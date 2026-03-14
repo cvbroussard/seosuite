@@ -24,15 +24,19 @@ async function migrate() {
   // Sites — websites/storefronts being managed
   await sql`
     CREATE TABLE IF NOT EXISTS sites (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      subscriber_id   UUID NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
-      name            TEXT NOT NULL,
-      url             TEXT,
-      external_id     TEXT,
-      brand_voice     JSONB DEFAULT '{}',
-      metadata        JSONB DEFAULT '{}',
-      created_at      TIMESTAMPTZ DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ DEFAULT NOW()
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      subscriber_id     UUID NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
+      name              TEXT NOT NULL,
+      url               TEXT,
+      external_id       TEXT,
+      brand_voice       JSONB DEFAULT '{}',
+      autopilot_enabled BOOLEAN DEFAULT false,
+      cadence_config    JSONB DEFAULT '{}',
+      content_pillars   TEXT[] DEFAULT '{}',
+      autopilot_config  JSONB DEFAULT '{}',
+      metadata          JSONB DEFAULT '{}',
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ DEFAULT NOW()
     )
   `;
   console.log("✓ sites");
@@ -63,7 +67,10 @@ async function migrate() {
     CREATE TABLE IF NOT EXISTS social_posts (
       id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       account_id            UUID NOT NULL REFERENCES social_accounts(id) ON DELETE CASCADE,
+      source_asset_id       UUID REFERENCES media_assets(id) ON DELETE SET NULL,
       status                TEXT DEFAULT 'draft',
+      authority             TEXT DEFAULT 'pipeline',
+      content_pillar        TEXT,
       caption               TEXT,
       hashtags              TEXT[],
       media_urls            TEXT[],
@@ -73,6 +80,9 @@ async function migrate() {
       platform_post_url     TEXT,
       scheduled_at          TIMESTAMPTZ,
       published_at          TIMESTAMPTZ,
+      vetoed_at             TIMESTAMPTZ,
+      veto_reason           TEXT,
+      slot_id               UUID,
       ai_generated          BOOLEAN DEFAULT false,
       trigger_type          TEXT,
       trigger_reference_id  TEXT,
@@ -129,7 +139,7 @@ async function migrate() {
       event_type          TEXT NOT NULL,
       enabled             BOOLEAN DEFAULT true,
       platforms           TEXT[],
-      requires_approval   BOOLEAN DEFAULT true,
+      requires_approval   BOOLEAN DEFAULT false,
       ai_generate         BOOLEAN DEFAULT true,
       template            TEXT,
       delay_minutes       INT DEFAULT 0,
@@ -252,22 +262,68 @@ async function migrate() {
       context_note    TEXT,
       transcription   TEXT,
       status          TEXT DEFAULT 'pending',
+      triage_status   TEXT DEFAULT 'received',
+      quality_score   NUMERIC(3,2),
+      content_pillar  TEXT,
+      platform_fit    TEXT[],
+      flag_reason     TEXT,
+      shelve_reason   TEXT,
+      ai_analysis     JSONB DEFAULT '{}',
+      triaged_at      TIMESTAMPTZ,
+      source          TEXT DEFAULT 'upload',
       metadata        JSONB DEFAULT '{}',
       created_at      TIMESTAMPTZ DEFAULT NOW()
     )
   `;
   console.log("✓ media_assets");
 
+  // Publishing slots — the calendar the pipeline fills
+  await sql`
+    CREATE TABLE IF NOT EXISTS publishing_slots (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      site_id         UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      account_id      UUID NOT NULL REFERENCES social_accounts(id) ON DELETE CASCADE,
+      platform        TEXT NOT NULL,
+      content_pillar  TEXT,
+      scheduled_at    TIMESTAMPTZ NOT NULL,
+      status          TEXT DEFAULT 'open',
+      post_id         UUID REFERENCES social_posts(id) ON DELETE SET NULL,
+      asset_id        UUID REFERENCES media_assets(id) ON DELETE SET NULL,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  console.log("✓ publishing_slots");
+
+  // Subscriber actions — narrow audit trail of subscriber interactions
+  await sql`
+    CREATE TABLE IF NOT EXISTS subscriber_actions (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      site_id       UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      action_type   TEXT NOT NULL,
+      target_type   TEXT NOT NULL,
+      target_id     UUID NOT NULL,
+      payload       JSONB DEFAULT '{}',
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  console.log("✓ subscriber_actions");
+
   // Indexes
   await sql`CREATE INDEX IF NOT EXISTS idx_sites_subscriber ON sites(subscriber_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_social_accounts_site ON social_accounts(site_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_social_posts_account ON social_posts(account_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_social_posts_status ON social_posts(status, scheduled_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_posts_source_asset ON social_posts(source_asset_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_seo_audits_site ON seo_audits(site_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_seo_content_site ON seo_content(site_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_gbp_locations_site ON gbp_locations(site_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_usage_log_subscriber ON usage_log(subscriber_id, created_at)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_media_assets_site ON media_assets(site_id, status)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_media_triage ON media_assets(site_id, triage_status)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_media_pillar ON media_assets(site_id, content_pillar, quality_score DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_slots_site_status ON publishing_slots(site_id, status, scheduled_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_slots_account ON publishing_slots(account_id, scheduled_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_subscriber_actions ON subscriber_actions(site_id, created_at)`;
   console.log("✓ indexes");
 
   console.log("\n✅ All migrations complete.");
