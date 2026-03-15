@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
         VALUES (
           ${state.subscriber_id}, 'instagram', ${ig.igUsername}, ${ig.igUserId},
           ${accessToken}, ${expiresAt},
-          ${'{instagram_basic,instagram_content_publish,pages_show_list}'},
+          ${'{instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement}'},
           'active',
           ${JSON.stringify({ page_id: ig.pageId, page_name: ig.pageName })}
         )
