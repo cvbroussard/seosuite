@@ -5,6 +5,8 @@ import { useState } from "react";
 export function ConnectInstagramButton() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPageIds, setShowPageIds] = useState(false);
+  const [pageIds, setPageIds] = useState("");
 
   async function handleConnect() {
     setLoading(true);
@@ -18,7 +20,8 @@ export function ConnectInstagramButton() {
       }
       const { apiKey } = await sessionRes.json();
 
-      const res = await fetch("/api/auth/instagram", {
+      const params = pageIds.trim() ? `?page_ids=${pageIds.trim()}` : "";
+      const res = await fetch(`/api/auth/instagram${params}`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
 
@@ -39,6 +42,15 @@ export function ConnectInstagramButton() {
 
   return (
     <div className="flex items-center gap-2">
+      {showPageIds && (
+        <input
+          type="text"
+          value={pageIds}
+          onChange={(e) => setPageIds(e.target.value)}
+          className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-accent"
+          placeholder="Facebook Page ID(s)"
+        />
+      )}
       <button
         onClick={handleConnect}
         disabled={loading}
@@ -46,6 +58,14 @@ export function ConnectInstagramButton() {
       >
         {loading ? "Connecting..." : "Connect Instagram"}
       </button>
+      {!showPageIds && (
+        <button
+          onClick={() => setShowPageIds(true)}
+          className="text-[10px] text-muted hover:text-foreground"
+        >
+          Page ID?
+        </button>
+      )}
       {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );

@@ -96,6 +96,7 @@ export async function discoverInstagramAccounts(
     `${GRAPH_BASE}/me/accounts?fields=id,name,instagram_business_account&access_token=${accessToken}`
   );
   const pagesData = await pagesRes.json();
+  console.log("me/accounts response:", JSON.stringify(pagesData));
 
   if (pagesRes.ok && pagesData.data?.length > 0) {
     for (const page of pagesData.data) {
@@ -109,10 +110,11 @@ export async function discoverInstagramAccounts(
   if (accounts.length === 0 && pageIds && pageIds.length > 0) {
     console.log("me/accounts empty — trying direct Page queries for:", pageIds);
     for (const pageId of pageIds) {
-      const pageRes = await fetch(
-        `${GRAPH_BASE}/${pageId}?fields=id,name,instagram_business_account&access_token=${accessToken}`
-      );
+      const pageUrl = `${GRAPH_BASE}/${pageId}?fields=id,name,instagram_business_account&access_token=${accessToken}`;
+      console.log("Querying Page:", pageId);
+      const pageRes = await fetch(pageUrl);
       const pageData = await pageRes.json();
+      console.log("Page query response:", pageRes.status, JSON.stringify(pageData));
       if (pageRes.ok && pageData.instagram_business_account) {
         const ig = await fetchIgAccount(pageData.instagram_business_account.id, pageData, accessToken);
         if (ig) accounts.push(ig);

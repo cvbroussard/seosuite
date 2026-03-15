@@ -40,9 +40,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const { accessToken, expiresIn } = await exchangeCodeForToken(code);
+    console.log("OAuth callback — token obtained, expires in:", expiresIn);
+    console.log("OAuth callback — state:", JSON.stringify(state));
+
     const igAccounts = await discoverInstagramAccounts(accessToken, state.page_ids);
+    console.log("OAuth callback — discovered accounts:", JSON.stringify(igAccounts));
 
     if (igAccounts.length === 0) {
+      console.log("OAuth callback — no IG accounts found, redirecting with error");
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/accounts?error=no_ig_account`
       );
