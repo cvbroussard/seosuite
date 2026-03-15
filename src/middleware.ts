@@ -30,7 +30,8 @@ export function middleware(req: NextRequest) {
   }
 
   // Static/shared public pages — accessible from all subdomains
-  const sharedPaths = ["/login", "/privacy", "/terms", "/data-deletion", "/admin-login"];
+  // Note: /login is NOT shared — it resolves differently per subdomain
+  const sharedPaths = ["/privacy", "/terms", "/data-deletion", "/admin-login"];
   if (sharedPaths.some((p) => pathname === p)) {
     return NextResponse.next();
   }
@@ -39,6 +40,10 @@ export function middleware(req: NextRequest) {
     // Block admin routes on studio subdomain
     if (pathname.startsWith("/admin")) {
       return new NextResponse("Not Found", { status: 404 });
+    }
+    // /login serves the subscriber login page directly
+    if (pathname === "/login") {
+      return NextResponse.next();
     }
     // Already rewritten paths — don't double-rewrite
     if (pathname.startsWith("/dashboard")) {
@@ -86,6 +91,11 @@ export function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = rewritePath;
     return NextResponse.rewrite(url);
+  }
+
+  // /login on marketing serves subscriber login
+  if (pathname === "/login") {
+    return NextResponse.next();
   }
 
   // Marketing subdomain — redirect leaked paths to proper subdomains
