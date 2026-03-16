@@ -36,3 +36,23 @@ export async function createPresignedUpload(opts: {
     publicUrl: `${PUBLIC_DOMAIN}/${opts.key}`,
   };
 }
+
+/**
+ * Upload a buffer directly to R2 (server-side).
+ * Used for re-hosting images during blog import.
+ */
+export async function uploadBufferToR2(
+  key: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+): Promise<string> {
+  await r2.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
+  return `${PUBLIC_DOMAIN}/${key}`;
+}

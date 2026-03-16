@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BlogImport } from "./blog-import";
 
 interface Settings {
   blog_enabled: boolean;
@@ -34,6 +35,7 @@ export function BlogDashboard({
   const [settings, setSettings] = useState(initialSettings);
   const [posts, setPosts] = useState(initialPosts);
   const [saving, setSaving] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [title, setTitle] = useState(settings.blog_title || "");
   const [description, setDescription] = useState(settings.blog_description || "");
   const [subdomain, setSubdomain] = useState(settings.subdomain || "");
@@ -147,6 +149,29 @@ export function BlogDashboard({
           {saving ? "Saving..." : "Save Settings"}
         </button>
       </div>
+
+      {/* Import section */}
+      {showImport ? (
+        <div className="mb-8">
+          <BlogImport
+            siteId={siteId}
+            subdomain={settings.subdomain}
+            onComplete={() => {
+              setShowImport(false);
+              window.location.reload();
+            }}
+          />
+        </div>
+      ) : (
+        <div className="mb-8">
+          <button
+            onClick={() => setShowImport(true)}
+            className="rounded-lg border border-dashed border-accent/40 px-4 py-2 text-xs font-medium text-accent hover:border-accent hover:bg-accent/10"
+          >
+            Import Existing Blog
+          </button>
+        </div>
+      )}
 
       {/* Posts list */}
       <h2 className="mb-3 text-sm font-medium">Blog Posts</h2>
