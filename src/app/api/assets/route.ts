@@ -20,7 +20,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { site_id, storage_url, media_type, context_note, metadata } = body;
+    const { site_id, media_type, context_note, metadata } = body;
+    // Accept both "storage_url" and "url" (mobile app sends "url")
+    const storage_url = body.storage_url || body.url;
 
     if (!site_id || !storage_url || !media_type) {
       return NextResponse.json(

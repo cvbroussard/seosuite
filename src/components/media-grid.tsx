@@ -1,0 +1,125 @@
+"use client";
+
+import { useState } from "react";
+import { AssetEditModal } from "./asset-edit-modal";
+
+interface Asset {
+  id: string;
+  storage_url: string;
+  media_type: string;
+  context_note: string | null;
+  triage_status: string;
+  quality_score: number | null;
+  content_pillar: string | null;
+  flag_reason: string | null;
+  created_at: string;
+}
+
+const statusColors: Record<string, string> = {
+  received: "bg-muted/20 text-muted",
+  triaged: "bg-accent/20 text-accent",
+  scheduled: "bg-success/20 text-success",
+  consumed: "bg-success/20 text-success",
+  shelved: "bg-warning/20 text-warning",
+  flagged: "bg-danger/20 text-danger",
+  rejected: "bg-danger/20 text-danger",
+};
+
+export function MediaGrid({
+  initialAssets,
+  availablePillars,
+}: {
+  initialAssets: Asset[];
+  availablePillars: string[];
+}) {
+  const [assets, setAssets] = useState(initialAssets);
+  const [editing, setEditing] = useState<Asset | null>(null);
+
+  function handleSaved(note: string, pillar: string) {
+    if (!editing) return;
+    setAssets((prev) =>
+      prev.map((a) =>
+        a.id === editing.id
+          ? { ...a, context_note: note, content_pillar: pillar || a.content_pillar }
+          : a
+      )
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {assets.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => setEditing(a)}
+            className="group relative overflow-hidden rounded-lg border border-border bg-surface text-left transition-colors hover:border-accent/40"
+          >
+            <div className="relative aspect-square bg-background">
+              {a.media_type === "image" ? (
+                <img
+                  src={a.storage_url}
+                  alt={a.context_note || ""}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-3xl text-muted">
+                  ▶
+                </div>
+              )}
+              <span
+                className={`absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  statusColors[a.triage_status] || "bg-muted/20 text-muted"
+                }`}
+              >
+                {a.triage_status}
+              </span>
+              {a.media_type === "video" && (
+                <span className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+                  video
+                </span>
+              )}
+            </div>
+            <div className="px-2.5 py-2">
+              {a.context_note ? (
+                <p className="truncate text-xs">{a.context_note}</p>
+              ) : (
+                <p className="truncate text-xs text-muted">No caption</p>
+              )}
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-[10px] text-muted">
+                  {new Date(a.created_at).toLocaleDateString()}
+                </span>
+                {a.content_pillar && (
+                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px]">
+                    {a.content_pillar}
+                  </span>
+                )}
+                {a.quality_score && (
+                  <span className="text-[10px] text-muted">
+                    {(a.quality_score * 100).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              {a.flag_reason && (
+                <p className="mt-1 text-[10px] text-danger">{a.flag_reason}</p>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {editing && (
+        <AssetEditModal
+          assetId={editing.id}
+          initialNote={editing.context_note || ""}
+          initialPillar={editing.content_pillar || ""}
+          availablePillars={availablePillars}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
+      )}
+    </>
+  );
+}

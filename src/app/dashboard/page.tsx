@@ -30,7 +30,9 @@ export default async function DashboardOverview() {
 
   const siteId = session.activeSiteId;
 
-  const [site, accounts, postStats, assetStats, upcoming] = await Promise.all([
+  const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [site, accounts, postStats, assetStats, upcoming, healthData] = await Promise.all([
     sql`SELECT name, url, autopilot_enabled FROM sites WHERE id = ${siteId}`,
     sql`
       SELECT COUNT(*)::int AS total,
@@ -64,11 +66,41 @@ export default async function DashboardOverview() {
       ORDER BY sp.scheduled_at ASC
       LIMIT 5
     `,
+    sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM media_assets
+         WHERE site_id = ${siteId} AND triage_status = 'triaged') AS triaged,
+        (SELECT COUNT(*)::int FROM publishing_slots
+         WHERE site_id = ${siteId} AND status = 'open'
+           AND scheduled_at <= ${sevenDaysFromNow}) AS open_slots
+    `,
   ]);
 
   const siteName = site[0]?.name || "Your Site";
   const p = postStats[0];
   const a = assetStats[0];
+  const h = healthData[0];
+
+  // Pipeline health status
+  const triaged = h?.triaged || 0;
+  const openSlots = h?.open_slots || 0;
+  let healthColor = "bg-muted";
+  let healthLabel = "No slots scheduled";
+  if (openSlots > 0) {
+    if (triaged === 0) {
+      healthColor = "bg-danger";
+      healthLabel = "Pipeline will stall";
+    } else if (triaged < openSlots) {
+      healthColor = "bg-warning";
+      healthLabel = "Running low";
+    } else {
+      healthColor = "bg-success";
+      healthLabel = "Pipeline healthy";
+    }
+  } else if (triaged > 0) {
+    healthColor = "bg-success";
+    healthLabel = "Content ready";
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -78,6 +110,32 @@ export default async function DashboardOverview() {
           ? "Autopilot is active — content publishes automatically"
           : "Autopilot is off"}
       </p>
+
+      {/* Pipeline Health */}
+      <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-surface p-4">
+        <span className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${healthColor}`} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{healthLabel}</p>
+          <p className="text-xs text-muted">
+            {triaged} ready &middot; {openSlots} open slots this week &middot; {p.scheduled} scheduled
+          </p>
+        </div>
+      </div>
+
+      {/* Low inventory nudge */}
+      {openSlots > 0 && triaged < openSlots && (
+        <div
+          className={`mb-4 rounded-lg border p-3 text-sm font-medium ${
+            triaged === 0
+              ? "border-danger/40 bg-danger/10 text-danger"
+              : "border-warning/40 bg-warning/10 text-warning"
+          }`}
+        >
+          {triaged === 0
+            ? `No content ready. ${openSlots} slots need content this week.`
+            : `${openSlots - triaged} more assets needed to fill this week's slots.`}
+        </div>
+      )}
 
       <div className="mb-8 grid grid-cols-4 gap-4">
         <div className="rounded-lg border border-border bg-surface p-4 text-center">
