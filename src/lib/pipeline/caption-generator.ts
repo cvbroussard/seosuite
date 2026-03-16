@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import type { PlatformFormat } from "./types";
+import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
 
 const anthropic = new Anthropic();
 
@@ -90,8 +91,9 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
   // Fetch post + asset + site in one chain
   const [post] = await sql`
     SELECT sp.id, sp.account_id, sp.content_pillar, sp.media_type, sp.slot_id,
-           sa.platform, sa.account_name,
+           sa.platform, sa.account_name, sa.site_id,
            s.name AS site_name, s.url AS site_url, s.brand_voice,
+           s.brand_playbook,
            ma.context_note, ma.transcription, ma.ai_analysis, ma.media_type AS asset_media_type
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
@@ -125,8 +127,29 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
 
   const rules = PLATFORM_RULES[platformFormat] || PLATFORM_RULES.ig_feed;
   const brandVoice = (post.brand_voice || {}) as Record<string, unknown>;
+  const playbook = post.brand_playbook as BrandPlaybook | null;
 
-  const prompt = buildPrompt(post, platformFormat, rules, brandVoice);
+  // Pull a hook from the bank if playbook exists
+  let hookText: string | undefined;
+  if (playbook && post.site_id) {
+    const [hook] = await sql`
+      SELECT text FROM hook_bank
+      WHERE site_id = ${post.site_id}
+      ORDER BY CASE rating WHEN 'loved' THEN 0 ELSE 1 END, used_count ASC, RANDOM()
+      LIMIT 1
+    `;
+    if (hook) {
+      hookText = hook.text;
+      await sql`
+        UPDATE hook_bank SET used_count = used_count + 1, last_used_at = NOW()
+        WHERE site_id = ${post.site_id} AND text = ${hook.text}
+      `;
+    }
+  }
+
+  const prompt = playbook
+    ? buildPlaybookPrompt(post, platformFormat, rules, playbook, hookText)
+    : buildPrompt(post, platformFormat, rules, brandVoice);
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
@@ -151,6 +174,73 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
     hashtags: parsed.hashtags,
     platform: platformFormat,
   };
+}
+
+function buildPlaybookPrompt(
+  post: Record<string, unknown>,
+  platform: PlatformFormat,
+  rules: (typeof PLATFORM_RULES)[string],
+  playbook: BrandPlaybook,
+  hookText?: string
+): string {
+  const { audienceResearch, brandPositioning, offerCore } = playbook;
+  const angle = brandPositioning.selectedAngles[0];
+  const lang = audienceResearch.languageMap;
+
+  const parts: string[] = [];
+
+  parts.push("You are an expert social media content writer using brand intelligence to create high-performing captions.");
+  parts.push("");
+  parts.push("## Brand Intelligence");
+  parts.push(`Site: ${post.site_name} (${post.site_url})`);
+  parts.push(`Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}`);
+  parts.push(`Tone: ${angle?.tone || "engaging"}`);
+  parts.push(`Emotional core: ${offerCore.offerStatement.emotionalCore}`);
+  parts.push("");
+  parts.push("## Audience Language (use THESE phrases, not marketing speak)");
+  parts.push(`Pain phrases: ${lang.painPhrases.join(", ")}`);
+  parts.push(`Desire phrases: ${lang.desirePhrases.join(", ")}`);
+  parts.push(`Emotional triggers: ${lang.emotionalTriggers.join(", ")}`);
+
+  if (hookText) {
+    parts.push("");
+    parts.push(`## Hook to incorporate`);
+    parts.push(`Weave this hook naturally into the caption opening: "${hookText}"`);
+  }
+
+  parts.push("");
+  parts.push("## Content");
+  parts.push(`Content pillar: ${post.content_pillar || "general"}`);
+  parts.push(`Media type: ${post.asset_media_type || post.media_type || "image"}`);
+  if (post.context_note) parts.push(`Context: "${post.context_note}"`);
+  if (post.transcription) parts.push(`Transcription: "${post.transcription}"`);
+
+  const analysis = post.ai_analysis as Record<string, unknown> | null;
+  if (analysis?.description) {
+    parts.push(`Visual: ${analysis.description}`);
+  }
+
+  parts.push("");
+  parts.push("## Platform Rules");
+  parts.push(`Platform: ${platform}`);
+  parts.push(`Max length: ${rules.maxLength} chars`);
+  parts.push(`Hashtags: ${rules.hashtagRange[0]}–${rules.hashtagRange[1]}`);
+  parts.push(`Style: ${rules.style}`);
+
+  parts.push("");
+  parts.push("## Response format");
+  parts.push("Respond with ONLY a JSON object, no markdown fencing:");
+  parts.push('{ "caption": "...", "hashtags": ["#tag1", "#tag2"] }');
+  parts.push("");
+  parts.push("Rules:");
+  parts.push("- Use the audience's language, not generic marketing copy");
+  parts.push("- First line must stop the scroll — lead with the hook or a pain/desire phrase");
+  parts.push("- Do not include hashtags inside the caption text");
+  if (platform === "tiktok" || platform === "ig_reel") {
+    parts.push("- Optimize for platform SEARCH — use terms people search for on this platform");
+  }
+
+  return parts.join("\n");
 }
 
 function buildPrompt(

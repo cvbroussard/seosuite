@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const baseNav = [
   { label: "Overview", path: "", icon: "◆" },
+  { label: "Brand", path: "/brand", icon: "◈" },
   { label: "Capture", path: "/capture", icon: "◎" },
   { label: "Media", path: "/media", icon: "▣" },
   { label: "Calendar", path: "/calendar", icon: "▦" },

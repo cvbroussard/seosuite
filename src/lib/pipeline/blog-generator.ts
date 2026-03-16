@@ -1,21 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
+import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
 
 const anthropic = new Anthropic();
 
 /**
  * Generate a blog post from a triaged media asset.
  *
- * Only fires if the site has blog_enabled = true in blog_settings.
- * Uses Claude to generate a long-form article from the asset's
- * context note, AI analysis, and the site's brand voice.
+ * If the site has a brand playbook, uses the full AI-native SEO spec:
+ * voice fusion, embedding coherence, semantic chunking, monosemanticity,
+ * query-aligned headings, FAQ generation, and key takeaways.
+ *
+ * Falls back to the basic prompt if no playbook exists.
  */
 export async function generateBlogPost(assetId: string): Promise<string | null> {
-  // Fetch asset + site + blog settings
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.context_note,
            ma.content_pillar, ma.ai_analysis, ma.media_type,
            s.name AS site_name, s.url AS site_url, s.brand_voice,
+           s.brand_playbook,
            bs.blog_enabled, bs.blog_title
     FROM media_assets ma
     JOIN sites s ON ma.site_id = s.id
@@ -26,20 +29,42 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   if (!asset) return null;
   if (!asset.blog_enabled) return null;
 
-  // Check if blog post already exists for this asset
   const [existing] = await sql`
     SELECT id FROM blog_posts WHERE source_asset_id = ${assetId}
   `;
   if (existing) return existing.id;
 
+  const playbook = asset.brand_playbook as BrandPlaybook | null;
   const brandVoice = (asset.brand_voice || {}) as Record<string, unknown>;
   const aiAnalysis = (asset.ai_analysis || {}) as Record<string, unknown>;
 
-  const prompt = buildBlogPrompt(asset, brandVoice, aiAnalysis);
+  // If playbook exists, pull a hook from the bank for this post
+  let hookText: string | undefined;
+  if (playbook) {
+    const [hook] = await sql`
+      SELECT text FROM hook_bank
+      WHERE site_id = ${asset.site_id}
+      ORDER BY
+        CASE rating WHEN 'loved' THEN 0 ELSE 1 END,
+        used_count ASC, RANDOM()
+      LIMIT 1
+    `;
+    if (hook) {
+      hookText = hook.text;
+      await sql`
+        UPDATE hook_bank SET used_count = used_count + 1, last_used_at = NOW()
+        WHERE site_id = ${asset.site_id} AND text = ${hook.text}
+      `;
+    }
+  }
+
+  const prompt = playbook
+    ? buildPlaybookBlogPrompt(asset, playbook, aiAnalysis, hookText)
+    : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis);
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 2048,
+    model: playbook ? "claude-sonnet-4-5-20250514" : "claude-haiku-4-5-20251001",
+    max_tokens: playbook ? 6144 : 2048,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -70,16 +95,94 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
 }
 
 /**
+ * Generate a blog post from a content topic (playbook-driven).
+ * Pulls from content_topics queue instead of media assets.
+ */
+export async function generateBlogFromTopic(topicId: string): Promise<string | null> {
+  const [topic] = await sql`
+    SELECT ct.id, ct.site_id, ct.title AS topic_title, ct.search_query,
+           ct.intent, ct.pillar, ct.cluster,
+           s.name AS site_name, s.url AS site_url, s.brand_playbook
+    FROM content_topics ct
+    JOIN sites s ON ct.site_id = s.id
+    WHERE ct.id = ${topicId} AND ct.status = 'queued'
+  `;
+
+  if (!topic) return null;
+
+  const playbook = topic.brand_playbook as BrandPlaybook | null;
+  if (!playbook) return null;
+
+  // Pull a hook
+  let hookText: string | undefined;
+  const [hook] = await sql`
+    SELECT text FROM hook_bank
+    WHERE site_id = ${topic.site_id}
+    ORDER BY CASE rating WHEN 'loved' THEN 0 ELSE 1 END, used_count ASC, RANDOM()
+    LIMIT 1
+  `;
+  if (hook) {
+    hookText = hook.text;
+    await sql`
+      UPDATE hook_bank SET used_count = used_count + 1, last_used_at = NOW()
+      WHERE site_id = ${topic.site_id} AND text = ${hook.text}
+    `;
+  }
+
+  const prompt = buildTopicBlogPrompt(topic, playbook, hookText);
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-5-20250514",
+    max_tokens: 6144,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const parsed = parseBlogResponse(text);
+  const slug = generateSlug(parsed.title);
+
+  // Check blog_enabled
+  const [settings] = await sql`
+    SELECT blog_enabled FROM blog_settings WHERE site_id = ${topic.site_id}
+  `;
+  if (!settings?.blog_enabled) return null;
+
+  const [post] = await sql`
+    INSERT INTO blog_posts (
+      site_id, slug, title, body, excerpt,
+      meta_title, meta_description, schema_json,
+      tags, content_pillar, status
+    ) VALUES (
+      ${topic.site_id}, ${slug}, ${parsed.title},
+      ${parsed.body}, ${parsed.excerpt},
+      ${parsed.meta_title || parsed.title},
+      ${parsed.meta_description || parsed.excerpt},
+      ${JSON.stringify(buildTopicArticleSchema(parsed, topic))},
+      ${parsed.tags}, ${topic.pillar || null},
+      'draft'
+    )
+    RETURNING id
+  `;
+
+  // Link topic to post
+  await sql`
+    UPDATE content_topics
+    SET status = 'generated', blog_post_id = ${post.id}
+    WHERE id = ${topicId}
+  `;
+
+  return post.id;
+}
+
+/**
  * Generate blog posts for all recently triaged assets that don't have one yet.
  */
 export async function generateMissingBlogPosts(siteId: string): Promise<number> {
-  // Only process if blog is enabled
   const [settings] = await sql`
     SELECT blog_enabled FROM blog_settings WHERE site_id = ${siteId}
   `;
   if (!settings?.blog_enabled) return 0;
 
-  // Find triaged assets without a blog post
   const assets = await sql`
     SELECT ma.id
     FROM media_assets ma
@@ -107,7 +210,144 @@ export async function generateMissingBlogPosts(siteId: string): Promise<number> 
   return generated;
 }
 
-function buildBlogPrompt(
+// ── AI-Native SEO Blog Prompt (Playbook-Driven) ───────────────────
+
+function buildPlaybookBlogPrompt(
+  asset: Record<string, unknown>,
+  playbook: BrandPlaybook,
+  aiAnalysis: Record<string, unknown>,
+  hookText?: string
+): string {
+  const { audienceResearch, brandPositioning, offerCore } = playbook;
+  const angle = brandPositioning.selectedAngles[0];
+  const lang = audienceResearch.languageMap;
+
+  return `In [2,000] words, write a comprehensive, authoritative, and semantically optimized article.
+
+## Content Source
+Content pillar: ${asset.content_pillar || "general"}
+${asset.context_note ? `Creator's note: "${asset.context_note}"` : ""}
+${aiAnalysis.description ? `Visual context: ${aiAnalysis.description}` : ""}
+${hookText ? `Opening hook to weave in: "${hookText}"` : ""}
+
+## Brand Context
+Business: ${asset.site_name} (${asset.site_url})
+Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
+Tone: ${angle?.tone || "professional, engaging"}
+Offer: ${offerCore.offerStatement.emotionalCore}
+
+## Audience Intelligence
+Current state: ${audienceResearch.transformationJourney.currentState.slice(0, 300)}
+Desired state: ${audienceResearch.transformationJourney.desiredState.slice(0, 300)}
+Pain phrases (use their language): ${lang.painPhrases.join(", ")}
+Desire phrases (use their language): ${lang.desirePhrases.join(", ")}
+Search phrases (optimize for): ${lang.searchPhrases.join(", ")}
+Emotional triggers: ${lang.emotionalTriggers.join(", ")}
+
+## Core Writing Instructions
+
+1) Writing Style: Synthesize two contrasting voices:
+
+Voice 1 (Structured Authority): Organized arguments, analogy-rich storytelling, humble yet deeply insightful, Socratic and reflective, human-centered and meticulous.
+
+Voice 2 (Sharp Conversational): Provocative, candid, witty. Boldly honest in assessing flaws. Sharp metaphors and analogies. Conversational and direct, no jargon.
+
+Fusion: Lead paragraphs with vivid anecdotes or provocative metaphors, follow immediately with structured analysis. Blend humility with intellectual confidence. Maintain 9th-grade reading level — accessible without dumbing down.
+
+2) Embedding Coherence: Optimize for semantic similarity to real search queries. Naturally integrate the audience's pain phrases, desire phrases, and search phrases. Paragraphs should anchor key entities with clarity and repetition.
+
+3) Semantic Chunking: Each paragraph must be a dense, contextually complete semantic unit ideal for LLM indexing. Never break an idea across multiple fragments.
+
+4) Monosemanticity: Identify and implicitly define key entities. Ensure clear, consistent, unambiguous definitions throughout.
+
+5) Headings: Use descriptive, query-aligned headings matching real search prompts. Include 2-3 headings phrased as direct questions (e.g., "What is X?", "How Does X Affect Y?").
+
+6) Paragraph-First: Bullet points only when absolutely necessary. Prefer cohesive paragraph exposition with embedded entities and strong transitions.
+
+## Response Format
+Respond with ONLY valid JSON (no markdown fencing):
+{
+  "title": "<engaging, SEO-optimized, 50-70 characters>",
+  "body": "<2000-word markdown article with ## headings, following all instructions above. End with ## Frequently Asked Questions section (5-7 Q&As optimized for LLM retrieval) and ## Key Takeaways section (5-7 bold, punchy, actionable statements)>",
+  "excerpt": "<1-2 sentence summary for previews>",
+  "meta_title": "<max 65 characters, semantic clarity for AI retrieval>",
+  "meta_description": "<max 155 characters, entity-salient, topically precise>",
+  "tags": ["<5-7 tags matching search intent>"]
+}`;
+}
+
+// ── Topic-Driven Blog Prompt ───────────────────────────────────────
+
+function buildTopicBlogPrompt(
+  topic: Record<string, unknown>,
+  playbook: BrandPlaybook,
+  hookText?: string
+): string {
+  const { audienceResearch, brandPositioning, offerCore } = playbook;
+  const angle = brandPositioning.selectedAngles[0];
+  const lang = audienceResearch.languageMap;
+
+  return `In [2,000] words, write a comprehensive, authoritative, and semantically optimized article about **${topic.topic_title}**.
+
+## Topic Context
+Target search query: "${topic.search_query}"
+Search intent: ${topic.intent}
+Content pillar: ${topic.pillar || "general"}
+Topic cluster: ${topic.cluster || "general"}
+${hookText ? `Opening hook to weave in: "${hookText}"` : ""}
+
+## Brand Context
+Business: ${topic.site_name} (${topic.site_url})
+Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
+Tone: ${angle?.tone || "professional, engaging"}
+Offer: ${offerCore.offerStatement.emotionalCore}
+
+## Audience Intelligence
+Current state: ${audienceResearch.transformationJourney.currentState.slice(0, 300)}
+Desired state: ${audienceResearch.transformationJourney.desiredState.slice(0, 300)}
+Pain phrases (use their language): ${lang.painPhrases.join(", ")}
+Desire phrases (use their language): ${lang.desirePhrases.join(", ")}
+Search phrases (optimize for): ${lang.searchPhrases.join(", ")}
+Emotional triggers: ${lang.emotionalTriggers.join(", ")}
+
+## Failed Solutions the Audience Has Tried
+${audienceResearch.urgencyGateway.failedSolutions.join("\n")}
+
+## Core Writing Instructions
+
+1) Writing Style: Synthesize two contrasting voices:
+
+Voice 1 (Structured Authority): Organized arguments, analogy-rich storytelling, humble yet deeply insightful, Socratic and reflective, human-centered and meticulous.
+
+Voice 2 (Sharp Conversational): Provocative, candid, witty. Boldly honest in assessing flaws. Sharp metaphors and analogies. Conversational and direct, no jargon.
+
+Fusion: Lead paragraphs with vivid anecdotes or provocative metaphors, follow immediately with structured analysis. Blend humility with intellectual confidence. Maintain 9th-grade reading level — accessible without dumbing down.
+
+2) Embedding Coherence: Optimize for semantic similarity to the target search query "${topic.search_query}". Naturally integrate the audience's language patterns. Paragraphs should anchor key entities with clarity and repetition.
+
+3) Semantic Chunking: Each paragraph must be a dense, contextually complete semantic unit ideal for LLM indexing. Never break an idea across multiple fragments.
+
+4) Monosemanticity: Identify and implicitly define key entities. Ensure clear, consistent, unambiguous definitions throughout.
+
+5) Headings: Use descriptive, query-aligned headings matching real search prompts. Include 2-3 headings phrased as direct questions.
+
+6) Paragraph-First: Bullet points only when absolutely necessary. Prefer cohesive paragraph exposition.
+
+## Response Format
+Respond with ONLY valid JSON (no markdown fencing):
+{
+  "title": "<engaging, SEO-optimized, 50-70 characters>",
+  "body": "<2000-word markdown article with ## headings. End with ## Frequently Asked Questions section (5-7 Q&As optimized for LLM retrieval, questions matching conversational prompts to LLMs) and ## Key Takeaways section (5-7 bold, punchy, actionable statements)>",
+  "excerpt": "<1-2 sentence summary for previews>",
+  "meta_title": "<max 65 characters, semantic clarity for AI retrieval>",
+  "meta_description": "<max 155 characters, entity-salient, topically precise>",
+  "tags": ["<5-7 tags matching search intent>"]
+}`;
+}
+
+// ── Basic Blog Prompt (No Playbook) ────────────────────────────────
+
+function buildBasicBlogPrompt(
   asset: Record<string, unknown>,
   brandVoice: Record<string, unknown>,
   aiAnalysis: Record<string, unknown>
@@ -140,17 +380,19 @@ function buildBlogPrompt(
   parts.push("");
   parts.push("## Response Format");
   parts.push("Respond with ONLY valid JSON (no markdown fencing):");
-  parts.push('{');
+  parts.push("{");
   parts.push('  "title": "...",');
   parts.push('  "body": "... (markdown with ## headings) ...",');
   parts.push('  "excerpt": "...",');
   parts.push('  "meta_title": "...",');
   parts.push('  "meta_description": "...",');
   parts.push('  "tags": ["tag1", "tag2", "tag3"]');
-  parts.push('}');
+  parts.push("}");
 
   return parts.join("\n");
 }
+
+// ── Shared Helpers ─────────────────────────────────────────────────
 
 function parseBlogResponse(text: string): {
   title: string;
@@ -182,12 +424,13 @@ function parseBlogResponse(text: string): {
 }
 
 function generateSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80)
-    + `-${Date.now().toString(36)}`;
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) + `-${Date.now().toString(36)}`
+  );
 }
 
 function buildArticleSchema(
@@ -208,6 +451,29 @@ function buildArticleSchema(
     publisher: {
       "@type": "Organization",
       name: asset.site_name,
+    },
+    datePublished: new Date().toISOString(),
+    wordCount: post.body.split(/\s+/).length,
+  };
+}
+
+function buildTopicArticleSchema(
+  post: { title: string; body: string; excerpt: string; meta_description?: string },
+  topic: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.meta_description || post.excerpt,
+    author: {
+      "@type": "Organization",
+      name: topic.site_name,
+      url: topic.site_url,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: topic.site_name,
     },
     datePublished: new Date().toISOString(),
     wordCount: post.body.split(/\s+/).length,
