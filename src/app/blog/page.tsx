@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import Link from "next/link";
-import { resolveBlogSite, getBlogPosts } from "@/lib/blog";
+import { resolveBlogSite, getBlogPosts, checkDepartureRedirect } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,10 @@ export default async function BlogIndex() {
   const site = await resolveBlogSite(blogHost);
 
   if (!site) {
+    // Check for departure redirect (cancelled subscriber)
+    const redirectTarget = await checkDepartureRedirect(blogHost);
+    if (redirectTarget) redirect(redirectTarget);
+
     return (
       <div className="py-20 text-center">
         <h1 className="mb-2 text-lg font-semibold">Blog not found</h1>

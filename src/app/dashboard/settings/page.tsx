@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { ApiKeySection } from "./api-key-section";
+import { AccountActions } from "./account-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function SettingsPage() {
   const [site] = await sql`
     SELECT s.name, s.url, s.brand_voice, s.autopilot_enabled, s.cadence_config,
            s.content_pillars, s.autopilot_config, s.created_at,
-           sub.name AS subscriber_name, sub.plan
+           sub.name AS subscriber_name, sub.plan, sub.cancelled_at
     FROM sites s
     JOIN subscribers sub ON s.subscriber_id = sub.id
     WHERE s.id = ${siteId}
@@ -112,6 +113,10 @@ export default async function SettingsPage() {
         </section>
 
         <ApiKeySection />
+
+        <AccountActions
+          cancelledAt={site?.cancelled_at ? String(site.cancelled_at) : null}
+        />
 
         <section className="rounded-lg border border-border bg-surface p-5">
           <h2 className="mb-3 text-sm font-medium">Brand Voice</h2>

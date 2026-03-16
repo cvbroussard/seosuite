@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { resolveBlogSite, getBlogPost } from "@/lib/blog";
+import { resolveBlogSite, getBlogPost, checkDepartureRedirect } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,13 @@ export default async function BlogPostPage({ params }: Props) {
   const blogHost = headersList.get("x-blog-host") || "blog.tracpost.com";
   const site = await resolveBlogSite(blogHost);
 
-  if (!site) notFound();
+  if (!site) {
+    const redirectTarget = await checkDepartureRedirect(blogHost);
+    if (redirectTarget) {
+      redirect(`${redirectTarget.replace(/\/+$/, "")}/${slug}`);
+    }
+    notFound();
+  }
 
   const post = await getBlogPost(site.siteId, slug);
   if (!post) notFound();

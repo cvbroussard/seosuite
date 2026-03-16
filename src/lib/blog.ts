@@ -24,6 +24,28 @@ function toBlogSite(row: Record<string, unknown>): BlogSite {
   };
 }
 
+/**
+ * Check for departure redirects — active when a subscriber cancels
+ * and provides a destination URL. Returns the redirect target base
+ * URL if one exists, or null.
+ */
+export async function checkDepartureRedirect(
+  hostname: string
+): Promise<string | null> {
+  const host = hostname.split(":")[0];
+
+  const [redirect] = await sql`
+    SELECT dr.target_base
+    FROM departure_redirects dr
+    JOIN blog_settings bs ON bs.site_id = dr.site_id
+    WHERE (bs.subdomain = ${host} OR bs.custom_domain = ${host})
+      AND dr.active_until > NOW()
+    LIMIT 1
+  `;
+
+  return redirect ? (redirect.target_base as string) : null;
+}
+
 export async function resolveBlogSite(hostname: string): Promise<BlogSite | null> {
   const host = hostname.split(":")[0];
 
