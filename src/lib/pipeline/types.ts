@@ -20,6 +20,8 @@ export type PlatformFormat =
   | "ig_feed"
   | "ig_reel"
   | "ig_story"
+  | "fb_feed"
+  | "fb_reel"
   | "youtube"
   | "youtube_short"
   | "gbp";
@@ -43,13 +45,17 @@ export type SubscriberActionType =
   | "veto"
   | "un_veto"
   | "flag_response"
-  | "cadence_change";
+  | "cadence_change"
+  | "triage"
+  | "edit";
 
 /** Cadence config shape stored in sites.cadence_config */
 export interface CadenceConfig {
   ig_feed?: number;
   ig_reel?: number;
   ig_story?: number;
+  fb_feed?: number;
+  fb_reel?: number;
   youtube?: number;
   youtube_short?: number;
   gbp?: number;

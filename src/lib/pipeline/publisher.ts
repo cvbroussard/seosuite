@@ -1,9 +1,10 @@
 import { sql } from "@/lib/db";
+import { getAdapter } from "./adapters/registry";
 
 /**
- * Publish a scheduled social post to its target platform.
+ * Publish a scheduled social post to its target platform via adapter.
  *
- * Currently supports: Instagram (Meta Graph API).
+ * The adapter is selected by the `platform` field on social_accounts.
  * Posts must have a caption and at least one media URL.
  */
 export async function publishPost(postId: string): Promise<{ success: boolean; error?: string }> {
@@ -11,7 +12,7 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
     SELECT sp.id, sp.caption, sp.hashtags, sp.media_urls, sp.media_type,
            sp.link_url, sp.slot_id,
            sa.platform, sa.account_id AS platform_account_id,
-           sa.access_token_encrypted
+           sa.access_token_encrypted, sa.metadata AS account_metadata
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
     WHERE sp.id = ${postId} AND sp.status = 'scheduled'
@@ -21,6 +22,12 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
   if (!post.caption) return { success: false, error: "Post has no caption" };
   if (!post.access_token_encrypted) return { success: false, error: "No access token for account" };
 
+  // Look up adapter
+  const adapter = getAdapter(post.platform);
+  if (!adapter) {
+    return { success: false, error: `Unsupported platform: ${post.platform}` };
+  }
+
   // Build full caption with hashtags appended
   const hashtags = (post.hashtags || []) as string[];
   const fullCaption = hashtags.length > 0
@@ -28,21 +35,15 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
     : post.caption;
 
   try {
-    let result: { platformPostId: string; platformPostUrl?: string };
-
-    switch (post.platform) {
-      case "instagram":
-        result = await publishToInstagram(
-          post.platform_account_id,
-          post.access_token_encrypted, // TODO: decrypt
-          fullCaption,
-          post.media_urls as string[],
-          post.media_type
-        );
-        break;
-      default:
-        return { success: false, error: `Unsupported platform: ${post.platform}` };
-    }
+    const result = await adapter.publish({
+      platformAccountId: post.platform_account_id,
+      accessToken: post.access_token_encrypted, // TODO: decrypt
+      caption: fullCaption,
+      mediaUrls: post.media_urls as string[],
+      mediaType: post.media_type,
+      linkUrl: post.link_url || undefined,
+      accountMetadata: (post.account_metadata || {}) as Record<string, unknown>,
+    });
 
     // Update post as published
     await sql`
@@ -92,109 +93,6 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
 
     return { success: false, error: message };
   }
-}
-
-/**
- * Instagram publishing via Meta Graph API.
- *
- * Flow:
- * 1. Create a media container (image or video)
- * 2. Publish the container
- *
- * Docs: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/content-publishing
- */
-async function publishToInstagram(
-  igUserId: string,
-  accessToken: string,
-  caption: string,
-  mediaUrls: string[],
-  mediaType: string | null
-): Promise<{ platformPostId: string; platformPostUrl?: string }> {
-  const baseUrl = "https://graph.facebook.com/v21.0";
-  const imageUrl = mediaUrls[0];
-
-  if (!imageUrl) throw new Error("No media URL provided");
-
-  // Step 1: Create media container
-  const isVideo = mediaType?.startsWith("video") || false;
-
-  const containerParams: Record<string, string> = {
-    access_token: accessToken,
-    caption,
-  };
-
-  if (isVideo) {
-    containerParams.media_type = "REELS";
-    containerParams.video_url = imageUrl;
-  } else {
-    containerParams.image_url = imageUrl;
-  }
-
-  const containerRes = await fetch(`${baseUrl}/${igUserId}/media`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(containerParams),
-  });
-
-  const containerData = await containerRes.json();
-
-  if (!containerRes.ok) {
-    throw new Error(`IG container creation failed: ${JSON.stringify(containerData.error || containerData)}`);
-  }
-
-  const containerId = containerData.id;
-
-  // Step 1.5: Poll until container is ready (images and videos both need this)
-  await waitForContainer(baseUrl, containerId, accessToken, isVideo ? 30 : 10);
-
-  // Step 2: Publish the container
-  const publishRes = await fetch(`${baseUrl}/${igUserId}/media_publish`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      creation_id: containerId,
-      access_token: accessToken,
-    }),
-  });
-
-  const publishData = await publishRes.json();
-
-  if (!publishRes.ok) {
-    throw new Error(`IG publish failed: ${JSON.stringify(publishData.error || publishData)}`);
-  }
-
-  return {
-    platformPostId: publishData.id,
-    platformPostUrl: `https://www.instagram.com/p/${publishData.id}/`,
-  };
-}
-
-/**
- * Poll Meta API until a container is finished processing.
- * Images usually take a few seconds, videos can take 30s–5min.
- */
-async function waitForContainer(
-  baseUrl: string,
-  containerId: string,
-  accessToken: string,
-  maxAttempts: number = 10,
-  intervalMs: number = 3000
-): Promise<void> {
-  for (let i = 0; i < maxAttempts; i++) {
-    const res = await fetch(
-      `${baseUrl}/${containerId}?fields=status_code&access_token=${accessToken}`
-    );
-    const data = await res.json();
-
-    if (data.status_code === "FINISHED") return;
-    if (data.status_code === "ERROR") {
-      throw new Error(`Video processing failed: ${JSON.stringify(data)}`);
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-
-  throw new Error("Video processing timed out");
 }
 
 /**

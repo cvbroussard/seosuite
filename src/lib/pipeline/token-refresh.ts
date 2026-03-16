@@ -1,10 +1,9 @@
 import { sql } from "@/lib/db";
-import { refreshLongLivedToken } from "@/lib/meta";
+import { getAdapter } from "./adapters/registry";
 
 /**
  * Refresh tokens for all social accounts expiring within 7 days.
- * Called by the cron pipeline to keep tokens alive without
- * subscriber intervention.
+ * Uses the platform adapter to handle refresh logic per platform.
  */
 export async function refreshExpiringTokens(): Promise<{ refreshed: number; failed: number }> {
   const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -22,28 +21,33 @@ export async function refreshExpiringTokens(): Promise<{ refreshed: number; fail
 
   for (const account of expiring) {
     try {
-      if (account.platform === "instagram") {
-        const { accessToken, expiresIn } = await refreshLongLivedToken(
-          account.access_token_encrypted // TODO: decrypt
-        );
-
-        const newExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-        await sql`
-          UPDATE social_accounts
-          SET access_token_encrypted = ${accessToken},
-              token_expires_at = ${newExpiry},
-              updated_at = NOW()
-          WHERE id = ${account.id}
-        `;
-
-        refreshed++;
+      const adapter = getAdapter(account.platform);
+      if (!adapter) {
+        console.error(`No adapter for platform ${account.platform}, skipping token refresh`);
+        failed++;
+        continue;
       }
+
+      const { accessToken, expiresIn } = await adapter.refreshToken(
+        account.access_token_encrypted // TODO: decrypt
+      );
+
+      const newExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+      await sql`
+        UPDATE social_accounts
+        SET access_token_encrypted = ${accessToken},
+            token_expires_at = ${newExpiry},
+            updated_at = NOW()
+        WHERE id = ${account.id}
+      `;
+
+      refreshed++;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`Token refresh failed for ${account.account_name}: ${msg}`);
 
-      // Mark account as needing re-auth if refresh fails
+      // Mark account as needing re-auth
       await sql`
         UPDATE social_accounts
         SET status = 'token_expired', updated_at = NOW()

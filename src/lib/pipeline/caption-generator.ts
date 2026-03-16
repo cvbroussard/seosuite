@@ -48,6 +48,16 @@ const PLATFORM_RULES: Record<string, { maxLength: number; hashtagRange: [number,
     hashtagRange: [0, 0],
     style: "Professional, local-focused. Include city name and service keywords. End with booking CTA and link.",
   },
+  fb_feed: {
+    maxLength: 63206,
+    hashtagRange: [3, 5],
+    style: "Conversational and engaging. Slightly longer than Instagram. Ask a question or share a story. CTA to comment or share.",
+  },
+  fb_reel: {
+    maxLength: 2200,
+    hashtagRange: [3, 5],
+    style: "Short, punchy hook. Similar to ig_reel but can reference the Facebook Page or community.",
+  },
 };
 
 /**
@@ -84,6 +94,8 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
     const p = post.platform as string;
     if (p === "instagram") {
       platformFormat = post.asset_media_type?.startsWith("video") ? "ig_reel" : "ig_feed";
+    } else if (p === "facebook") {
+      platformFormat = (post.asset_media_type?.startsWith("video") ? "fb_reel" : "fb_feed") as PlatformFormat;
     } else if (p === "youtube") {
       platformFormat = "youtube";
     } else if (p === "gbp") {
