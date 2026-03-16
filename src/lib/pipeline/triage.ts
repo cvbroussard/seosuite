@@ -100,10 +100,14 @@ function heuristicTriage(
     platformFit.push("ig_feed", "ig_story", "gbp");
   }
 
-  // Pillar assignment from context note keywords (rough heuristic)
+  // Pillar assignment — subscriber-provided pillar takes precedence over heuristic
   let pillar: ContentPillar = pillars[0] || "training_action";
+  const subscriberPillar = (metadata.pillar as string) || "";
   const note = contextNote.toLowerCase();
-  if (note.includes("before") || note.includes("after") || note.includes("result")) {
+
+  if (subscriberPillar && pillars.includes(subscriberPillar as ContentPillar)) {
+    pillar = subscriberPillar as ContentPillar;
+  } else if (note.includes("before") || note.includes("after") || note.includes("result")) {
     pillar = "result";
   } else if (note.includes("hektor") || note.includes("showcase") || note.includes("demo")) {
     pillar = "showcase";

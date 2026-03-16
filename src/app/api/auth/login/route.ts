@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { cookieDomain } from "@/lib/subdomains";
+import { createSessionToken } from "@/lib/auth";
 
 /**
  * POST /api/auth/login
@@ -55,6 +56,9 @@ export async function POST(req: NextRequest) {
     activeSiteId: sites[0]?.id || null,
   };
 
+  // Generate session token for native app clients
+  const sessionToken = await createSessionToken(subscriber.id);
+
   const response = NextResponse.json({
     subscriber: {
       id: subscriber.id,
@@ -62,6 +66,7 @@ export async function POST(req: NextRequest) {
       plan: subscriber.plan,
     },
     sites,
+    session_token: sessionToken, // For native app — store in SecureStore
   });
 
   const domain = cookieDomain();

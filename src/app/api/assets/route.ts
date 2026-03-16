@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { runPipeline } from "@/lib/pipeline/orchestrator";
 
 /**
  * POST /api/assets — Register a new media asset.
@@ -62,6 +63,11 @@ export async function POST(req: NextRequest) {
         media_type,
       })})
     `;
+
+    // Fire pipeline immediately — non-blocking (don't await)
+    runPipeline(site_id).catch((err) =>
+      console.error("Pipeline trigger after upload failed:", err)
+    );
 
     return NextResponse.json({ asset }, { status: 201 });
   } catch (err: unknown) {
