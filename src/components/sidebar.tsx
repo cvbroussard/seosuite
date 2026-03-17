@@ -2,6 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SidebarBrand } from "./sidebar-brand";
+
+interface SiteInfo {
+  id: string;
+  name: string;
+  url: string;
+}
+
+interface ChannelInfo {
+  id: string;
+  platform: string;
+  account_name: string;
+}
 
 const baseNav = [
   { label: "Dashboard", path: "", icon: "◆" },
@@ -14,7 +27,13 @@ const baseNav = [
   { label: "Settings", path: "/settings", icon: "⚙" },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  sites: SiteInfo[];
+  activeSiteId: string | null;
+  channels: ChannelInfo[];
+}
+
+export function Sidebar({ sites, activeSiteId, channels }: SidebarProps) {
   const pathname = usePathname();
 
   const isSubdomain =
@@ -28,6 +47,11 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-48 flex-col border-r border-border bg-surface">
+      <SidebarBrand
+        sites={sites}
+        activeSiteId={activeSiteId}
+        channels={channels}
+      />
       <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
         {nav.map((item) => {
           const active =
