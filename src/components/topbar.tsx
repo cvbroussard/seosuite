@@ -45,7 +45,7 @@ export function TopBar({ subscriberName, variant = "studio" }: TopBarProps) {
           href="https://tracpost.com/docs"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-white/50 transition-colors hover:text-white"
+          className="text-sm text-white/50 transition-colors hover:text-white"
         >
           Docs
         </a>
@@ -53,16 +53,16 @@ export function TopBar({ subscriberName, variant = "studio" }: TopBarProps) {
           href="https://tracpost.com/support"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-white/50 transition-colors hover:text-white"
+          className="text-sm text-white/50 transition-colors hover:text-white"
         >
           Support
         </a>
         <ThemeToggle />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-white/50">{subscriberName}</span>
+          <span className="text-sm text-white/50">{subscriberName}</span>
           <button
             onClick={handleLogout}
-            className="text-xs text-white/30 transition-colors hover:text-white"
+            className="text-sm text-white/30 transition-colors hover:text-white"
           >
             Sign out
           </button>
