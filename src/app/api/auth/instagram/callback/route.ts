@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForToken, discoverInstagramAccounts } from "@/lib/meta";
+import { exchangeCodeForToken, discoverInstagramAccounts, discoverFacebookPages } from "@/lib/meta";
 import { sql } from "@/lib/db";
 import { studioUrl } from "@/lib/subdomains";
 
@@ -82,15 +82,50 @@ export async function GET(req: NextRequest) {
       `;
     }
 
+    // Also discover and store Facebook Page accounts
+    const fbPages = await discoverFacebookPages(accessToken, state.page_ids);
+    console.log("OAuth callback — discovered FB pages:", JSON.stringify(fbPages));
+
+    for (const fb of fbPages) {
+      await sql`
+        INSERT INTO social_accounts (
+          subscriber_id, platform, account_name, account_id,
+          access_token_encrypted, token_expires_at,
+          scopes, status, metadata
+        )
+        VALUES (
+          ${state.subscriber_id}, 'facebook', ${fb.pageName}, ${fb.pageId},
+          ${fb.pageAccessToken}, ${expiresAt},
+          ${'{pages_manage_posts,pages_show_list,pages_read_engagement}'},
+          'active',
+          ${JSON.stringify({ page_id: fb.pageId, page_name: fb.pageName })}
+        )
+        ON CONFLICT (subscriber_id, platform, account_id)
+        DO UPDATE SET
+          account_name = EXCLUDED.account_name,
+          access_token_encrypted = EXCLUDED.access_token_encrypted,
+          token_expires_at = EXCLUDED.token_expires_at,
+          scopes = EXCLUDED.scopes,
+          status = 'active',
+          metadata = EXCLUDED.metadata,
+          updated_at = NOW()
+      `;
+    }
+
     // Log usage
     await sql`
       INSERT INTO usage_log (subscriber_id, action, metadata)
       VALUES (${state.subscriber_id}, 'instagram_connect', ${JSON.stringify({
         accounts: igAccounts.map((a) => a.igUsername),
+        facebook_pages: fbPages.map((p) => p.pageName),
       })})
     `;
 
-    const accountNames = igAccounts.map((a) => a.igUsername).join(",");
+    const allNames = [
+      ...igAccounts.map((a) => a.igUsername),
+      ...fbPages.map((p) => `FB:${p.pageName}`),
+    ];
+    const accountNames = allNames.join(",");
     return NextResponse.redirect(
       `${studioUrl("/accounts")}?connected=${encodeURIComponent(accountNames)}`
     );

@@ -18,6 +18,7 @@ export function getMetaAuthUrl(state: string): string {
       "instagram_content_publish",
       "pages_show_list",
       "pages_read_engagement",
+      "pages_manage_posts",
     ].join(","),
     response_type: "code",
     state,
@@ -140,6 +141,60 @@ async function fetchIgAccount(
     pageName: page.name,
     pageId: page.id,
   };
+}
+
+/**
+ * Discover Facebook Pages the user manages, with their Page access tokens.
+ * Page tokens from a long-lived user token are themselves long-lived.
+ */
+export async function discoverFacebookPages(
+  accessToken: string,
+  pageIds?: string[]
+): Promise<Array<{
+  pageId: string;
+  pageName: string;
+  pageAccessToken: string;
+}>> {
+  const pages: Array<{
+    pageId: string;
+    pageName: string;
+    pageAccessToken: string;
+  }> = [];
+
+  // Strategy 1: me/accounts with access_token field
+  const pagesRes = await fetch(
+    `${GRAPH_BASE}/me/accounts?fields=id,name,access_token&access_token=${accessToken}`
+  );
+  const pagesData = await pagesRes.json();
+
+  if (pagesRes.ok && pagesData.data?.length > 0) {
+    for (const page of pagesData.data) {
+      pages.push({
+        pageId: page.id,
+        pageName: page.name,
+        pageAccessToken: page.access_token,
+      });
+    }
+  }
+
+  // Strategy 2: Direct Page ID queries (fallback)
+  if (pages.length === 0 && pageIds && pageIds.length > 0) {
+    for (const pageId of pageIds) {
+      const pageRes = await fetch(
+        `${GRAPH_BASE}/${pageId}?fields=id,name,access_token&access_token=${accessToken}`
+      );
+      const pageData = await pageRes.json();
+      if (pageRes.ok && pageData.access_token) {
+        pages.push({
+          pageId: pageData.id,
+          pageName: pageData.name,
+          pageAccessToken: pageData.access_token,
+        });
+      }
+    }
+  }
+
+  return pages;
 }
 
 /**
