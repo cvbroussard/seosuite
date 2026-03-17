@@ -16,7 +16,6 @@ export function getMetaAuthUrl(state: string): string {
     scope: [
       "instagram_basic",
       "instagram_content_publish",
-      "pages_manage_posts",
       "pages_read_engagement",
     ].join(","),
     response_type: "code",
