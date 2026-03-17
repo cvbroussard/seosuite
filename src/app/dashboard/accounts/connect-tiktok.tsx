@@ -30,16 +30,16 @@ export function ConnectTikTokButton() {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <>
       <button
         onClick={handleConnect}
         disabled={loading}
-        className="flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-80 disabled:opacity-50"
+        className="flex items-center gap-2 border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50"
       >
-        <TikTokIcon size={16} />
+        <TikTokIcon size={14} />
         {loading ? "Connecting..." : "TikTok"}
       </button>
       {error && <span className="text-xs text-danger">{error}</span>}
-    </div>
+    </>
   );
 }

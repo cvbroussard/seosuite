@@ -30,16 +30,16 @@ export function ConnectGoogleButton({ siteId }: { siteId: string }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <>
       <button
         onClick={handleConnect}
         disabled={loading}
-        className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+        className="flex items-center gap-2 border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50"
       >
-        <GoogleIcon size={16} />
+        <GoogleIcon size={14} />
         {loading ? "Connecting..." : "Google Business"}
       </button>
       {error && <span className="text-xs text-danger">{error}</span>}
-    </div>
+    </>
   );
 }

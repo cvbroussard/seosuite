@@ -6,16 +6,13 @@ import { InstagramIcon } from "@/components/platform-icons";
 export function ConnectInstagramButton() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showPageIds, setShowPageIds] = useState(false);
-  const [pageIds, setPageIds] = useState("");
 
   async function handleConnect() {
     setLoading(true);
     setError("");
 
     try {
-      const params = pageIds.trim() ? `?page_ids=${pageIds.trim()}` : "";
-      const res = await fetch(`/api/auth/instagram${params}`);
+      const res = await fetch("/api/auth/instagram");
 
       if (!res.ok) {
         const data = await res.json();
@@ -33,33 +30,16 @@ export function ConnectInstagramButton() {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {showPageIds && (
-        <input
-          type="text"
-          value={pageIds}
-          onChange={(e) => setPageIds(e.target.value)}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-accent"
-          placeholder="Facebook Page ID(s)"
-        />
-      )}
+    <>
       <button
         onClick={handleConnect}
         disabled={loading}
-        className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+        className="flex items-center gap-2 border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50"
       >
-        <InstagramIcon size={16} />
+        <InstagramIcon size={14} />
         {loading ? "Connecting..." : "Instagram"}
       </button>
-      {!showPageIds && (
-        <button
-          onClick={() => setShowPageIds(true)}
-          className="text-[10px] text-muted hover:text-foreground"
-        >
-          Page ID?
-        </button>
-      )}
       {error && <span className="text-xs text-danger">{error}</span>}
-    </div>
+    </>
   );
 }
