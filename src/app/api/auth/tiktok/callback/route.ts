@@ -44,9 +44,21 @@ export async function GET(req: NextRequest) {
     const { accessToken, refreshToken, expiresIn, openId } =
       await exchangeTikTokCode(code);
 
-    // Fetch user profile
-    const userInfo = await getTikTokUserInfo(accessToken);
-    const accountName = userInfo.username || userInfo.displayName || openId;
+    // Fetch user profile (best-effort — sandbox may restrict this)
+    let accountName = openId;
+    let userMeta: Record<string, string> = { open_id: openId };
+    try {
+      const userInfo = await getTikTokUserInfo(accessToken);
+      accountName = userInfo.username || userInfo.displayName || openId;
+      userMeta = {
+        open_id: openId,
+        username: userInfo.username,
+        display_name: userInfo.displayName,
+        avatar_url: userInfo.avatarUrl,
+      };
+    } catch (e) {
+      console.warn("TikTok user info fetch failed (non-fatal):", e instanceof Error ? e.message : e);
+    }
 
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
@@ -62,12 +74,7 @@ export async function GET(req: NextRequest) {
         ${accessToken}, ${refreshToken}, ${expiresAt},
         ${"{user.info.basic,video.publish,video.upload}"},
         'active',
-        ${JSON.stringify({
-          open_id: openId,
-          username: userInfo.username,
-          display_name: userInfo.displayName,
-          avatar_url: userInfo.avatarUrl,
-        })}
+        ${JSON.stringify(userMeta)}
       )
       ON CONFLICT (subscriber_id, platform, account_id)
       DO UPDATE SET
@@ -85,8 +92,7 @@ export async function GET(req: NextRequest) {
     await sql`
       INSERT INTO usage_log (subscriber_id, action, metadata)
       VALUES (${state.subscriber_id}, 'tiktok_connect', ${JSON.stringify({
-        username: userInfo.username,
-        display_name: userInfo.displayName,
+        account_name: accountName,
       })})
     `;
 
