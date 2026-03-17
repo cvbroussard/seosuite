@@ -132,6 +132,14 @@ body {
   transition: background var(--tp-transition), color var(--tp-transition);
 }
 
+/* Buttons — tight 4px radius (Tux pattern) */
+button,
+a[role="button"],
+[type="submit"],
+[type="button"] {
+  border-radius: var(--tp-radius-sm);
+}
+
 /* Flat inputs — borderless, opacity background */
 input:not([type="checkbox"]):not([type="radio"]),
 textarea,
