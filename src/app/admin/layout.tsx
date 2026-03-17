@@ -1,3 +1,4 @@
+import { TopBar } from "@/components/topbar";
 import { AdminSidebar } from "@/components/admin-sidebar";
 
 export const metadata = {
@@ -10,9 +11,12 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <AdminSidebar />
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+    <div className="flex h-screen flex-col overflow-hidden">
+      <TopBar subscriberName="Admin" variant="platform" />
+      <div className="flex flex-1 overflow-hidden">
+        <AdminSidebar />
+        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ThemeToggle } from "./theme-toggle";
+import { usePathname } from "next/navigation";
 
 const baseNav = [
   { label: "Dashboard", path: "", icon: "◆" },
@@ -15,12 +14,9 @@ const baseNav = [
   { label: "Settings", path: "/settings", icon: "⚙" },
 ];
 
-export function Sidebar({ subscriberName }: { subscriberName: string }) {
+export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
 
-  // On studio subdomain, links are root-relative (no /dashboard prefix).
-  // In dev (localhost), keep the /dashboard prefix.
   const isSubdomain =
     typeof window !== "undefined" &&
     window.location.hostname === "studio.tracpost.com";
@@ -30,19 +26,9 @@ export function Sidebar({ subscriberName }: { subscriberName: string }) {
     href: prefix + item.path || "/",
   }));
 
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  }
-
   return (
-    <aside className="flex h-screen w-56 flex-col border-r border-border bg-surface">
-      <div className="flex h-14 items-center px-5">
-        <span className="text-sm font-semibold tracking-wider text-foreground">
-          TRACPOST
-        </span>
-      </div>
-      <nav className="flex flex-1 flex-col gap-0.5 px-2 py-2">
+    <aside className="flex h-full w-48 flex-col border-r border-border bg-surface">
+      <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
         {nav.map((item) => {
           const active =
             item.path === ""
@@ -64,18 +50,6 @@ export function Sidebar({ subscriberName }: { subscriberName: string }) {
           );
         })}
       </nav>
-      <div className="border-t border-border px-5 py-3">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="truncate text-xs font-medium">{subscriberName}</p>
-          <ThemeToggle />
-        </div>
-        <button
-          onClick={handleLogout}
-          className="text-[10px] text-muted hover:text-foreground"
-        >
-          Sign out
-        </button>
-      </div>
     </aside>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ThemeToggle } from "./theme-toggle";
+import { usePathname } from "next/navigation";
 
 const baseNav = [
   { label: "Overview", path: "", icon: "◆" },
@@ -15,7 +14,6 @@ const baseNav = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
 
   const isSubdomain =
     typeof window !== "undefined" &&
@@ -23,20 +21,12 @@ export function AdminSidebar() {
   const prefix = isSubdomain ? "" : "/admin";
   const nav = baseNav.map((item) => ({
     ...item,
-    href: prefix + item.path || prefix,
+    href: prefix + item.path || "/",
   }));
 
   return (
-    <aside className="flex h-screen w-56 flex-col border-r border-border bg-surface">
-      <div className="flex h-14 items-center gap-2 px-5">
-        <span className="text-sm font-semibold tracking-wider text-foreground">
-          TRACPOST
-        </span>
-        <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-          ADMIN
-        </span>
-      </div>
-      <nav className="flex flex-1 flex-col gap-0.5 px-2 py-2">
+    <aside className="flex h-full w-48 flex-col border-r border-border bg-surface">
+      <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
         {nav.map((item) => {
           const active =
             item.path === ""
@@ -58,21 +48,6 @@ export function AdminSidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-border px-5 py-3">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="text-xs text-muted">Platform Admin</p>
-          <ThemeToggle />
-        </div>
-        <button
-          onClick={async () => {
-            await fetch("/api/auth/admin", { method: "DELETE" });
-            router.push(isSubdomain ? "/login" : "/admin-login");
-          }}
-          className="text-[10px] text-muted hover:text-foreground"
-        >
-          Sign out
-        </button>
-      </div>
     </aside>
   );
 }
