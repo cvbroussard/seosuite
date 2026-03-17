@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { ConnectInstagramButton } from "./connect-instagram";
 import { ConnectGoogleButton } from "./connect-google";
+import { ConnectTikTokButton } from "./connect-tiktok";
 import { LinkAccountForm } from "./link-account";
 import { DisconnectButton } from "./disconnect-button";
 
@@ -58,6 +59,7 @@ export default async function AccountsPage() {
         </div>
         <div className="flex gap-2">
           <ConnectInstagramButton />
+          <ConnectTikTokButton />
           {session.activeSiteId && (
             <ConnectGoogleButton siteId={session.activeSiteId} />
           )}
