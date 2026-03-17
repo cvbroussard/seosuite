@@ -10,12 +10,6 @@ interface SiteInfo {
   url: string;
 }
 
-interface ChannelInfo {
-  id: string;
-  platform: string;
-  account_name: string;
-}
-
 const baseNav = [
   { label: "Dashboard", path: "", icon: "◆" },
   { label: "Brand", path: "/brand", icon: "◈" },
@@ -28,12 +22,12 @@ const baseNav = [
 ];
 
 interface SidebarProps {
+  subscriberName: string;
   sites: SiteInfo[];
   activeSiteId: string | null;
-  channels: ChannelInfo[];
 }
 
-export function Sidebar({ sites, activeSiteId, channels }: SidebarProps) {
+export function Sidebar({ subscriberName, sites, activeSiteId }: SidebarProps) {
   const pathname = usePathname();
 
   const isSubdomain =
@@ -48,9 +42,9 @@ export function Sidebar({ sites, activeSiteId, channels }: SidebarProps) {
   return (
     <aside className="flex h-full w-48 flex-col border-r border-border bg-surface">
       <SidebarBrand
+        subscriberName={subscriberName}
         sites={sites}
         activeSiteId={activeSiteId}
-        channels={channels}
       />
       <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
         {nav.map((item) => {
