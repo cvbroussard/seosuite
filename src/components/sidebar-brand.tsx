@@ -33,13 +33,8 @@ export function SidebarBrand({ subscriberName, sites, activeSiteId, onSiteChange
 
   return (
     <div className="border-b border-border px-4 py-3">
-      {/* Business brand */}
-      <p className="font-semibold text-foreground">
-        {subscriberName}
-      </p>
-
       {/* Channel (site) badge / picker */}
-      <div className="relative mt-1.5" ref={dropdownRef}>
+      <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => sites.length > 1 && setOpen(!open)}
           className={`flex items-center gap-1.5 text-xs text-muted transition-colors ${sites.length > 1 ? "hover:text-foreground" : ""}`}
