@@ -8,6 +8,8 @@ import {
   FacebookIcon,
   PinterestIcon,
   TwitterIcon,
+  YouTubeIcon,
+  LinkedInIcon,
   PlatformIcon,
 } from "@/components/platform-icons";
 
@@ -20,9 +22,9 @@ const PLATFORMS = [
   { key: "tiktok", label: "TikTok", icon: TikTokIcon, ready: true },
   { key: "facebook", label: "Facebook", icon: FacebookIcon, ready: false, note: "Pending app review" },
   { key: "gbp", label: "Google Business", icon: GoogleIcon, ready: false, note: "Pending API access" },
-  { key: "youtube", label: "YouTube", icon: GoogleIcon, ready: false },
+  { key: "youtube", label: "YouTube", icon: YouTubeIcon, ready: false },
   { key: "twitter", label: "Twitter / X", icon: TwitterIcon, ready: true },
-  { key: "linkedin", label: "LinkedIn", icon: PlatformIcon, ready: false },
+  { key: "linkedin", label: "LinkedIn", icon: LinkedInIcon, ready: false },
   { key: "pinterest", label: "Pinterest", icon: PinterestIcon, ready: true },
 ];
 
@@ -36,7 +38,7 @@ export function ConnectButton({ siteId }: ConnectModalProps) {
     setError("");
 
     try {
-      let url = `/api/auth/${platform}`;
+      let url = `/api/auth/${platform}?site_id=${siteId}`;
       if (platform === "google" || platform === "gbp") {
         url = `/api/auth/google?site_id=${siteId}`;
       }

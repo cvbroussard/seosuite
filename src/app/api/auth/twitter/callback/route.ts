@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let state: { subscriber_id: string; code_verifier: string };
+  let state: { subscriber_id: string; site_id?: string | null; code_verifier: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -82,6 +82,21 @@ export async function GET(req: NextRequest) {
         metadata = EXCLUDED.metadata,
         updated_at = NOW()
     `;
+
+    // Auto-link to active channel
+    if (state.site_id && accountId) {
+      const [acct] = await sql`
+        SELECT id FROM social_accounts
+        WHERE subscriber_id = ${state.subscriber_id} AND platform = 'twitter' AND account_id = ${accountId}
+      `;
+      if (acct) {
+        await sql`
+          INSERT INTO site_social_links (site_id, social_account_id)
+          VALUES (${state.site_id}, ${acct.id})
+          ON CONFLICT DO NOTHING
+        `;
+      }
+    }
 
     await sql`
       INSERT INTO usage_log (subscriber_id, action, metadata)

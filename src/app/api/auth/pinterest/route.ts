@@ -12,9 +12,12 @@ export async function GET(req: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const auth = authResult as AuthContext;
 
+  const siteId = new URL(req.url).searchParams.get("site_id");
+
   const state = Buffer.from(
     JSON.stringify({
       subscriber_id: auth.subscriberId,
+      site_id: siteId || null,
     })
   ).toString("base64url");
 

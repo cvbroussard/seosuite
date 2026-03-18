@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { PlatformIcon } from "@/components/platform-icons";
 import { ConnectButton } from "./connect-modal";
 import { AccountName } from "./account-name";
-import { LinkAccountForm } from "./link-account";
 import { DisconnectButton } from "./disconnect-button";
 
 export const dynamic = "force-dynamic";
@@ -102,24 +101,15 @@ export default async function AccountsPage() {
                 </div>
 
                 {/* Linked sites */}
-                <div className="mt-4 flex items-center gap-3">
-                  {accountLinks.length > 0 ? (
-                    accountLinks.map((link) => (
+                {accountLinks.length > 0 && (
+                  <div className="mt-4 flex items-center gap-2">
+                    {accountLinks.map((link) => (
                       <span key={link.siteId} className="rounded bg-accent/10 px-2 py-1 text-xs text-accent">
                         {link.siteName}
                       </span>
-                    ))
-                  ) : (
-                    <span className="text-sm text-warning">Not linked to any site</span>
-                  )}
-                  {sites.length > 0 && (
-                    <LinkAccountForm
-                      accountId={acc.id}
-                      sites={sites.map((s) => ({ id: s.id, name: s.name }))}
-                      linkedSiteIds={accountLinks.map((l) => l.siteId)}
-                    />
-                  )}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

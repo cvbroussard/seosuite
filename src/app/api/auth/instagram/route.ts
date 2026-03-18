@@ -17,11 +17,12 @@ export async function GET(req: NextRequest) {
 
   const params = new URL(req.url).searchParams;
   const pageIds = params.get("page_ids");
+  const siteId = params.get("site_id");
 
-  // Encode state: subscriber_id + optional page_ids
   const state = Buffer.from(
     JSON.stringify({
       subscriber_id: auth.subscriberId,
+      site_id: siteId || null,
       page_ids: pageIds ? pageIds.split(",").map((s) => s.trim()) : [],
     })
   ).toString("base64url");

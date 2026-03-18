@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let state: { subscriber_id: string; page_ids?: string[] };
+  let state: { subscriber_id: string; site_id?: string | null; page_ids?: string[] };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -111,6 +111,36 @@ export async function GET(req: NextRequest) {
           metadata = EXCLUDED.metadata,
           updated_at = NOW()
       `;
+    }
+
+    // Auto-link to active channel
+    if (state.site_id) {
+      for (const ig of igAccounts) {
+        const [acct] = await sql`
+          SELECT id FROM social_accounts
+          WHERE subscriber_id = ${state.subscriber_id} AND platform = 'instagram' AND account_id = ${ig.igUserId}
+        `;
+        if (acct) {
+          await sql`
+            INSERT INTO site_social_links (site_id, social_account_id)
+            VALUES (${state.site_id}, ${acct.id})
+            ON CONFLICT DO NOTHING
+          `;
+        }
+      }
+      for (const fb of fbPages) {
+        const [acct] = await sql`
+          SELECT id FROM social_accounts
+          WHERE subscriber_id = ${state.subscriber_id} AND platform = 'facebook' AND account_id = ${fb.pageId}
+        `;
+        if (acct) {
+          await sql`
+            INSERT INTO site_social_links (site_id, social_account_id)
+            VALUES (${state.site_id}, ${acct.id})
+            ON CONFLICT DO NOTHING
+          `;
+        }
+      }
     }
 
     // Log usage
