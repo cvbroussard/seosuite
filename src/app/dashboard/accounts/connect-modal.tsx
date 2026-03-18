@@ -6,6 +6,8 @@ import {
   TikTokIcon,
   GoogleIcon,
   FacebookIcon,
+  PinterestIcon,
+  TwitterIcon,
   PlatformIcon,
 } from "@/components/platform-icons";
 
@@ -18,10 +20,10 @@ const PLATFORMS = [
   { key: "tiktok", label: "TikTok", icon: TikTokIcon, ready: true },
   { key: "facebook", label: "Facebook", icon: FacebookIcon, ready: false, note: "Pending app review" },
   { key: "gbp", label: "Google Business", icon: GoogleIcon, ready: false, note: "Pending API access" },
-  { key: "youtube", label: "YouTube", icon: PlatformIcon, ready: false },
-  { key: "twitter", label: "Twitter / X", icon: PlatformIcon, ready: true },
+  { key: "youtube", label: "YouTube", icon: GoogleIcon, ready: false },
+  { key: "twitter", label: "Twitter / X", icon: TwitterIcon, ready: true },
   { key: "linkedin", label: "LinkedIn", icon: PlatformIcon, ready: false },
-  { key: "pinterest", label: "Pinterest", icon: PlatformIcon, ready: true },
+  { key: "pinterest", label: "Pinterest", icon: PinterestIcon, ready: true },
 ];
 
 export function ConnectButton({ siteId }: ConnectModalProps) {
