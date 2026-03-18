@@ -73,10 +73,8 @@ export default async function AccountsPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <PlatformIcon platform={acc.platform} size={22} />
-                    <div>
-                      <AccountName name={acc.account_name} />
-                      <p className="text-sm text-muted">{acc.platform}</p>
-                    </div>
+                    <p className="font-medium">{acc.platform}</p>
+                    <AccountName name={acc.account_name} />
                   </div>
                   <div className="flex items-center gap-4">
                     <span className={`text-sm ${acc.status === "active" ? "text-success" : "text-danger"}`}>
