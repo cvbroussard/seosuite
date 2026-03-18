@@ -21,7 +21,7 @@ const PLATFORMS = [
   { key: "youtube", label: "YouTube", icon: PlatformIcon, ready: false },
   { key: "twitter", label: "Twitter / X", icon: PlatformIcon, ready: true },
   { key: "linkedin", label: "LinkedIn", icon: PlatformIcon, ready: false },
-  { key: "pinterest", label: "Pinterest", icon: PlatformIcon, ready: false },
+  { key: "pinterest", label: "Pinterest", icon: PlatformIcon, ready: true },
 ];
 
 export function ConnectButton({ siteId }: ConnectModalProps) {
