@@ -14,13 +14,13 @@ export default async function DashboardOverview() {
   if (!session.activeSiteId) {
     return (
       <div className="mx-auto max-w-4xl">
-        <h1 className="mb-1 text-lg font-semibold">Welcome, {session.subscriberName}</h1>
-        <p className="mb-8 text-sm text-muted">Let&apos;s get started by adding your blog.</p>
+        <h1 className="mb-2">Welcome, {session.subscriberName}</h1>
+        <p className="mb-8 text-muted">Let&apos;s get started by adding your site.</p>
         <div className="flex flex-col items-center rounded-lg border border-dashed border-border px-8 py-12">
           <span className="mb-3 text-3xl">◆</span>
-          <h3 className="mb-1 text-sm font-medium">Add your blog</h3>
-          <p className="mb-6 max-w-xs text-center text-xs text-muted">
-            Enter your blog URL to start generating social content from your posts.
+          <h3 className="mb-1">Add your site</h3>
+          <p className="mb-6 max-w-xs text-center text-sm text-muted">
+            Enter your site URL to start generating social content.
           </p>
           <AddSiteForm />
         </div>
@@ -76,12 +76,10 @@ export default async function DashboardOverview() {
     `,
   ]);
 
-  const siteName = site[0]?.name || "Your Site";
   const p = postStats[0];
   const a = assetStats[0];
   const h = healthData[0];
 
-  // Pipeline health status
   const triaged = h?.triaged || 0;
   const openSlots = h?.open_slots || 0;
   let healthColor = "bg-muted";
@@ -104,31 +102,22 @@ export default async function DashboardOverview() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="mb-1 text-lg font-semibold">{siteName}</h1>
-      <p className="mb-8 text-sm text-muted">
-        {site[0]?.autopilot_enabled
-          ? "Autopilot is active — content publishes automatically"
-          : "Autopilot is off"}
-      </p>
-
-      {/* Pipeline Health */}
-      <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-surface p-4">
-        <span className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${healthColor}`} />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{healthLabel}</p>
-          <p className="text-xs text-muted">
-            {triaged} ready &middot; {openSlots} open slots this week &middot; {p.scheduled} scheduled
-          </p>
-        </div>
+      {/* Pipeline status */}
+      <div className="mb-6 flex items-center gap-3">
+        <span className={`inline-block h-2.5 w-2.5 rounded-full ${healthColor}`} />
+        <span className="font-medium">{healthLabel}</span>
+        <span className="text-sm text-muted">
+          {triaged} ready · {openSlots} open slots · {p.scheduled} scheduled
+        </span>
       </div>
 
       {/* Low inventory nudge */}
       {openSlots > 0 && triaged < openSlots && (
         <div
-          className={`mb-4 rounded-lg border p-3 text-sm font-medium ${
+          className={`mb-6 rounded-lg p-3 text-sm font-medium ${
             triaged === 0
-              ? "border-danger/40 bg-danger/10 text-danger"
-              : "border-warning/40 bg-warning/10 text-warning"
+              ? "bg-danger/10 text-danger"
+              : "bg-warning/10 text-warning"
           }`}
         >
           {triaged === 0
@@ -137,69 +126,72 @@ export default async function DashboardOverview() {
         </div>
       )}
 
-      <div className="mb-8 grid grid-cols-4 gap-4">
-        <div className="rounded-lg border border-border bg-surface p-4 text-center">
-          <p className="text-2xl font-semibold">{accounts[0].active}</p>
-          <p className="text-xs text-muted">Connected Accounts</p>
+      {/* Key metrics */}
+      <div className="mb-8 grid grid-cols-4 gap-6">
+        <div>
+          <p className="text-3xl font-semibold">{accounts[0].active}</p>
+          <p className="mt-1 text-sm text-muted">Connected Accounts</p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4 text-center">
-          <p className="text-2xl font-semibold">{p.scheduled}</p>
-          <p className="text-xs text-muted">Scheduled</p>
+        <div>
+          <p className="text-3xl font-semibold">{p.scheduled}</p>
+          <p className="mt-1 text-sm text-muted">Scheduled</p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4 text-center">
-          <p className="text-2xl font-semibold text-success">{p.published}</p>
-          <p className="text-xs text-muted">Published</p>
+        <div>
+          <p className="text-3xl font-semibold text-success">{p.published}</p>
+          <p className="mt-1 text-sm text-muted">Published</p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4 text-center">
-          <p className={`text-2xl font-semibold ${a.ready + a.shelved > 0 ? "" : "text-warning"}`}>
+        <div>
+          <p className={`text-3xl font-semibold ${a.ready + a.shelved > 0 ? "" : "text-warning"}`}>
             {a.ready + a.shelved}
           </p>
-          <p className="text-xs text-muted">Assets Ready</p>
+          <p className="mt-1 text-sm text-muted">Assets Ready</p>
         </div>
       </div>
 
-      <div className="mb-8 rounded-lg border border-border bg-surface p-5">
-        <h2 className="mb-3 text-sm font-medium">Media Pipeline</h2>
-        <div className="grid grid-cols-4 gap-4 text-center">
+      {/* Media Pipeline */}
+      <section className="mb-8">
+        <h2 className="mb-4">Media Pipeline</h2>
+        <div className="grid grid-cols-4 gap-6">
           <div>
-            <p className="text-lg font-semibold">{a.received}</p>
-            <p className="text-[10px] text-muted">Awaiting Triage</p>
+            <p className="text-2xl font-semibold">{a.received}</p>
+            <p className="mt-1 text-sm text-muted">Awaiting Triage</p>
           </div>
           <div>
-            <p className="text-lg font-semibold">{a.ready}</p>
-            <p className="text-[10px] text-muted">Ready</p>
+            <p className="text-2xl font-semibold">{a.ready}</p>
+            <p className="mt-1 text-sm text-muted">Ready</p>
           </div>
           <div>
-            <p className="text-lg font-semibold">{a.shelved}</p>
-            <p className="text-[10px] text-muted">Shelved</p>
+            <p className="text-2xl font-semibold">{a.shelved}</p>
+            <p className="mt-1 text-sm text-muted">Shelved</p>
           </div>
           <div>
-            <p className={`text-lg font-semibold ${a.flagged > 0 ? "text-warning" : ""}`}>{a.flagged}</p>
-            <p className="text-[10px] text-muted">Flagged</p>
+            <p className={`text-2xl font-semibold ${a.flagged > 0 ? "text-warning" : ""}`}>{a.flagged}</p>
+            <p className="mt-1 text-sm text-muted">Flagged</p>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="rounded-lg border border-border bg-surface p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium">Upcoming Posts</h2>
-          <Link href="/dashboard/calendar" className="text-xs text-accent hover:underline">
+      {/* Upcoming Posts */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2>Upcoming Posts</h2>
+          <Link href="/dashboard/calendar" className="text-sm text-accent hover:underline">
             View calendar
           </Link>
         </div>
         {upcoming.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {upcoming.map((post) => (
-              <div key={post.id} className="flex items-start justify-between rounded border border-border p-3">
+              <div key={post.id} className="flex items-start justify-between border-b border-border py-3 last:border-0">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{post.caption || "Awaiting caption"}</p>
-                  <p className="mt-0.5 text-xs text-muted">
+                  <p className="truncate">{post.caption || "Awaiting caption"}</p>
+                  <p className="mt-0.5 text-sm text-muted">
                     {post.account_name} ({post.platform})
-                    {post.content_pillar && ` — ${post.content_pillar}`}
+                    {post.content_pillar && ` · ${post.content_pillar}`}
                   </p>
                 </div>
                 <div className="ml-4 shrink-0 text-right">
-                  <p className="text-xs text-muted">
+                  <p className="text-sm text-muted">
                     {post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : "—"}
                   </p>
                 </div>
@@ -207,9 +199,9 @@ export default async function DashboardOverview() {
             ))}
           </div>
         ) : (
-          <p className="py-6 text-center text-sm text-muted">No upcoming posts</p>
+          <p className="py-8 text-center text-muted">No upcoming posts</p>
         )}
-      </div>
+      </section>
     </div>
   );
 }
