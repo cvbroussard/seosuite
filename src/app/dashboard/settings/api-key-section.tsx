@@ -30,46 +30,48 @@ export function ApiKeySection() {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-surface p-5">
-      <h2 className="mb-1 text-sm font-medium">API Key</h2>
-      <p className="mb-4 text-xs text-muted">
+    <section className="mb-8">
+      <h2 className="mb-1">API Key</h2>
+      <p className="mb-4 text-sm text-muted">
         For programmatic API access. Keep this secret — it grants full access to your account.
       </p>
 
       {newKey ? (
         <div>
-          <label className="mb-1 block text-xs text-danger">New API key (copy now — shown only once)</label>
+          <label className="mb-1.5 block text-sm font-medium text-danger">
+            New API key (copy now — shown only once)
+          </label>
           <div className="mb-3 flex items-center gap-2">
-            <div className="min-w-0 flex-1 rounded border border-danger/30 bg-background px-3 py-2 font-mono text-xs break-all">
+            <div className="min-w-0 flex-1 rounded-lg bg-danger/10 px-3 py-2.5 font-mono text-sm break-all">
               {newKey}
             </div>
             <button
               onClick={handleCopy}
-              className="shrink-0 rounded border border-border px-3 py-2 text-xs text-muted transition-colors hover:bg-surface-hover"
+              className="shrink-0 border border-border px-3 py-2 text-sm text-muted transition-colors hover:text-foreground"
             >
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
           <button
             onClick={() => setNewKey(null)}
-            className="text-xs text-muted hover:text-foreground"
+            className="text-sm text-muted hover:text-foreground"
           >
             Done
           </button>
         </div>
       ) : confirming ? (
         <div className="flex items-center gap-3">
-          <span className="text-xs text-danger">This will invalidate your current key. Continue?</span>
+          <span className="text-sm text-danger">This will invalidate your current key. Continue?</span>
           <button
             onClick={handleRegenerate}
             disabled={loading}
-            className="rounded border border-danger/30 px-3 py-1.5 text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
+            className="border border-danger/30 px-3 py-1.5 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
           >
             {loading ? "..." : "Yes, regenerate"}
           </button>
           <button
             onClick={() => setConfirming(false)}
-            className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-hover"
+            className="border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground"
           >
             Cancel
           </button>
@@ -77,7 +79,7 @@ export function ApiKeySection() {
       ) : (
         <button
           onClick={() => setConfirming(true)}
-          className="rounded border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+          className="border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-foreground hover:text-foreground"
         >
           Regenerate API Key
         </button>

@@ -28,7 +28,6 @@ export function AccountActions({
       if (data.download_url) {
         setExportUrl(data.download_url);
       } else if (data.export_id) {
-        // Poll for completion
         pollExport(data.export_id);
       }
     } catch {
@@ -105,11 +104,11 @@ export function AccountActions({
     <>
       {/* Grace period banner */}
       {cancelled && graceEnd && (
-        <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
-          <p className="text-sm font-medium text-warning">
+        <div className="mb-8 rounded-lg bg-warning/10 p-4">
+          <p className="font-medium text-warning">
             Your account is scheduled for cancellation
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-sm text-muted">
             Your data will remain accessible until{" "}
             {new Date(graceEnd).toLocaleDateString("en-US", {
               year: "numeric",
@@ -121,7 +120,7 @@ export function AccountActions({
           <button
             onClick={revokeCancellation}
             disabled={revoking}
-            className="mt-3 rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="mt-3 bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {revoking ? "Revoking..." : "Keep My Account"}
           </button>
@@ -129,9 +128,9 @@ export function AccountActions({
       )}
 
       {/* Data Export */}
-      <section className="rounded-lg border border-border bg-surface p-5">
-        <h2 className="mb-1 text-sm font-medium">Data Export</h2>
-        <p className="mb-4 text-xs text-muted">
+      <section className="mb-8">
+        <h2 className="mb-1">Data Export</h2>
+        <p className="mb-4 text-sm text-muted">
           Download all your content — blog posts, social captions, images, and
           configuration. You own everything.
         </p>
@@ -140,20 +139,18 @@ export function AccountActions({
           <div className="flex items-center gap-3">
             <a
               href={exportUrl}
-              className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover"
+              className="bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
               download
             >
               Download Export
             </a>
-            <span className="text-xs text-muted">
-              Link expires in 7 days
-            </span>
+            <span className="text-sm text-muted">Link expires in 7 days</span>
           </div>
         ) : (
           <button
             onClick={requestExport}
             disabled={exporting}
-            className="rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted hover:border-accent hover:text-foreground disabled:opacity-50"
+            className="border border-border px-4 py-2 text-sm text-muted transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50"
           >
             {exporting ? "Building export..." : "Export My Data"}
           </button>
@@ -162,52 +159,52 @@ export function AccountActions({
 
       {/* Cancel Account */}
       {!cancelled && (
-        <section className="rounded-lg border border-error/20 bg-surface p-5">
-          <h2 className="mb-1 text-sm font-medium">Cancel Account</h2>
-          <p className="mb-4 text-xs text-muted">
+        <section className="mb-8">
+          <h2 className="mb-1 text-danger">Cancel Account</h2>
+          <p className="mb-4 text-sm text-muted">
             Your account stays active for 30 days after cancellation. Blog
             redirects stay active for 120 days. Export your data first.
           </p>
 
           {showCancelConfirm ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs text-muted">
+                <label className="mb-1.5 block text-sm font-medium">
                   Reason (optional)
                 </label>
                 <input
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
                   placeholder="Why are you leaving?"
+                  className="w-full px-3 py-2.5"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-muted">
+                <label className="mb-1.5 block text-sm font-medium">
                   Where is your blog moving? (optional)
                 </label>
                 <input
                   value={redirectTarget}
                   onChange={(e) => setRedirectTarget(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
                   placeholder="https://yourdomain.com/blog"
+                  className="w-full px-3 py-2.5"
                 />
-                <p className="mt-1 text-[10px] text-muted">
+                <p className="mt-1.5 text-sm text-muted">
                   We&apos;ll redirect your TracPost blog URLs here for 120 days
                   to preserve your SEO.
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <button
                   onClick={confirmCancel}
                   disabled={cancelling}
-                  className="rounded-lg bg-error px-4 py-2 text-xs font-medium text-white hover:bg-error/80 disabled:opacity-50"
+                  className="bg-danger px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
                 >
                   {cancelling ? "Cancelling..." : "Confirm Cancellation"}
                 </button>
                 <button
                   onClick={() => setShowCancelConfirm(false)}
-                  className="rounded-lg border border-border px-4 py-2 text-xs text-muted hover:text-foreground"
+                  className="border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
                 >
                   Never mind
                 </button>
@@ -216,7 +213,7 @@ export function AccountActions({
           ) : (
             <button
               onClick={() => setShowCancelConfirm(true)}
-              className="rounded-lg border border-error/40 px-4 py-2 text-xs font-medium text-error hover:bg-error/10"
+              className="border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10"
             >
               Cancel My Account
             </button>
