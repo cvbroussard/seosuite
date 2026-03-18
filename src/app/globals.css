@@ -175,11 +175,16 @@ a[role="button"],
 input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
+  width: 100%;
   background: var(--color-input-bg);
   border: none;
   border-radius: var(--tp-radius);
   color: var(--color-foreground);
+  padding: 10px 12px;
+  font-size: 15px;
+  line-height: 1.5;
   transition: background var(--tp-transition-fast);
+  resize: vertical;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):hover,
