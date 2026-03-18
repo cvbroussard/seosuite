@@ -52,7 +52,7 @@ export function PageHeader({ siteName, siteIcon, children }: PageHeaderProps) {
         ) : (
           <img src="/icon.svg" alt={siteName} className="h-5 w-5" />
         )}
-        <span className="font-medium text-foreground">{siteName}</span>
+        <span className="mr-3 font-medium text-foreground">{siteName}</span>
 
         {/* Breadcrumbs — root is always Dashboard */}
         {crumbs.length === 0 && !currentPage ? (
