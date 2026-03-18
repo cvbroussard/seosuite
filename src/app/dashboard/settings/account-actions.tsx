@@ -160,7 +160,7 @@ export function AccountActions({
       {/* Cancel Account */}
       {!cancelled && (
         <section className="mb-8">
-          <h2 className="mb-1 text-danger">Cancel Account</h2>
+          <h2 className="mb-1 text-muted">Cancel Account</h2>
           <p className="mb-4 text-sm text-muted">
             Your account stays active for 30 days after cancellation. Blog
             redirects stay active for 120 days. Export your data first.
