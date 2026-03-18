@@ -16,11 +16,22 @@ export async function GET() {
   const posts = await getBlogPosts(site.siteId, 100);
   const baseUrl = `https://${blogHost}`;
 
-  const urls = posts.map((post) => `
+  // Collect unique pillars for archive pages
+  const pillars = [...new Set(posts.map((p) => p.content_pillar as string).filter(Boolean))];
+
+  const pillarUrls = pillars.map((pillar) => `
+    <url>
+      <loc>${baseUrl}/pillar/${encodeURIComponent(pillar)}</loc>
+      <changefreq>weekly</changefreq>
+      <priority>0.8</priority>
+    </url>`).join("");
+
+  const postUrls = posts.map((post) => `
     <url>
       <loc>${baseUrl}/${post.slug}</loc>
       <lastmod>${new Date(post.published_at as string).toISOString()}</lastmod>
       <changefreq>monthly</changefreq>
+      <priority>0.6</priority>
     </url>`).join("");
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -29,7 +40,7 @@ export async function GET() {
       <loc>${baseUrl}/</loc>
       <changefreq>weekly</changefreq>
       <priority>1.0</priority>
-    </url>${urls}
+    </url>${pillarUrls}${postUrls}
 </urlset>`;
 
   return new NextResponse(xml, {

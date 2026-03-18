@@ -58,9 +58,29 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     }
   }
 
+  // Query 2-3 additional images from the media library for inline use
+  const inlineImages = await sql`
+    SELECT storage_url, context_note, content_pillar
+    FROM media_assets
+    WHERE site_id = ${asset.site_id}
+      AND id != ${assetId}
+      AND triage_status IN ('triaged', 'scheduled')
+      AND quality_score > 0.6
+      AND storage_url IS NOT NULL
+    ORDER BY
+      CASE WHEN content_pillar = ${asset.content_pillar || ''} THEN 0 ELSE 1 END,
+      quality_score DESC
+    LIMIT 3
+  `;
+
+  const imageUrls = inlineImages.map((img: Record<string, unknown>) => ({
+    url: img.storage_url as string,
+    context: img.context_note as string || "",
+  }));
+
   const prompt = playbook
-    ? buildPlaybookBlogPrompt(asset, playbook, aiAnalysis, hookText)
-    : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis);
+    ? buildPlaybookBlogPrompt(asset, playbook, aiAnalysis, hookText, imageUrls)
+    : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis, imageUrls);
 
   const response = await anthropic.messages.create({
     model: playbook ? "claude-sonnet-4-5-20250514" : "claude-haiku-4-5-20251001",
@@ -129,7 +149,26 @@ export async function generateBlogFromTopic(topicId: string): Promise<string | n
     `;
   }
 
-  const prompt = buildTopicBlogPrompt(topic, playbook, hookText);
+  // Query images from media library for inline use
+  const inlineImages = await sql`
+    SELECT storage_url, context_note
+    FROM media_assets
+    WHERE site_id = ${topic.site_id}
+      AND triage_status IN ('triaged', 'scheduled')
+      AND quality_score > 0.6
+      AND storage_url IS NOT NULL
+    ORDER BY
+      CASE WHEN content_pillar = ${topic.pillar || ''} THEN 0 ELSE 1 END,
+      quality_score DESC
+    LIMIT 3
+  `;
+
+  const imageUrls = inlineImages.map((img: Record<string, unknown>) => ({
+    url: img.storage_url as string,
+    context: img.context_note as string || "",
+  }));
+
+  const prompt = buildTopicBlogPrompt(topic, playbook, hookText, imageUrls);
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-5-20250514",
@@ -216,7 +255,8 @@ function buildPlaybookBlogPrompt(
   asset: Record<string, unknown>,
   playbook: BrandPlaybook,
   aiAnalysis: Record<string, unknown>,
-  hookText?: string
+  hookText?: string,
+  inlineImages?: Array<{ url: string; context: string }>
 ): string {
   const { audienceResearch, brandPositioning, offerCore } = playbook;
   const angle = brandPositioning.selectedAngles[0];
@@ -244,6 +284,12 @@ Desire phrases (use their language): ${lang.desirePhrases.join(", ")}
 Search phrases (optimize for): ${lang.searchPhrases.join(", ")}
 Emotional triggers: ${lang.emotionalTriggers.join(", ")}
 
+## Available Images
+Place 2-3 of these images at contextually relevant points in the article using markdown: ![brief description](url)
+${inlineImages && inlineImages.length > 0
+  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (context: ${img.context})` : ""}`).join("\n")
+  : "No additional images available — text only."}
+
 ## Core Writing Instructions
 
 1) Writing Style: Synthesize two contrasting voices:
@@ -264,6 +310,8 @@ Fusion: Lead paragraphs with vivid anecdotes or provocative metaphors, follow im
 
 6) Paragraph-First: Bullet points only when absolutely necessary. Prefer cohesive paragraph exposition with embedded entities and strong transitions.
 
+7) External Links: Include 1-2 outbound links to authoritative, non-competitor sources that support claims in the article. Use descriptive anchor text. Format as [anchor text](https://url). Never link to direct competitors.
+
 ## Response Format
 Respond with ONLY valid JSON (no markdown fencing):
 {
@@ -281,7 +329,8 @@ Respond with ONLY valid JSON (no markdown fencing):
 function buildTopicBlogPrompt(
   topic: Record<string, unknown>,
   playbook: BrandPlaybook,
-  hookText?: string
+  hookText?: string,
+  inlineImages?: Array<{ url: string; context: string }>
 ): string {
   const { audienceResearch, brandPositioning, offerCore } = playbook;
   const angle = brandPositioning.selectedAngles[0];
@@ -313,6 +362,12 @@ Emotional triggers: ${lang.emotionalTriggers.join(", ")}
 ## Failed Solutions the Audience Has Tried
 ${audienceResearch.urgencyGateway.failedSolutions.join("\n")}
 
+## Available Images
+Place 2-3 of these images at contextually relevant points in the article using markdown: ![brief description](url)
+${inlineImages && inlineImages.length > 0
+  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (context: ${img.context})` : ""}`).join("\n")
+  : "No additional images available — text only."}
+
 ## Core Writing Instructions
 
 1) Writing Style: Synthesize two contrasting voices:
@@ -333,6 +388,8 @@ Fusion: Lead paragraphs with vivid anecdotes or provocative metaphors, follow im
 
 6) Paragraph-First: Bullet points only when absolutely necessary. Prefer cohesive paragraph exposition.
 
+7) External Links: Include 1-2 outbound links to authoritative, non-competitor sources. Use descriptive anchor text. Format as [anchor text](https://url).
+
 ## Response Format
 Respond with ONLY valid JSON (no markdown fencing):
 {
@@ -350,7 +407,8 @@ Respond with ONLY valid JSON (no markdown fencing):
 function buildBasicBlogPrompt(
   asset: Record<string, unknown>,
   brandVoice: Record<string, unknown>,
-  aiAnalysis: Record<string, unknown>
+  aiAnalysis: Record<string, unknown>,
+  inlineImages?: Array<{ url: string; context: string }>
 ): string {
   const parts: string[] = [];
 
@@ -368,12 +426,22 @@ function buildBasicBlogPrompt(
   if (aiAnalysis.description) parts.push(`Image description: ${aiAnalysis.description}`);
   if (aiAnalysis.quality_notes) parts.push(`Quality: ${aiAnalysis.quality_notes}`);
 
+  if (inlineImages && inlineImages.length > 0) {
+    parts.push("");
+    parts.push("## Available Images");
+    parts.push("Place 2-3 of these images at contextually relevant points using markdown: ![description](url)");
+    inlineImages.forEach((img, i) => {
+      parts.push(`Image ${i + 1}: ${img.url}${img.context ? ` (context: ${img.context})` : ""}`);
+    });
+  }
+
   parts.push("");
   parts.push("## Requirements");
   parts.push("- Title: engaging, SEO-friendly, 50-70 characters");
   parts.push("- Body: 300-600 words with 2-3 subheadings (## Heading)");
   parts.push("- Write in a way that tells a story or provides value, not just describes the image");
   parts.push("- Include a call-to-action at the end");
+  parts.push("- Include 1-2 outbound links to authoritative, non-competitor sources using [anchor text](url)");
   parts.push("- Excerpt: 1-2 sentence summary for previews");
   parts.push("- Meta description: 150-160 characters for SEO");
 
