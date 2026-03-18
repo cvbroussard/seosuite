@@ -37,7 +37,7 @@ export function SidebarBrand({ subscriberName, sites, activeSiteId, onSiteChange
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => sites.length > 1 && setOpen(!open)}
-          className={`flex items-center gap-1.5 text-xs text-muted transition-colors ${sites.length > 1 ? "hover:text-foreground" : ""}`}
+          className={`flex items-center gap-2 text-sm font-medium text-foreground transition-colors ${sites.length > 1 ? "hover:text-accent" : ""}`}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-success" />
           <span>{activeSite?.name || "No site"}</span>
