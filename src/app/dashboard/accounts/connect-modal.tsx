@@ -12,7 +12,7 @@ const PLATFORMS = [
   { key: "tiktok", label: "TikTok", ready: true },
   { key: "facebook", label: "Facebook", ready: false, note: "Pending app review" },
   { key: "gbp", label: "Google Business", ready: false, note: "Pending API access" },
-  { key: "youtube", label: "YouTube", ready: false },
+  { key: "youtube", label: "YouTube", ready: true },
   { key: "twitter", label: "Twitter / X", ready: true },
   { key: "linkedin", label: "LinkedIn", ready: false },
   { key: "pinterest", label: "Pinterest", ready: true },
