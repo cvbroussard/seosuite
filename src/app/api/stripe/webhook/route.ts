@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe, PRICE_TO_PLAN } from "@/lib/stripe";
 import { sql } from "@/lib/db";
 import { generateMagicToken } from "@/lib/magic-link";
+import { sendWelcomeEmail } from "@/lib/email";
 import { randomBytes, createHash } from "node:crypto";
 
 /**
@@ -97,7 +98,8 @@ async function handleCheckoutCompleted(session: Record<string, unknown>) {
 
     // Generate magic link for returning subscriber
     const token = await generateMagicToken(existing.id);
-    await sendWelcomeEmail(email, token, false);
+    const magicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://tracpost.com"}/auth/magic?token=${token}`;
+    await sendWelcomeEmail(email, magicUrl, false);
 
     console.log(`Stripe: reactivated subscriber ${existing.id} (${email})`);
     return;
@@ -139,7 +141,8 @@ async function handleCheckoutCompleted(session: Record<string, unknown>) {
 
   // Generate magic link
   const token = await generateMagicToken(subscriber.id);
-  await sendWelcomeEmail(email, token, true);
+  const magicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://tracpost.com"}/auth/magic?token=${token}`;
+  await sendWelcomeEmail(email, magicUrl, true);
 
   // Log
   await sql`
@@ -192,19 +195,3 @@ async function handleSubscriptionDeleted(subscription: Record<string, unknown>) 
   console.log(`Stripe: cancelled subscription for customer ${customerId}`);
 }
 
-/**
- * Send welcome email with magic link.
- * TODO: integrate with email provider (Resend, SES, etc.)
- * For now, logs the magic link URL.
- */
-async function sendWelcomeEmail(email: string, magicToken: string, isNew: boolean) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://tracpost.com";
-  const magicUrl = `${baseUrl}/auth/magic?token=${magicToken}`;
-
-  // TODO: Replace with actual email sending (Resend, SES)
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`WELCOME EMAIL → ${email}`);
-  console.log(`Type: ${isNew ? "New subscriber" : "Returning subscriber"}`);
-  console.log(`Magic link: ${magicUrl}`);
-  console.log(`${"=".repeat(60)}\n`);
-}

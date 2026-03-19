@@ -19,6 +19,7 @@ const baseNav = [
   { label: "SEO", path: "/seo", icon: "◇" },
   { label: "Accounts", path: "/accounts", icon: "◉" },
   { label: "Settings", path: "/settings", icon: "⚙" },
+  { label: "My Account", path: "/account", icon: "◯" },
 ];
 
 interface SidebarProps {
