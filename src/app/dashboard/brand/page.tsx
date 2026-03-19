@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { BrandWizard } from "./brand-wizard";
+import { OnboardingTip } from "@/components/onboarding-tip";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +38,15 @@ export default async function BrandPage() {
     initialHooks = wizardState.generatedHooks as unknown[];
   }
 
+  const hasPlaybook = playbook && (playbook as Record<string, unknown>).offerCore;
+
   return (
     <div className="py-4">
+      <OnboardingTip
+        tipKey="brand"
+        message="Your playbook is the DNA of every caption, blog post, and hook. The more detail you share about your business and audience, the sharper your content will be."
+        incomplete={!hasPlaybook}
+      />
       <BrandWizard
         siteId={siteId}
         initialPhase={initialPhase as "onboarding" | "angles" | "hooks" | "complete"}

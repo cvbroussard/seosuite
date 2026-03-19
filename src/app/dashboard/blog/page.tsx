@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { BlogDashboard } from "./blog-dashboard";
+import { OnboardingTip } from "@/components/onboarding-tip";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,11 @@ export default async function BlogPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <OnboardingTip
+        tipKey="blog"
+        message="Your blog is your SEO engine. Every post is a page Google indexes. This is how clients find you when they search for what you do."
+        incomplete={!settings.blog_enabled}
+      />
       <h1 className="mb-1 text-lg font-semibold">Blog</h1>
       <p className="mb-8 text-sm text-muted">
         {settings.blog_enabled

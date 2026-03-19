@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { OnboardingTip } from "@/components/onboarding-tip";
 
 interface UploadItem {
   id: string;
@@ -142,6 +143,11 @@ export default function CapturePage() {
 
   return (
     <div className="mx-auto max-w-lg">
+      <OnboardingTip
+        tipKey="capture"
+        message="The pipeline needs raw material. Upload 5+ photos or videos — training sessions, results, facility shots — and the AI handles triage, captioning, and scheduling."
+        incomplete={true}
+      />
       <h1 className="mb-1 text-lg font-semibold">Capture</h1>
       <p className="mb-6 text-sm text-muted">Upload photos and videos to your media library</p>
 

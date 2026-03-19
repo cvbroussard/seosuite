@@ -5,6 +5,7 @@ import { PlatformIcon } from "@/components/platform-icons";
 import { ConnectButton } from "./connect-modal";
 import { AccountName } from "./account-name";
 import { DisconnectButton } from "./disconnect-button";
+import { OnboardingTip } from "@/components/onboarding-tip";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,11 @@ export default async function AccountsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <OnboardingTip
+        tipKey="accounts"
+        message="Every platform is a discovery channel. A client might find you on TikTok but book through Instagram. Connecting all 8 maximizes your reach and gives the autopilot the widest publishing surface."
+        incomplete={accounts.length < 8}
+      />
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="mb-1 text-lg font-semibold">Social Accounts</h1>
