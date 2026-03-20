@@ -17,6 +17,7 @@ const baseNav = [
   { label: "Media", path: "/media", icon: "▣" },
   { label: "Calendar", path: "/calendar", icon: "▦" },
   { label: "SEO", path: "/seo", icon: "◇" },
+  { label: "Analytics", path: "/analytics", icon: "▥" },
   { label: "Accounts", path: "/accounts", icon: "◉" },
   { label: "Settings", path: "/settings", icon: "⚙" },
   { label: "My Account", path: "/account", icon: "◯" },
