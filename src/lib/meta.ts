@@ -17,6 +17,7 @@ export function getMetaAuthUrl(state: string): string {
       "instagram_basic",
       "instagram_content_publish",
       "pages_read_engagement",
+      "business_management",
     ].join(","),
     response_type: "code",
     state,
