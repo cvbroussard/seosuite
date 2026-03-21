@@ -11,7 +11,7 @@ const PLATFORMS = [
   { key: "instagram", label: "Instagram", ready: true },
   { key: "tiktok", label: "TikTok", ready: true },
   { key: "facebook", label: "Facebook", ready: true },
-  { key: "gbp", label: "Google Business", ready: false, note: "Pending API access" },
+  { key: "gbp", label: "Google Business", ready: true },
   { key: "youtube", label: "YouTube", ready: true },
   { key: "twitter", label: "Twitter / X", ready: true },
   { key: "linkedin", label: "LinkedIn", ready: true },
