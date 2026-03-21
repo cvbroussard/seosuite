@@ -1,3 +1,4 @@
+import { oauthSuccessUrl, oauthErrorUrl } from "@/lib/oauth-redirect";
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForToken, discoverInstagramAccounts, discoverFacebookPages } from "@/lib/meta";
 import { sql } from "@/lib/db";
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let state: { subscriber_id: string; site_id?: string | null; page_ids?: string[] };
+  let state: { subscriber_id: string; site_id?: string | null; source?: string; page_ids?: string[] };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -158,13 +159,13 @@ export async function GET(req: NextRequest) {
     ];
     const accountNames = allNames.join(",");
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?connected=${encodeURIComponent(accountNames)}`
+      oauthSuccessUrl(state.source, accountNames)
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Instagram OAuth callback error:", message);
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=oauth_failed`
+      oauthErrorUrl(state.source, "oauth_failed", message)
     );
   }
 }

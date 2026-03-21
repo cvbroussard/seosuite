@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     JSON.stringify({
       subscriber_id: auth.subscriberId,
       site_id: siteId || null,
+      source: new URL(req.url).searchParams.get("source") || null,
     })
   ).toString("base64url");
 

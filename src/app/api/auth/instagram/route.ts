@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     JSON.stringify({
       subscriber_id: auth.subscriberId,
       site_id: siteId || null,
+      source: params.get("source") || null,
       page_ids: pageIds ? pageIds.split(",").map((s) => s.trim()) : [],
     })
   ).toString("base64url");

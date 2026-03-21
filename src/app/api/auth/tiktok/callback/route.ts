@@ -1,3 +1,4 @@
+import { oauthSuccessUrl, oauthErrorUrl } from "@/lib/oauth-redirect";
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeTikTokCode, getTikTokUserInfo } from "@/lib/tiktok";
 import { sql } from "@/lib/db";
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let state: { subscriber_id: string; site_id?: string | null };
+  let state: { subscriber_id: string; site_id?: string | null; source?: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -113,13 +114,13 @@ export async function GET(req: NextRequest) {
     `;
 
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?connected=${encodeURIComponent(accountName || "TikTok")}`
+      oauthSuccessUrl(state.source, accountName || "TikTok")
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("TikTok OAuth callback error:", message);
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=tiktok_oauth_failed&detail=${encodeURIComponent(message.slice(0, 200))}`
+      oauthErrorUrl(state.source, "tiktok_oauth_failed", message)
     );
   }
 }
