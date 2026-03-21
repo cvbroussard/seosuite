@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     try {
       const userInfo = await getLinkedInUserInfo(accessToken);
       accountName = userInfo.name;
-      accountId = userInfo.sub;
+      accountId = userInfo.id;
     } catch (e) {
       console.warn("LinkedIn user info failed (non-fatal):", e instanceof Error ? e.message : e);
     }

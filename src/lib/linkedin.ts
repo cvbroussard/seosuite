@@ -64,26 +64,46 @@ export async function exchangeLinkedInCode(code: string): Promise<{
 }
 
 /**
- * Fetch the authenticated user's profile via OpenID Connect userinfo.
+ * Fetch the authenticated user's profile.
+ * Tries OpenID Connect userinfo first, falls back to /v2/me.
  */
 export async function getLinkedInUserInfo(accessToken: string): Promise<{
-  sub: string;
+  id: string;
   name: string;
 }> {
-  const res = await fetch(USERINFO_URL, {
+  // Try OIDC userinfo first
+  const userinfoRes = await fetch(USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  const data = await res.json();
+  if (userinfoRes.ok) {
+    const data = await userinfoRes.json();
+    console.log("LinkedIn userinfo response:", JSON.stringify(data));
+    if (data.sub) {
+      return {
+        id: data.sub,
+        name: data.name || `${data.given_name || ""} ${data.family_name || ""}`.trim() || "LinkedIn User",
+      };
+    }
+  } else {
+    const errText = await userinfoRes.text();
+    console.warn("LinkedIn userinfo failed, trying /v2/me:", errText);
+  }
 
-  if (!res.ok) {
-    throw new Error(
-      `LinkedIn user info failed: ${JSON.stringify(data)}`
-    );
+  // Fallback to /v2/me
+  const meRes = await fetch("https://api.linkedin.com/v2/me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  const meData = await meRes.json();
+  console.log("LinkedIn /v2/me response:", JSON.stringify(meData));
+
+  if (!meRes.ok) {
+    throw new Error(`LinkedIn profile fetch failed: ${JSON.stringify(meData)}`);
   }
 
   return {
-    sub: data.sub,
-    name: data.name || `${data.given_name || ""} ${data.family_name || ""}`.trim() || "LinkedIn User",
+    id: meData.id,
+    name: `${meData.localizedFirstName || ""} ${meData.localizedLastName || ""}`.trim() || "LinkedIn User",
   };
 }
