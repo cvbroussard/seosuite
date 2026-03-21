@@ -71,10 +71,13 @@ export async function getLinkedInUserInfo(accessToken: string): Promise<{
   id: string;
   name: string;
 }> {
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "LinkedIn-Version": "202401",
+  };
+
   // Try OIDC userinfo first
-  const userinfoRes = await fetch(USERINFO_URL, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const userinfoRes = await fetch(USERINFO_URL, { headers });
 
   if (userinfoRes.ok) {
     const data = await userinfoRes.json();
@@ -91,9 +94,7 @@ export async function getLinkedInUserInfo(accessToken: string): Promise<{
   }
 
   // Fallback to /v2/me
-  const meRes = await fetch("https://api.linkedin.com/v2/me", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const meRes = await fetch("https://api.linkedin.com/v2/me", { headers });
 
   const meData = await meRes.json();
   console.log("LinkedIn /v2/me response:", JSON.stringify(meData));
