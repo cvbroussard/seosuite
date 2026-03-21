@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Google OAuth callback error:", message);
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=google_oauth_failed`
+      `${studioUrl("/accounts")}?error=google_oauth_failed&detail=${encodeURIComponent(message)}`
     );
   }
 }
