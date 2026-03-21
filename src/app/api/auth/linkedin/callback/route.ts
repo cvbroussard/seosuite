@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       VALUES (
         ${state.subscriber_id}, 'linkedin', ${accountName}, ${accountId},
         ${encrypt(accessToken)}, ${refreshToken ? encrypt(refreshToken) : null}, ${expiresAt},
-        ${"{profile,w_member_social}"},
+        ${"{w_member_social}"},
         'active',
         ${JSON.stringify({ name: accountName, person_urn: personUrn })}
       )

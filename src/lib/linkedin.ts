@@ -11,10 +11,7 @@ const AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization";
 const TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
 const USERINFO_URL = "https://api.linkedin.com/v2/me";
 
-const SCOPES = [
-  "profile",
-  "w_member_social",
-].join(" ");
+const SCOPES = "w_member_social";
 
 /**
  * Build LinkedIn OAuth authorization URL.
