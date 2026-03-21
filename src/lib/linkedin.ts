@@ -9,10 +9,9 @@
 
 const AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization";
 const TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
-const USERINFO_URL = "https://api.linkedin.com/v2/userinfo";
+const USERINFO_URL = "https://api.linkedin.com/v2/me";
 
 const SCOPES = [
-  "openid",
   "profile",
   "w_member_social",
 ].join(" ");
@@ -68,12 +67,11 @@ export async function exchangeLinkedInCode(code: string): Promise<{
 }
 
 /**
- * Fetch the authenticated user's profile via OpenID Connect userinfo.
+ * Fetch the authenticated user's profile via LinkedIn v2 API.
  */
 export async function getLinkedInUserInfo(accessToken: string): Promise<{
-  sub: string;
+  id: string;
   name: string;
-  picture?: string;
 }> {
   const res = await fetch(USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -88,8 +86,7 @@ export async function getLinkedInUserInfo(accessToken: string): Promise<{
   }
 
   return {
-    sub: data.sub,
-    name: data.name || `${data.given_name || ""} ${data.family_name || ""}`.trim(),
-    picture: data.picture,
+    id: data.id,
+    name: `${data.localizedFirstName || ""} ${data.localizedLastName || ""}`.trim() || "LinkedIn User",
   };
 }

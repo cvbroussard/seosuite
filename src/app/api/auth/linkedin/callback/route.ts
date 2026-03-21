@@ -48,12 +48,10 @@ export async function GET(req: NextRequest) {
     // Fetch user profile
     let accountName = "LinkedIn User";
     let accountId = "";
-    let picture: string | undefined;
     try {
       const userInfo = await getLinkedInUserInfo(accessToken);
       accountName = userInfo.name;
-      accountId = userInfo.sub;
-      picture = userInfo.picture;
+      accountId = userInfo.id;
     } catch (e) {
       console.warn("LinkedIn user info failed (non-fatal):", e instanceof Error ? e.message : e);
     }
@@ -72,9 +70,9 @@ export async function GET(req: NextRequest) {
       VALUES (
         ${state.subscriber_id}, 'linkedin', ${accountName}, ${accountId},
         ${encrypt(accessToken)}, ${refreshToken ? encrypt(refreshToken) : null}, ${expiresAt},
-        ${"{openid,profile,w_member_social}"},
+        ${"{profile,w_member_social}"},
         'active',
-        ${JSON.stringify({ name: accountName, person_urn: personUrn, picture: picture || null })}
+        ${JSON.stringify({ name: accountName, person_urn: personUrn })}
       )
       ON CONFLICT (subscriber_id, platform, account_id)
       DO UPDATE SET
