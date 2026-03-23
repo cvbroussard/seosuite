@@ -43,11 +43,11 @@ export default async function PillarArchivePage({ params }: Props) {
   return (
     <div>
       <Link
-        href="/blog"
+        href={`/blog/${site.blogSlug}`}
         className="blog-muted"
         style={{ fontSize: 14, textDecoration: "none", display: "inline-block", marginBottom: 32 }}
       >
-        &larr; All Posts
+        &larr; {site.siteName}
       </Link>
 
       <header style={{ marginBottom: 48 }}>
@@ -68,7 +68,7 @@ export default async function PillarArchivePage({ params }: Props) {
               key={String(post.id)}
               style={{ borderBottom: "1px solid var(--blog-border)", padding: "24px 0" }}
             >
-              <Link href={`/blog/${post.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
+              <Link href={`/blog/${site.blogSlug}/${post.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
                 <h2 style={{ fontSize: 20, fontWeight: 600, marginTop: 0, marginBottom: 6 }}>
                   {String(post.title)}
                 </h2>

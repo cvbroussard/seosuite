@@ -41,11 +41,14 @@ export function middleware(req: NextRequest) {
     if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
       return new NextResponse("Not Found", { status: 404 });
     }
-    // Already on /blog path — pass through
+    // Already on /blog path — pass through with host header
     if (pathname.startsWith("/blog")) {
-      return NextResponse.next();
+      const response = NextResponse.next();
+      response.headers.set("x-blog-host", hostname);
+      return response;
     }
-    // Rewrite: / → /blog, /my-post → /blog/my-post
+    // Rewrite: / → /blog, /empire-music → /blog/empire-music,
+    // /empire-music/my-post → /blog/empire-music/my-post
     const rewritePath = pathname === "/" ? "/blog" : `/blog${pathname}`;
     const url = req.nextUrl.clone();
     url.pathname = rewritePath;

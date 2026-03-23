@@ -95,7 +95,8 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
            sa.platform, sa.account_name, sa.site_id,
            s.name AS site_name, s.url AS site_url, s.brand_voice,
            s.brand_playbook,
-           ma.context_note, ma.transcription, ma.ai_analysis, ma.media_type AS asset_media_type
+           ma.context_note, ma.transcription, ma.ai_analysis, ma.metadata AS asset_metadata,
+           ma.media_type AS asset_media_type, ma.source AS asset_source
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
     JOIN sites s ON sa.site_id = s.id
@@ -154,9 +155,17 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
     ? await getPersonaCaptionContext(sourceAssetId).catch(() => null)
     : null;
 
-  const prompt = playbook
-    ? buildPlaybookPrompt(post, platformFormat, rules, playbook, hookText, personaContext)
-    : buildPrompt(post, platformFormat, rules, brandVoice, personaContext);
+  // Check if this is an RSS-sourced link post
+  const isRssContent = post.asset_source === "rss" && post.asset_media_type === "link";
+  const rssMetadata = isRssContent
+    ? (post.asset_metadata as Record<string, unknown>) || {}
+    : null;
+
+  const prompt = isRssContent
+    ? buildRssPrompt(post, platformFormat, rules, playbook, rssMetadata)
+    : playbook
+      ? buildPlaybookPrompt(post, platformFormat, rules, playbook, hookText, personaContext)
+      : buildPrompt(post, platformFormat, rules, brandVoice, personaContext);
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
@@ -307,6 +316,61 @@ function buildPrompt(
   parts.push('{ "caption": "...", "hashtags": ["#tag1", "#tag2"] }');
   parts.push("");
   parts.push("Do not include hashtags inside the caption text. They go in the hashtags array only.");
+
+  return parts.join("\n");
+}
+
+function buildRssPrompt(
+  post: Record<string, unknown>,
+  platform: PlatformFormat,
+  rules: (typeof PLATFORM_RULES)[string],
+  playbook: BrandPlaybook | null,
+  rssMetadata: Record<string, unknown> | null
+): string {
+  const parts: string[] = [];
+
+  parts.push("You are a social media content writer. Write a social post sharing an article that is relevant to this business.");
+  parts.push("");
+  parts.push("## Business");
+  parts.push(`Name: ${post.site_name} (${post.site_url})`);
+
+  if (playbook) {
+    const angle = playbook.brandPositioning.selectedAngles[0];
+    parts.push(`Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}`);
+    parts.push(`Tone: ${angle?.tone || "engaging"}`);
+  }
+
+  parts.push("");
+  parts.push("## Article to share");
+  const contextNote = (post.context_note as string) || "";
+  const articleTitle = contextNote.replace(/^\[RSS\]\s*/, "");
+  parts.push(`Title: ${articleTitle}`);
+
+  if (rssMetadata?.source_excerpt) {
+    parts.push(`Excerpt: ${rssMetadata.source_excerpt}`);
+  }
+  if (rssMetadata?.source_url) {
+    parts.push(`Link: ${rssMetadata.source_url}`);
+  }
+
+  parts.push("");
+  parts.push("## Platform Rules");
+  parts.push(`Platform: ${platform}`);
+  parts.push(`Max length: ${rules.maxLength} chars`);
+  parts.push(`Hashtags: ${rules.hashtagRange[0]}–${rules.hashtagRange[1]}`);
+  parts.push(`Style: ${rules.style}`);
+
+  parts.push("");
+  parts.push("## Response format");
+  parts.push("Respond with ONLY a JSON object, no markdown fencing:");
+  parts.push('{ "caption": "...", "hashtags": ["#tag1", "#tag2"] }');
+  parts.push("");
+  parts.push("Rules:");
+  parts.push("- Position the business as an industry expert sharing valuable content");
+  parts.push("- Add a brief opinion or takeaway from the article");
+  parts.push("- Encourage followers to read the article");
+  parts.push("- Do not include hashtags inside the caption text");
+  parts.push("- Include the article link naturally in the caption");
 
   return parts.join("\n");
 }

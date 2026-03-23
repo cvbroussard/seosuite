@@ -7,9 +7,11 @@ import { publishDuePosts } from "./publisher";
 import { generateMissingBlogPosts } from "./blog-generator";
 import { sendPushNotification } from "@/lib/notifications";
 import { syncInboxEngagement } from "@/lib/inbox/sync";
+import { syncRssFeeds } from "@/lib/inbox/sync-rss";
 
 export interface PipelineRunResult {
   siteId: string;
+  rssItemsIngested: number;
   assetsTriaged: number;
   slotsGenerated: number;
   slotsFilled: number;
@@ -36,6 +38,7 @@ export interface PipelineRunResult {
 export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
   const result: PipelineRunResult = {
     siteId,
+    rssItemsIngested: 0,
     assetsTriaged: 0,
     slotsGenerated: 0,
     slotsFilled: 0,
@@ -47,6 +50,14 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     inboxReviewsAdded: 0,
     errors: [],
   };
+
+  // Step 0: Sync RSS feeds (ingest new items before triage)
+  try {
+    result.rssItemsIngested = await syncRssFeeds(siteId);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    result.errors.push(`rss-sync: ${msg}`);
+  }
 
   // Step 1: Triage all received assets for this site
   const receivedAssets = await sql`
