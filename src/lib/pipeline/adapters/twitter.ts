@@ -3,7 +3,10 @@
  *
  * Publishes tweets via X API v2 with media upload via v1.1.
  */
-import type { PlatformAdapter, PublishInput, PublishResult, TokenResult } from "./types";
+import type {
+  PlatformAdapter, PublishInput, PublishResult, TokenResult,
+  FetchCommentsInput, CommentData, ReplyInput,
+} from "./types";
 
 const API_V2 = "https://api.x.com/2";
 const UPLOAD_API = "https://upload.twitter.com/1.1";
@@ -86,6 +89,83 @@ class TwitterAdapter implements PlatformAdapter {
 
   getPostUrl(platformPostId: string): string {
     return `https://x.com/i/status/${platformPostId}`;
+  }
+
+  async fetchComments(input: FetchCommentsInput): Promise<CommentData[]> {
+    const { accessToken, platformPostId, since } = input;
+
+    // Use search endpoint to find replies in the conversation thread
+    let query = `conversation_id:${platformPostId} is:reply`;
+    if (since) {
+      query += ` -is:retweet`;
+    }
+
+    const params = new URLSearchParams({
+      query,
+      "tweet.fields": "author_id,created_at,conversation_id,in_reply_to_user_id",
+      "user.fields": "name,username,profile_image_url",
+      expansions: "author_id",
+      max_results: "50",
+    });
+
+    if (since) {
+      params.set("start_time", new Date(since).toISOString());
+    }
+
+    const res = await fetch(`${API_V2}/tweets/search/recent?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn("Twitter fetchComments failed:", errText);
+      return [];
+    }
+
+    const data = await res.json();
+    const users = new Map<string, Record<string, string>>();
+    for (const u of data.includes?.users || []) {
+      users.set(u.id, u);
+    }
+
+    return (data.data || []).map((tweet: Record<string, unknown>) => {
+      const user = users.get(tweet.author_id as string);
+      return {
+        platformCommentId: tweet.id as string,
+        platformPostId,
+        authorName: user?.name || "X User",
+        authorUsername: user?.username || undefined,
+        authorAvatarUrl: user?.profile_image_url || undefined,
+        authorPlatformId: tweet.author_id as string,
+        body: tweet.text as string,
+        commentedAt: tweet.created_at as string,
+        rawData: tweet,
+      };
+    });
+  }
+
+  async replyToComment(input: ReplyInput): Promise<{ success: boolean; platformReplyId?: string }> {
+    const { accessToken, platformCommentId, body } = input;
+
+    const res = await fetch(`${API_V2}/tweets`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: body.slice(0, 280),
+        reply: { in_reply_to_tweet_id: platformCommentId },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Twitter reply failed: ${errText}`);
+    }
+
+    const data = await res.json();
+    return { success: true, platformReplyId: data.data?.id };
   }
 }
 
