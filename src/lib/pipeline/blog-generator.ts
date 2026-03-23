@@ -83,7 +83,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis, imageUrls);
 
   const response = await anthropic.messages.create({
-    model: playbook ? "claude-sonnet-4-5-20250514" : "claude-haiku-4-5-20251001",
+    model: playbook ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001",
     max_tokens: playbook ? 6144 : 2048,
     messages: [{ role: "user", content: prompt }],
   });
@@ -171,7 +171,7 @@ export async function generateBlogFromTopic(topicId: string): Promise<string | n
   const prompt = buildTopicBlogPrompt(topic, playbook, hookText, imageUrls);
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 6144,
     messages: [{ role: "user", content: prompt }],
   });
