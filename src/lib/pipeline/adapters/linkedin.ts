@@ -4,7 +4,10 @@
  * Publishes posts via LinkedIn Marketing API (UGC Posts).
  * Supports text, image, and video posts to personal profiles or company pages.
  */
-import type { PlatformAdapter, PublishInput, PublishResult, TokenResult } from "./types";
+import type {
+  PlatformAdapter, PublishInput, PublishResult, TokenResult,
+  FetchCommentsInput, CommentData, ReplyInput,
+} from "./types";
 
 const API_BASE = "https://api.linkedin.com/v2";
 
@@ -99,6 +102,97 @@ class LinkedInAdapter implements PlatformAdapter {
 
   getPostUrl(platformPostId: string): string {
     return `https://www.linkedin.com/feed/update/${platformPostId}`;
+  }
+
+  async fetchComments(input: FetchCommentsInput): Promise<CommentData[]> {
+    const { accessToken, platformPostId } = input;
+
+    // LinkedIn post URNs need to be URL-encoded in the path
+    const encodedUrn = encodeURIComponent(platformPostId);
+    const url = `https://api.linkedin.com/rest/socialActions/${encodedUrn}/comments`;
+
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "LinkedIn-Version": "202601",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn("LinkedIn fetchComments failed:", errText);
+      return [];
+    }
+
+    const data = await res.json();
+
+    return (data.elements || []).map((c: Record<string, unknown>) => {
+      const created = c.created as Record<string, unknown> | undefined;
+      const message = c.message as Record<string, unknown> | undefined;
+
+      return {
+        platformCommentId: c.id as string,
+        platformPostId,
+        parentCommentId: c.parentComment ? String(c.parentComment) : undefined,
+        authorName: (c.actor as string) || "LinkedIn User",
+        authorPlatformId: c.actor as string,
+        body: (message?.text as string) || "",
+        commentedAt: created?.time
+          ? new Date(created.time as number).toISOString()
+          : new Date().toISOString(),
+        rawData: c,
+      };
+    });
+  }
+
+  async replyToComment(input: ReplyInput): Promise<{ success: boolean; platformReplyId?: string }> {
+    const { accessToken, platformCommentId, body, accountMetadata } = input;
+
+    // The platformCommentId for LinkedIn is the comment ID
+    // We need the post URN to construct the reply endpoint
+    // The post URN should be stored in the inbox_comments.platform_post_id
+    const personUrn = (accountMetadata?.person_urn as string) || "";
+
+    // For LinkedIn, we reply to the post's comments thread, referencing the parent comment
+    // We need the post URN — extract from the comment URN if it's a composite
+    // Comment URN format: urn:li:comment:(urn:li:activity:xxx,commentId)
+    let postUrn = "";
+    if (platformCommentId?.includes("urn:li:comment:(")) {
+      const match = platformCommentId.match(/urn:li:comment:\((urn:li:activity:\d+),/);
+      if (match) postUrn = match[1];
+    }
+
+    if (!postUrn) {
+      throw new Error("Cannot determine post URN from comment ID for LinkedIn reply");
+    }
+
+    const encodedUrn = encodeURIComponent(postUrn);
+    const url = `https://api.linkedin.com/rest/socialActions/${encodedUrn}/comments`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "LinkedIn-Version": "202601",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        actor: personUrn,
+        object: postUrn,
+        message: { text: body },
+        parentComment: platformCommentId,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`LinkedIn reply failed: ${errText}`);
+    }
+
+    const replyId = res.headers.get("x-restli-id") || "";
+    return { success: true, platformReplyId: replyId };
   }
 }
 
