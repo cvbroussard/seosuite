@@ -14,33 +14,39 @@ export default async function AccountsPage() {
   if (!session) redirect("/login");
 
   const subscriberId = session.subscriberId;
+  const activeSiteId = session.activeSiteId;
 
-  // All social accounts owned by this subscriber
-  const accounts = await sql`
-    SELECT sa.id, sa.platform, sa.account_name, sa.status, sa.token_expires_at,
-           sa.created_at,
-           (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'published') AS published,
-           (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'scheduled') AS scheduled
-    FROM social_accounts sa
-    WHERE sa.subscriber_id = ${subscriberId}
-    ORDER BY sa.created_at DESC
-  `;
+  // Social accounts linked to the active site
+  const accounts = activeSiteId
+    ? await sql`
+        SELECT sa.id, sa.platform, sa.account_name, sa.status, sa.token_expires_at,
+               sa.created_at,
+               (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'published') AS published,
+               (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'scheduled') AS scheduled
+        FROM social_accounts sa
+        JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+        WHERE ssl.site_id = ${activeSiteId} AND sa.subscriber_id = ${subscriberId}
+        ORDER BY sa.created_at DESC
+      `
+    : [];
 
   // Sites for linking
   const sites = await sql`
     SELECT id, name, url FROM sites
-    WHERE subscriber_id = ${subscriberId}
+    WHERE subscriber_id = ${subscriberId} AND deleted_at IS NULL
     ORDER BY created_at ASC
   `;
 
-  // Current links
-  const links = await sql`
-    SELECT ssl.social_account_id, ssl.site_id, s.name AS site_name
-    FROM site_social_links ssl
-    JOIN sites s ON ssl.site_id = s.id
-    JOIN social_accounts sa ON ssl.social_account_id = sa.id
-    WHERE sa.subscriber_id = ${subscriberId}
-  `;
+  // Current links for active site
+  const links = activeSiteId
+    ? await sql`
+        SELECT ssl.social_account_id, ssl.site_id, s.name AS site_name
+        FROM site_social_links ssl
+        JOIN sites s ON ssl.site_id = s.id
+        JOIN social_accounts sa ON ssl.social_account_id = sa.id
+        WHERE ssl.site_id = ${activeSiteId}
+      `
+    : [];
 
   // Group links by account
   const linksByAccount = new Map<string, Array<{ siteId: string; siteName: string }>>();
