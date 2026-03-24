@@ -1,5 +1,8 @@
 import { sql } from "@/lib/db";
 import Link from "next/link";
+import { generateProfileKit } from "@/lib/provisioning/profile-kit";
+import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
+import { ProfileKitPanel } from "./profile-kit-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +12,6 @@ const ALL_PLATFORMS = [
 ];
 
 export default async function ProvisioningPage() {
-  // Subscribers with sites that need provisioning
   const subscribers = await sql`
     SELECT
       sub.id AS subscriber_id,
@@ -23,7 +25,10 @@ export default async function ProvisioningPage() {
       s.url AS site_url,
       s.business_type,
       s.location,
+      s.blog_slug,
+      s.brand_playbook,
       s.brand_playbook IS NOT NULL AS has_playbook,
+      s.deleted_at,
       (
         SELECT array_agg(DISTINCT sa.platform)
         FROM social_accounts sa
@@ -35,7 +40,7 @@ export default async function ProvisioningPage() {
       ) AS blog_enabled
     FROM subscribers sub
     JOIN sites s ON s.subscriber_id = sub.id
-    WHERE sub.is_active = true
+    WHERE sub.is_active = true AND s.deleted_at IS NULL
     ORDER BY sub.created_at DESC
   `;
 
@@ -55,6 +60,23 @@ export default async function ProvisioningPage() {
             const onboardingStatus = meta.onboarding_status as string;
             const isNew = onboardingStatus === "new" || onboardingStatus === "complete";
             const allProvisioned = missing.length === 0 && sub.has_playbook && sub.blog_enabled;
+
+            // Generate profile kit if playbook exists
+            let profileKit = null;
+            if (sub.has_playbook && sub.brand_playbook) {
+              try {
+                profileKit = generateProfileKit({
+                  siteName: sub.site_name as string,
+                  businessType: (sub.business_type as string) || "Business",
+                  location: (sub.location as string) || "",
+                  blogSlug: (sub.blog_slug as string) || "",
+                  siteUrl: sub.site_url as string | null,
+                  playbook: sub.brand_playbook as unknown as BrandPlaybook,
+                });
+              } catch {
+                // Kit generation failed — show without it
+              }
+            }
 
             return (
               <div
@@ -92,62 +114,17 @@ export default async function ProvisioningPage() {
                 {/* Provisioning checklist */}
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   {/* Playbook */}
-                  <div className="flex items-center gap-2 text-sm">
-                    <span style={{
-                      width: 16, height: 16, borderRadius: "50%", display: "inline-flex",
-                      alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600,
-                      background: sub.has_playbook ? "var(--color-success)" : "var(--color-surface-hover)",
-                      color: sub.has_playbook ? "#fff" : "var(--color-muted)",
-                    }}>
-                      {sub.has_playbook ? "✓" : ""}
-                    </span>
-                    Brand playbook {sub.has_playbook ? "" : "(auto-generating...)"}
-                  </div>
-
+                  <ChecklistItem done={!!sub.has_playbook} label="Brand playbook" pendingLabel="(auto-generating...)" />
                   {/* Blog */}
-                  <div className="flex items-center gap-2 text-sm">
-                    <span style={{
-                      width: 16, height: 16, borderRadius: "50%", display: "inline-flex",
-                      alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600,
-                      background: sub.blog_enabled ? "var(--color-success)" : "var(--color-surface-hover)",
-                      color: sub.blog_enabled ? "#fff" : "var(--color-muted)",
-                    }}>
-                      {sub.blog_enabled ? "✓" : ""}
-                    </span>
-                    Blog enabled
-                  </div>
-
+                  <ChecklistItem done={!!sub.blog_enabled} label="Blog enabled" />
                   {/* Each platform */}
-                  {ALL_PLATFORMS.map((platform) => {
-                    const isConnected = connected.includes(platform);
-                    return (
-                      <div key={platform} className="flex items-center gap-2 text-sm">
-                        <span style={{
-                          width: 16, height: 16, borderRadius: "50%", display: "inline-flex",
-                          alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600,
-                          background: isConnected ? "var(--color-success)" : "var(--color-surface-hover)",
-                          color: isConnected ? "#fff" : "var(--color-muted)",
-                        }}>
-                          {isConnected ? "✓" : ""}
-                        </span>
-                        <span className={isConnected ? "text-muted" : ""}>
-                          {platform}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  {ALL_PLATFORMS.map((platform) => (
+                    <ChecklistItem key={platform} done={connected.includes(platform)} label={platform} />
+                  ))}
                 </div>
 
-                {/* Profile template */}
-                {sub.has_playbook && (
-                  <ProfileTemplate
-                    siteName={sub.site_name as string}
-                    businessType={sub.business_type as string}
-                    location={sub.location as string}
-                    siteUrl={sub.site_url as string}
-                    siteId={sub.site_id as string}
-                  />
-                )}
+                {/* Profile Kit */}
+                {profileKit && <ProfileKitPanel kit={profileKit} />}
               </div>
             );
           })}
@@ -157,37 +134,20 @@ export default async function ProvisioningPage() {
   );
 }
 
-async function ProfileTemplate({
-  siteName, businessType, location, siteUrl, siteId,
-}: {
-  siteName: string; businessType: string; location: string; siteUrl: string; siteId: string;
-}) {
-  // Pull offer statement from playbook for bio
-  const [site] = await sql`
-    SELECT brand_playbook FROM sites WHERE id = ${siteId}
-  `;
-
-  const playbook = site?.brand_playbook as Record<string, unknown> | null;
-  const offerCore = playbook?.offerCore as Record<string, unknown> | null;
-  const offerStatement = offerCore?.offerStatement as Record<string, string> | null;
-  const emotionalCore = offerStatement?.emotionalCore || businessType;
-
-  const bio = `${siteName} | ${emotionalCore} | ${location || ""}`.trim().replace(/\| $/, "");
-  const linkInBio = siteUrl || `https://${siteName.toLowerCase().replace(/[^a-z0-9]+/g, "")}.tracpost.com`;
-
+function ChecklistItem({ done, label, pendingLabel }: { done: boolean; label: string; pendingLabel?: string }) {
   return (
-    <div className="mt-4 rounded-lg bg-surface-hover p-4">
-      <p className="mb-2 text-sm font-medium">Profile template</p>
-      <div className="space-y-1 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted">Bio</span>
-          <span className="max-w-xs text-right">{bio}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted">Link in bio</span>
-          <span>{linkInBio}</span>
-        </div>
-      </div>
+    <div className="flex items-center gap-2 text-sm">
+      <span style={{
+        width: 16, height: 16, borderRadius: "50%", display: "inline-flex",
+        alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600,
+        background: done ? "var(--color-success)" : "var(--color-surface-hover)",
+        color: done ? "#fff" : "var(--color-muted)",
+      }}>
+        {done ? "✓" : ""}
+      </span>
+      <span className={done ? "text-muted" : ""}>
+        {label} {!done && pendingLabel ? pendingLabel : ""}
+      </span>
     </div>
   );
 }
