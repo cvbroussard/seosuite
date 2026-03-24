@@ -24,7 +24,17 @@ export function ProvisionActions({ siteId, status }: ProvisionActionsProps) {
       if (res.ok) {
         const data = await res.json();
         setCurrentStatus(data.status);
-        if (data.automation) setAutomationLog(data.automation);
+        if (data.automation) {
+          setAutomationLog(data.automation);
+          // Don't reload if there are failures — admin needs to see the log
+          if (!data.automation.some((a: string) => a.includes("failed"))) {
+            window.location.reload();
+            return;
+          }
+        } else {
+          window.location.reload();
+          return;
+        }
       }
     } finally {
       setLoading(false);
