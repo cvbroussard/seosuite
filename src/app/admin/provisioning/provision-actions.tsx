@@ -10,9 +10,11 @@ interface ProvisionActionsProps {
 export function ProvisionActions({ siteId, status }: ProvisionActionsProps) {
   const [currentStatus, setCurrentStatus] = useState(status);
   const [loading, setLoading] = useState(false);
+  const [automationLog, setAutomationLog] = useState<string[] | null>(null);
 
   async function advance(action: "start" | "complete") {
     setLoading(true);
+    setAutomationLog(null);
     try {
       const res = await fetch("/api/admin/sites/provision", {
         method: "POST",
@@ -22,6 +24,7 @@ export function ProvisionActions({ siteId, status }: ProvisionActionsProps) {
       if (res.ok) {
         const data = await res.json();
         setCurrentStatus(data.status);
+        if (data.automation) setAutomationLog(data.automation);
       }
     } finally {
       setLoading(false);
@@ -30,25 +33,48 @@ export function ProvisionActions({ siteId, status }: ProvisionActionsProps) {
 
   if (currentStatus === "requested") {
     return (
-      <button
-        onClick={() => advance("start")}
-        disabled={loading}
-        className="bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-      >
-        {loading ? "..." : "Start Provisioning"}
-      </button>
+      <div>
+        <button
+          onClick={() => advance("start")}
+          disabled={loading}
+          className="bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {loading ? "Generating playbook + blog..." : "Start Provisioning"}
+        </button>
+        {loading && (
+          <p className="mt-1 text-[10px] text-muted animate-pulse">
+            This may take a couple minutes
+          </p>
+        )}
+      </div>
     );
   }
 
   if (currentStatus === "in_progress") {
     return (
-      <button
-        onClick={() => advance("complete")}
-        disabled={loading}
-        className="bg-success/20 px-3 py-1 text-xs font-medium text-success hover:bg-success/30 disabled:opacity-50"
-      >
-        {loading ? "..." : "Mark Complete"}
-      </button>
+      <div>
+        {automationLog && automationLog.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1">
+            {automationLog.map((item, i) => (
+              <span
+                key={i}
+                className={`rounded px-1.5 py-0.5 text-[10px] ${
+                  item.includes("failed") ? "bg-danger/10 text-danger" : "bg-success/10 text-success"
+                }`}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => advance("complete")}
+          disabled={loading}
+          className="bg-success/20 px-3 py-1 text-xs font-medium text-success hover:bg-success/30 disabled:opacity-50"
+        >
+          {loading ? "..." : "Mark Complete"}
+        </button>
+      </div>
     );
   }
 
