@@ -25,7 +25,7 @@ const PLATFORM_PROFILES: Record<string, {
   },
   facebook: {
     label: "Facebook Page",
-    bioMaxLength: 255,
+    bioMaxLength: 101,
     handlePrefix: "",
     handleMaxLength: 50,
     categoryField: "Page Category",
@@ -222,11 +222,15 @@ function generateBio(
 ): string {
   const { siteName, tagline, emotionalCore, location, businessType, desirePhrases } = ctx;
 
-  // Ultra-short platforms (TikTok: 80 chars)
-  if (maxLength <= 80) {
-    const short = `${siteName} | ${tagline}`;
-    if (short.length <= maxLength) return short;
-    return `${siteName} | ${businessType}`.slice(0, maxLength);
+  // Ultra-short platforms (TikTok: 80, Facebook: 101)
+  if (maxLength <= 101) {
+    // Try tagline first — it's the most compelling
+    if (tagline.length <= maxLength) return tagline;
+    // Fall back to name + business type
+    const nameBiz = `${siteName} | ${businessType}`;
+    if (nameBiz.length <= maxLength) return nameBiz;
+    // Last resort
+    return `${siteName} | ${location}`.slice(0, maxLength);
   }
 
   // Short platforms (Instagram: 150, Twitter: 160)
