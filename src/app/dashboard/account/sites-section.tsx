@@ -30,9 +30,11 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   complete: { label: "Active", color: "bg-success/10 text-success" },
 };
 
+type FormStep = "closed" | "details" | "confirm";
+
 export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
-  const [sites, setSites] = useState(initialSites);
-  const [showForm, setShowForm] = useState(false);
+  const [sites] = useState(initialSites);
+  const [step, setStep] = useState<FormStep>("closed");
   const [name, setName] = useState("");
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
@@ -41,10 +43,20 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name || !businessType || !location) return;
+  const toCreate = PLATFORMS.filter((p) => !existingAccounts.has(p.id));
+  const toLink = PLATFORMS.filter((p) => existingAccounts.has(p.id));
 
+  function resetForm() {
+    setStep("closed");
+    setName("");
+    setBusinessType("");
+    setLocation("");
+    setDomain("");
+    setExistingAccounts(new Set());
+    setError(null);
+  }
+
+  async function handleSubmit() {
     setSubmitting(true);
     setError(null);
 
@@ -64,13 +76,14 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
       if (!res.ok) {
         const data = await res.json();
         setError(data.error || "Failed to create site");
+        setStep("details");
         return;
       }
 
-      // Reload to pick up new session with the site
       window.location.reload();
     } catch {
       setError("Request failed");
+      setStep("details");
     } finally {
       setSubmitting(false);
     }
@@ -83,9 +96,9 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
     <section className="mb-8">
       <div className="mb-4 flex items-center justify-between">
         <h2>Sites</h2>
-        {!showForm && (
+        {step === "closed" && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => setStep("details")}
             className="rounded border border-border px-3 py-1 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           >
             Add Site
@@ -93,9 +106,9 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
         )}
       </div>
 
-      {/* Add Site Form */}
-      {showForm && (
-        <form onSubmit={handleSubmit} className="mb-6">
+      {/* Step 1: Details */}
+      {step === "details" && (
+        <div className="mb-6">
           <h3 className="mb-4 text-sm font-medium">New Site</h3>
 
           {error && (
@@ -110,7 +123,6 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Epicurious Kitchens"
                 className="w-full text-sm"
-                required
               />
             </div>
             <div>
@@ -120,7 +132,6 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 onChange={(e) => setBusinessType(e.target.value)}
                 placeholder="Luxury Kitchen Remodeling"
                 className="w-full text-sm"
-                required
               />
             </div>
             <div>
@@ -130,7 +141,6 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="Greater Pittsburgh, PA"
                 className="w-full text-sm"
-                required
               />
             </div>
             <div>
@@ -144,7 +154,6 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
             </div>
           </div>
 
-          {/* Existing social accounts */}
           <div className="mt-4">
             <label className="mb-2 block text-xs text-muted">
               I have existing accounts on:
@@ -178,21 +187,100 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
 
           <div className="mt-4 flex gap-3">
             <button
-              type="submit"
-              disabled={submitting || !name || !businessType || !location}
-              className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              onClick={() => setStep("confirm")}
+              disabled={!name || !businessType || !location}
+              className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
-              {submitting ? "Creating..." : "Create Site"}
+              Review
             </button>
             <button
-              type="button"
-              onClick={() => { setShowForm(false); setError(null); }}
+              onClick={resetForm}
               className="text-xs text-muted hover:text-foreground"
             >
               Cancel
             </button>
           </div>
-        </form>
+        </div>
+      )}
+
+      {/* Step 2: Confirmation */}
+      {step === "confirm" && (
+        <div className="mb-6">
+          <h3 className="mb-4 text-sm font-medium">Confirm New Site</h3>
+
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between border-b border-border py-2 text-sm">
+              <span className="text-muted">Business</span>
+              <span className="font-medium">{name}</span>
+            </div>
+            <div className="flex justify-between border-b border-border py-2 text-sm">
+              <span className="text-muted">Type</span>
+              <span>{businessType}</span>
+            </div>
+            <div className="flex justify-between border-b border-border py-2 text-sm">
+              <span className="text-muted">Location</span>
+              <span>{location}</span>
+            </div>
+            {domain && (
+              <div className="flex justify-between border-b border-border py-2 text-sm">
+                <span className="text-muted">Domain</span>
+                <span>{domain}</span>
+              </div>
+            )}
+          </div>
+
+          {toLink.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-xs font-medium text-accent">Will be linked (existing)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {toLink.map((p) => (
+                  <span key={p.id} className="rounded bg-accent/10 px-2 py-0.5 text-xs text-accent">
+                    {p.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {toCreate.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-xs font-medium text-warning">Will be created for you</p>
+              <div className="flex flex-wrap gap-1.5">
+                {toCreate.map((p) => (
+                  <span key={p.id} className="rounded bg-warning/10 px-2 py-0.5 text-xs text-warning">
+                    {p.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <p className="mb-4 rounded bg-danger/10 p-2 text-sm text-danger">{error}</p>
+          )}
+
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            >
+              {submitting ? "Creating..." : "Confirm & Submit"}
+            </button>
+            <button
+              onClick={() => setStep("details")}
+              className="text-xs text-muted hover:text-foreground"
+            >
+              Back
+            </button>
+            <button
+              onClick={resetForm}
+              className="text-xs text-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Active Sites */}

@@ -25,7 +25,8 @@ export async function AdminAlerts() {
     `,
     // Sites with provisioning explicitly requested by subscriber
     sql`
-      SELECT sub.id AS subscriber_id, sub.name AS subscriber_name, s.name AS site_name, s.created_at
+      SELECT sub.id AS subscriber_id, sub.name AS subscriber_name,
+             s.name AS site_name, s.metadata AS site_metadata, s.created_at
       FROM subscribers sub
       JOIN sites s ON s.subscriber_id = sub.id
       WHERE s.provisioning_status = 'requested'
@@ -60,11 +61,17 @@ export async function AdminAlerts() {
   }
 
   for (const sub of newSubscribers) {
+    const meta = (sub.site_metadata || {}) as Record<string, unknown>;
+    const existing = (meta.existing_accounts || []) as string[];
+    const toCreate = 8 - existing.length;
+    const detail = toCreate > 0
+      ? `${sub.subscriber_name} — create ${toCreate} account${toCreate !== 1 ? "s" : ""}${existing.length > 0 ? `, link ${existing.length}` : ""}`
+      : `${sub.subscriber_name} — link ${existing.length} existing accounts`;
     alerts.push({
       type: "new_subscriber",
       severity: "info",
-      title: `Needs provisioning: ${sub.site_name}`,
-      detail: `${sub.subscriber_name} — no playbook yet`,
+      title: `Provision: ${sub.site_name}`,
+      detail,
       href: `/admin/provisioning`,
       timestamp: sub.created_at as string,
     });

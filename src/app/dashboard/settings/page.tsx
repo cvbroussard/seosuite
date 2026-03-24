@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { SiteDeletion } from "./site-deletion";
+import { EditExistingAccounts } from "./edit-existing-accounts";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,8 @@ export default async function SettingsPage() {
   const [site] = await sql`
     SELECT s.name, s.url, s.brand_voice, s.autopilot_enabled, s.cadence_config,
            s.content_pillars, s.autopilot_config, s.created_at,
-           s.deletion_requested_at, s.deletion_status
+           s.deletion_requested_at, s.deletion_status,
+           s.provisioning_status, s.metadata AS site_metadata
     FROM sites s
     WHERE s.id = ${siteId}
   `;
@@ -121,6 +123,16 @@ export default async function SettingsPage() {
           </p>
         )}
       </section>
+
+      {/* Editable existing accounts — only while provisioning is pending */}
+      {site?.provisioning_status === "requested" && (
+        <EditExistingAccounts
+          siteId={siteId}
+          initialExisting={
+            ((site?.site_metadata as Record<string, unknown>)?.existing_accounts as string[]) || []
+          }
+        />
+      )}
 
       {/* Site Deletion */}
       <SiteDeletion
