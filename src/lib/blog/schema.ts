@@ -67,10 +67,9 @@ export async function generateHubSchema(input: HubSchemaInput): Promise<Record<s
 
   // Fetch GBP location data
   const [gbpLocation] = await sql`
-    SELECT sa.metadata, gl.sync_data
-    FROM social_accounts sa
-    LEFT JOIN gbp_locations gl ON gl.account_id = sa.id
-    WHERE sa.site_id = ${siteId} AND sa.platform = 'gbp'
+    SELECT gl.sync_data
+    FROM gbp_locations gl
+    WHERE gl.site_id = ${siteId}
     LIMIT 1
   `;
 

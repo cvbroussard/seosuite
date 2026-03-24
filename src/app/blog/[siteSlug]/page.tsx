@@ -87,13 +87,12 @@ export default async function HubPage({ params }: Props) {
     `,
     sql`
       SELECT gl.sync_data
-      FROM social_accounts sa
-      LEFT JOIN gbp_locations gl ON gl.account_id = sa.id
-      WHERE sa.site_id = ${site.siteId} AND sa.platform = 'gbp'
+      FROM gbp_locations gl
+      WHERE gl.site_id = ${site.siteId}
       LIMIT 1
     `,
     sql`
-      SELECT url FROM media_assets
+      SELECT storage_url FROM media_assets
       WHERE site_id = ${site.siteId}
         AND media_type LIKE 'image%'
         AND quality_score > 0.8
@@ -110,7 +109,7 @@ export default async function HubPage({ params }: Props) {
     ? [address.locality, address.administrativeArea].filter(Boolean).join(", ")
     : null;
   const phone = (syncData?.phoneNumber || syncData?.phone) as string | null;
-  const logoUrl = (logoAsset[0]?.url as string) || null;
+  const logoUrl = (logoAsset[0]?.storage_url as string) || null;
   const websiteUrl = (siteInfo.url as string) || null;
 
   // Build description from playbook or blog description
