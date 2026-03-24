@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ProfileKit } from "@/lib/provisioning/profile-kit";
 
-export function ProfileKitPanel({ kit }: { kit: ProfileKit }) {
+export function ProfileKitPanel({ kit, existingAccounts }: { kit: ProfileKit; existingAccounts?: string[] }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -94,6 +94,7 @@ export function ProfileKitPanel({ kit }: { kit: ProfileKit }) {
                   profile={p}
                   onCopy={copyText}
                   copied={copied}
+                  isExisting={existingAccounts?.includes(p.platform) || false}
                 />
               ))}
             </div>
@@ -108,10 +109,12 @@ function PlatformCard({
   profile,
   onCopy,
   copied,
+  isExisting,
 }: {
   profile: ProfileKit["platforms"][0];
   onCopy: (text: string, label: string) => void;
   copied: string | null;
+  isExisting: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const bioKey = `bio-${profile.platform}`;
@@ -122,7 +125,16 @@ function PlatformCard({
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
       >
-        <span className="font-medium">{profile.label}</span>
+        <span className="flex items-center gap-2">
+          <span className="font-medium">{profile.label}</span>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+            isExisting
+              ? "bg-accent/10 text-accent"
+              : "bg-warning/10 text-warning"
+          }`}>
+            {isExisting ? "link existing" : "create new"}
+          </span>
+        </span>
         <span className="text-xs text-muted">{open ? "▾" : "▸"}</span>
       </button>
 

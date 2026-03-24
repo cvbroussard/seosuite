@@ -13,6 +13,17 @@ interface SiteInfo {
   created_at: string;
 }
 
+const PLATFORMS = [
+  { id: "instagram", label: "Instagram" },
+  { id: "facebook", label: "Facebook" },
+  { id: "tiktok", label: "TikTok" },
+  { id: "youtube", label: "YouTube" },
+  { id: "gbp", label: "Google Business" },
+  { id: "twitter", label: "X (Twitter)" },
+  { id: "linkedin", label: "LinkedIn" },
+  { id: "pinterest", label: "Pinterest" },
+];
+
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   requested: { label: "Provisioning requested", color: "bg-warning/10 text-warning" },
   in_progress: { label: "Provisioning in progress", color: "bg-accent/10 text-accent" },
@@ -26,6 +37,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [domain, setDomain] = useState("");
+  const [existingAccounts, setExistingAccounts] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +57,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
           businessType,
           location,
           domain: domain || undefined,
+          existingAccounts: Array.from(existingAccounts),
         }),
       });
 
@@ -129,6 +142,38 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 className="w-full text-sm"
               />
             </div>
+          </div>
+
+          {/* Existing social accounts */}
+          <div className="mt-4">
+            <label className="mb-2 block text-xs text-muted">
+              I have existing accounts on:
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {PLATFORMS.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 py-1 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={existingAccounts.has(p.id)}
+                    onChange={(e) => {
+                      setExistingAccounts((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p.id);
+                        else next.delete(p.id);
+                        return next;
+                      });
+                    }}
+                    className="accent-accent"
+                  />
+                  <span className={existingAccounts.has(p.id) ? "text-foreground" : "text-muted"}>
+                    {p.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] text-dim">
+              Unchecked platforms will be created for you during provisioning.
+            </p>
           </div>
 
           <div className="mt-4 flex gap-3">

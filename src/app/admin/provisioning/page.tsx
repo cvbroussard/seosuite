@@ -28,6 +28,7 @@ export default async function ProvisioningPage() {
       s.blog_slug,
       s.brand_playbook,
       s.brand_playbook IS NOT NULL AS has_playbook,
+      s.metadata AS site_metadata,
       s.deleted_at,
       (
         SELECT array_agg(DISTINCT sa.platform)
@@ -124,7 +125,12 @@ export default async function ProvisioningPage() {
                 </div>
 
                 {/* Profile Kit */}
-                {profileKit && <ProfileKitPanel kit={profileKit} />}
+                {profileKit && (
+                  <ProfileKitPanel
+                    kit={profileKit}
+                    existingAccounts={((sub.site_metadata as Record<string, unknown>)?.existing_accounts as string[]) || undefined}
+                  />
+                )}
               </div>
             );
           })}

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, businessType, location, domain } = body;
+  const { name, businessType, location, domain, existingAccounts } = body;
 
   if (!name || !businessType || !location) {
     return NextResponse.json(
@@ -35,8 +35,13 @@ export async function POST(req: NextRequest) {
     ? `${blogSlug}-${Date.now().toString(36).slice(-4)}`
     : blogSlug;
 
+  // Store existing accounts signal in metadata for provisioning
+  const metadata = existingAccounts?.length
+    ? JSON.stringify({ existing_accounts: existingAccounts })
+    : "{}";
+
   const [site] = await sql`
-    INSERT INTO sites (subscriber_id, name, domain, url, business_type, location, blog_slug, provisioning_status)
+    INSERT INTO sites (subscriber_id, name, domain, url, business_type, location, blog_slug, provisioning_status, metadata)
     VALUES (
       ${session.subscriberId},
       ${name},
@@ -45,7 +50,8 @@ export async function POST(req: NextRequest) {
       ${businessType},
       ${location},
       ${finalSlug},
-      'requested'
+      'requested',
+      ${metadata}::jsonb
     )
     RETURNING id, name, blog_slug, provisioning_status
   `;
