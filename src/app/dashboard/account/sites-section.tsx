@@ -82,7 +82,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
 
       {/* Add Site Form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="mb-6 rounded-lg border border-border bg-surface p-5">
+        <form onSubmit={handleSubmit} className="mb-6">
           <h3 className="mb-4 text-sm font-medium">New Site</h3>
 
           {error && (
@@ -96,7 +96,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Epicurious Kitchens"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                className="w-full text-sm"
                 required
               />
             </div>
@@ -106,7 +106,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 value={businessType}
                 onChange={(e) => setBusinessType(e.target.value)}
                 placeholder="Luxury Kitchen Remodeling"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                className="w-full text-sm"
                 required
               />
             </div>
@@ -116,7 +116,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="Greater Pittsburgh, PA"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                className="w-full text-sm"
                 required
               />
             </div>
@@ -126,7 +126,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder="epicuriouskitchens.com"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                className="w-full text-sm"
               />
             </div>
           </div>
@@ -158,13 +158,13 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
             return (
               <div
                 key={site.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-surface p-4"
+                className="flex items-baseline justify-between border-b border-border py-2"
               >
                 <div>
-                  <p className="text-sm font-medium">{site.name}</p>
-                  <p className="mt-0.5 text-xs text-muted">
+                  <span className="text-sm font-medium">{site.name}</span>
+                  <span className="ml-2 text-xs text-muted">
                     {site.business_type || "—"} · {site.location || "—"}
-                  </p>
+                  </span>
                 </div>
                 <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${status.color}`}>
                   {status.label}
@@ -180,23 +180,20 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
       {/* Deleted Sites */}
       {deletedSites.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-xs text-muted">Deleted</p>
-          <div className="space-y-2">
-            {deletedSites.map((site) => (
-              <div
-                key={site.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-surface p-3 opacity-50"
-              >
-                <div>
-                  <p className="text-sm font-medium">{site.name}</p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Deleted {new Date(site.deleted_at!).toLocaleDateString()}
-                  </p>
-                </div>
-                <span className="rounded bg-danger/10 px-2 py-0.5 text-[10px] text-danger">deleted</span>
+          {deletedSites.map((site) => (
+            <div
+              key={site.id}
+              className="flex items-baseline justify-between border-b border-border py-2 opacity-50"
+            >
+              <div>
+                <span className="text-sm font-medium">{site.name}</span>
+                <span className="ml-2 text-xs text-muted">
+                  Deleted {new Date(site.deleted_at!).toLocaleDateString()}
+                </span>
               </div>
-            ))}
-          </div>
+              <span className="rounded bg-danger/10 px-2 py-0.5 text-[10px] text-danger">deleted</span>
+            </div>
+          ))}
         </div>
       )}
     </section>
