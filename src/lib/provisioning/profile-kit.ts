@@ -95,6 +95,11 @@ const PLATFORM_PROFILES: Record<string, {
   },
 };
 
+const ALL_PLATFORMS = [
+  "instagram", "facebook", "tiktok", "youtube",
+  "gbp", "twitter", "linkedin", "pinterest",
+];
+
 export interface PlatformProfile {
   platform: string;
   label: string;
@@ -159,8 +164,8 @@ export function generateProfileKit(opts: {
 
   const handleSuggestions = [...new Set([handleDotted, handleBase, handleUnder])];
 
-  // Determine recommended platforms by business type
-  const platforms = opts.recommendedPlatforms || recommendPlatforms(businessType);
+  // All platforms — every channel is a discovery surface
+  const platforms = opts.recommendedPlatforms || ALL_PLATFORMS;
 
   // Generate per-platform profiles
   const platformProfiles: PlatformProfile[] = platforms.map((platform) => {
