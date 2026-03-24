@@ -10,7 +10,7 @@ interface SiteInfo {
   url: string;
 }
 
-const baseNav = [
+const siteNav = [
   { label: "Dashboard", path: "", icon: "◆" },
   { label: "Brand", path: "/brand", icon: "◈" },
   { label: "Capture", path: "/capture", icon: "◎" },
@@ -22,6 +22,9 @@ const baseNav = [
   { label: "Analytics", path: "/analytics", icon: "▥" },
   { label: "Accounts", path: "/accounts", icon: "◉" },
   { label: "Settings", path: "/settings", icon: "⚙" },
+];
+
+const accountNav = [
   { label: "My Account", path: "/account", icon: "◯" },
 ];
 
@@ -38,10 +41,8 @@ export function Sidebar({ subscriberName, sites, activeSiteId }: SidebarProps) {
     typeof window !== "undefined" &&
     window.location.hostname === "studio.tracpost.com";
   const prefix = isSubdomain ? "" : "/dashboard";
-  const nav = baseNav.map((item) => ({
-    ...item,
-    href: prefix + item.path || "/",
-  }));
+  const siteLinks = siteNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
+  const accountLinks = accountNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
 
   const handleSiteChange = async (siteId: string) => {
     await fetch("/api/auth/session", {
@@ -60,27 +61,49 @@ export function Sidebar({ subscriberName, sites, activeSiteId }: SidebarProps) {
         activeSiteId={activeSiteId}
         onSiteChange={handleSiteChange}
       />
-      <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
-        {nav.map((item) => {
-          const active =
-            item.path === ""
-              ? pathname === prefix || pathname === prefix + "/"
-              : pathname.startsWith(prefix + item.path);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
-                active
-                  ? "bg-accent-muted text-accent"
-                  : "text-muted hover:bg-surface-hover hover:text-foreground"
-              }`}
-            >
-              <span className="text-xs">{item.icon}</span>
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex flex-1 flex-col px-2 py-3">
+        <div className="flex flex-col gap-0.5">
+          {siteLinks.map((item) => {
+            const active =
+              item.path === ""
+                ? pathname === prefix || pathname === prefix + "/"
+                : pathname.startsWith(prefix + item.path);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                  active
+                    ? "bg-accent-muted text-accent"
+                    : "text-muted hover:bg-surface-hover hover:text-foreground"
+                }`}
+              >
+                <span className="text-xs">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="mx-3 my-2 border-t border-border" />
+        <div className="flex flex-col gap-0.5">
+          {accountLinks.map((item) => {
+            const active = pathname.startsWith(prefix + item.path);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                  active
+                    ? "bg-accent-muted text-accent"
+                    : "text-muted hover:bg-surface-hover hover:text-foreground"
+                }`}
+              >
+                <span className="text-xs">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
     </aside>
   );
