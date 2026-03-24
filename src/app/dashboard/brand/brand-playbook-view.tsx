@@ -23,7 +23,6 @@ export function BrandPlaybookView({ siteId, playbook: initialPlaybook, subscribe
   const [refining, setRefining] = useState(false);
   const [refined, setRefined] = useState(!!subscriberAngle);
   const [error, setError] = useState<string | null>(null);
-  const [confirmResharpen, setConfirmResharpen] = useState(false);
 
   // Extract playbook sections
   const offerCore = playbook.offerCore as Record<string, unknown> | undefined;
@@ -89,74 +88,55 @@ export function BrandPlaybookView({ siteId, playbook: initialPlaybook, subscribe
         <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
           {refined ? "Your Angle" : "Tell Us Your Twist"}
         </p>
-        <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
-          {refined
-            ? "Your playbook is built around this. Edit and resharpen anytime."
-            : "What makes you different from every other business in your category? This single input reshapes your entire playbook."}
-        </p>
-        <textarea
-          value={angle}
-          onChange={(e) => { setAngle(e.target.value); setConfirmResharpen(false); }}
-          placeholder="e.g., We focus on serious home cooks and prosumer chefs — the kitchen should reflect the cooking experience. The recipes, the gear, the culinary elevated."
-          rows={3}
-          className="w-full text-sm"
-          style={{
-            border: "1px solid var(--color-success)",
-            background: "var(--color-input-bg)",
-          }}
-          disabled={refining}
-        />
-
-        {error && (
-          <p className="mt-2 rounded bg-danger/10 p-2 text-sm text-danger">{error}</p>
-        )}
-
-        {/* First sharpen — no confirmation needed */}
-        {!refined && (
-          <button
-            onClick={handleRefine}
-            disabled={refining || !angle.trim()}
-            className="mt-3 px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
-            style={{ background: "var(--color-success)" }}
-          >
-            {refining ? "Sharpening playbook..." : "Sharpen My Playbook"}
-          </button>
-        )}
-
-        {/* Resharpen — requires confirmation */}
-        {refined && !confirmResharpen && (
-          <button
-            onClick={() => setConfirmResharpen(true)}
-            disabled={refining || !angle.trim()}
-            className="mt-3 px-4 py-2 text-xs font-medium text-muted disabled:opacity-50"
-            style={{ border: "1px solid var(--color-border)" }}
-          >
-            Resharpen
-          </button>
-        )}
-
-        {refined && confirmResharpen && (
-          <div className="mt-3">
-            <p className="mb-2 text-xs text-warning">
-              This will regenerate your playbook, hooks, and content topics. Existing content already published won&apos;t change.
+        {refined ? (
+          <>
+            <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
+              Your playbook is built around this angle. To request a change, contact support.
             </p>
-            <div className="flex gap-2">
-              <button
-                onClick={handleRefine}
-                disabled={refining || !angle.trim()}
-                className="px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
-                style={{ background: "var(--color-success)" }}
-              >
-                {refining ? "Sharpening..." : "Confirm Resharpen"}
-              </button>
-              <button
-                onClick={() => setConfirmResharpen(false)}
-                className="text-xs text-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
+            <div
+              className="text-sm leading-relaxed"
+              style={{
+                padding: "10px 12px",
+                borderRadius: "var(--tp-radius)",
+                background: "var(--color-input-bg)",
+                border: "1px solid var(--color-success)",
+                color: "var(--color-foreground)",
+              }}
+            >
+              {angle}
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
+              What makes you different from every other business in your category? This single input reshapes your entire playbook.
+            </p>
+            <textarea
+              value={angle}
+              onChange={(e) => setAngle(e.target.value)}
+              placeholder="e.g., We focus on serious home cooks and prosumer chefs — the kitchen should reflect the cooking experience. The recipes, the gear, the culinary elevated."
+              rows={3}
+              className="w-full text-sm"
+              style={{
+                border: "1px solid var(--color-success)",
+                background: "var(--color-input-bg)",
+              }}
+              disabled={refining}
+            />
+
+            {error && (
+              <p className="mt-2 rounded bg-danger/10 p-2 text-sm text-danger">{error}</p>
+            )}
+
+            <button
+              onClick={handleRefine}
+              disabled={refining || !angle.trim()}
+              className="mt-3 px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
+              style={{ background: "var(--color-success)" }}
+            >
+              {refining ? "Sharpening playbook..." : "Sharpen My Playbook"}
+            </button>
+          </>
         )}
       </div>
 
