@@ -34,7 +34,7 @@ export function AdminConnectButton({ siteId, subscriberId, connectedPlatforms }:
 
     try {
       const apiPlatform = platform === "gbp" ? "google" : platform;
-      const url = `/api/auth/${apiPlatform}?site_id=${siteId}&subscriber_id=${subscriberId}`;
+      const url = `/api/auth/${apiPlatform}?site_id=${siteId}&subscriber_id=${subscriberId}&source=admin`;
 
       const res = await fetch(url);
       if (!res.ok) {
