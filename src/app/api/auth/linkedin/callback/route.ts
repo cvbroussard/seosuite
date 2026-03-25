@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeLinkedInCode, getLinkedInUserInfo, discoverLinkedInOrganizations } from "@/lib/linkedin";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
-import { studioUrl } from "@/lib/subdomains";
+
 
 /**
  * GET /api/auth/linkedin/callback?code=xxx&state=xxx

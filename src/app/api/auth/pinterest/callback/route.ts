@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangePinterestCode, getPinterestUserInfo, getPinterestBoards } from "@/lib/pinterest";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
-import { studioUrl } from "@/lib/subdomains";
-
 /**
  * GET /api/auth/pinterest/callback?code=xxx&state=xxx
  *
@@ -20,25 +18,28 @@ export async function GET(req: NextRequest) {
   const stateParam = searchParams.get("state");
   const error = searchParams.get("error");
 
+  // Try to parse state early so error redirects respect source
+  let source: string | undefined;
+  if (stateParam) {
+    try {
+      const parsed = JSON.parse(Buffer.from(stateParam, "base64url").toString());
+      source = parsed.source;
+    } catch { /* ignore */ }
+  }
+
   if (error) {
-    return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=pinterest_oauth_denied`
-    );
+    return NextResponse.redirect(oauthErrorUrl(source, "pinterest_oauth_denied"));
   }
 
   if (!code || !stateParam) {
-    return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=missing_params`
-    );
+    return NextResponse.redirect(oauthErrorUrl(source, "missing_params"));
   }
 
   let state: { subscriber_id: string; site_id?: string | null; source?: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
-    return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=invalid_state`
-    );
+    return NextResponse.redirect(oauthErrorUrl(source, "invalid_state"));
   }
 
   try {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeGoogleCode, discoverGbpLocations } from "@/lib/google";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
-import { studioUrl } from "@/lib/subdomains";
+import { oauthSuccessUrl, oauthErrorUrl } from "@/lib/oauth-redirect";
 
 /**
  * GET /api/auth/google/callback?code=xxx&state=xxx
@@ -13,7 +13,7 @@ import { studioUrl } from "@/lib/subdomains";
  * 3. Store credentials in gbp_credentials
  * 4. Store locations in gbp_locations
  * 5. Create social_accounts entry for each location
- * 6. Redirect to dashboard
+ * 6. Redirect to dashboard or admin
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -21,25 +21,28 @@ export async function GET(req: NextRequest) {
   const stateParam = searchParams.get("state");
   const error = searchParams.get("error");
 
+  // Try to parse source early for error redirects
+  let source: string | undefined;
+  if (stateParam) {
+    try {
+      const parsed = JSON.parse(Buffer.from(stateParam, "base64url").toString());
+      source = parsed.source;
+    } catch { /* ignore */ }
+  }
+
   if (error) {
-    return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=google_oauth_denied`
-    );
+    return NextResponse.redirect(oauthErrorUrl(source, "google_oauth_denied"));
   }
 
   if (!code || !stateParam) {
-    return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=missing_params`
-    );
+    return NextResponse.redirect(oauthErrorUrl(source, "missing_params"));
   }
 
-  let state: { subscriber_id: string; site_id: string };
+  let state: { subscriber_id: string; site_id: string; source?: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
-    return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=invalid_state`
-    );
+    return NextResponse.redirect(oauthErrorUrl(source, "invalid_state"));
   }
 
   try {
@@ -136,13 +139,13 @@ export async function GET(req: NextRequest) {
 
     const locationNames = locations.map((l) => l.locationName).join(",");
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?connected=${encodeURIComponent(locationNames || "Google Business")}`
+      oauthSuccessUrl(state.source, locationNames || "Google Business")
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Google OAuth callback error:", message);
     return NextResponse.redirect(
-      `${studioUrl("/accounts")}?error=google_oauth_failed&detail=${encodeURIComponent(message)}`
+      oauthErrorUrl(state.source, "google_oauth_failed", message)
     );
   }
 }
