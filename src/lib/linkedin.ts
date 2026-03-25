@@ -11,7 +11,7 @@ const AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization";
 const TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
 const USERINFO_URL = "https://api.linkedin.com/v2/userinfo";
 
-const SCOPES = "openid profile w_member_social";
+const SCOPES = "openid profile w_member_social r_organization_social w_organization_social";
 
 /**
  * Build LinkedIn OAuth authorization URL.
@@ -107,4 +107,44 @@ export async function getLinkedInUserInfo(accessToken: string): Promise<{
     id: meData.id,
     name: `${meData.localizedFirstName || ""} ${meData.localizedLastName || ""}`.trim() || "LinkedIn User",
   };
+}
+
+/**
+ * Discover LinkedIn organizations (Company Pages) the user is admin of.
+ */
+export async function discoverLinkedInOrganizations(accessToken: string): Promise<Array<{
+  orgId: string;
+  orgName: string;
+  vanityName: string;
+}>> {
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "LinkedIn-Version": "202401",
+  };
+
+  // Get org admin roles
+  const aclRes = await fetch(
+    "https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(id,localizedName,vanityName)))",
+    { headers }
+  );
+
+  if (!aclRes.ok) {
+    const errText = await aclRes.text();
+    console.warn("LinkedIn org discovery failed:", errText);
+    return [];
+  }
+
+  const data = await aclRes.json();
+  const elements = data.elements || [];
+
+  return elements
+    .filter((el: Record<string, unknown>) => el["organization~"])
+    .map((el: Record<string, unknown>) => {
+      const org = el["organization~"] as Record<string, unknown>;
+      return {
+        orgId: String(org.id || ""),
+        orgName: String(org.localizedName || ""),
+        vanityName: String(org.vanityName || ""),
+      };
+    });
 }

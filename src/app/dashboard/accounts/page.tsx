@@ -6,6 +6,7 @@ import { ConnectButton } from "./connect-modal";
 import { AccountName } from "./account-name";
 import { DisconnectButton } from "./disconnect-button";
 import { OnboardingTip } from "@/components/onboarding-tip";
+import { LinkedInOrgSelector } from "./linkedin-org-selector";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function AccountsPage() {
   const accounts = activeSiteId
     ? await sql`
         SELECT sa.id, sa.platform, sa.account_name, sa.status, sa.token_expires_at,
-               sa.created_at,
+               sa.created_at, sa.metadata,
                (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'published') AS published,
                (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'scheduled') AS scheduled
         FROM social_accounts sa
@@ -111,6 +112,23 @@ export default async function AccountsPage() {
                     <p className="text-sm text-muted">Token Expires</p>
                   </div>
                 </div>
+
+                {/* LinkedIn org selector */}
+                {acc.platform === "linkedin" && (() => {
+                  const meta = (acc.metadata || {}) as Record<string, unknown>;
+                  const orgs = (meta.organizations || []) as Array<{ orgId: string; orgName: string; vanityName: string }>;
+                  const selectedOrg = meta.selected_org as Record<string, string> | null;
+                  if (orgs.length > 1) {
+                    return (
+                      <LinkedInOrgSelector
+                        accountId={acc.id as string}
+                        organizations={orgs}
+                        selectedOrgId={selectedOrg?.org_id || null}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Linked sites */}
                 {accountLinks.length > 0 && (

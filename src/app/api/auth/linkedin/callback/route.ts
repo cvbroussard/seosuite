@@ -1,6 +1,6 @@
 import { oauthSuccessUrl, oauthErrorUrl } from "@/lib/oauth-redirect";
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeLinkedInCode, getLinkedInUserInfo } from "@/lib/linkedin";
+import { exchangeLinkedInCode, getLinkedInUserInfo, discoverLinkedInOrganizations } from "@/lib/linkedin";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { studioUrl } from "@/lib/subdomains";
@@ -59,7 +59,27 @@ export async function GET(req: NextRequest) {
     // LinkedIn author URN for publishing
     const personUrn = accountId ? `urn:li:person:${accountId}` : "";
 
+    // Discover organizations (Company Pages) the user admins
+    const organizations = await discoverLinkedInOrganizations(accessToken);
+    console.log("LinkedIn orgs discovered:", JSON.stringify(organizations));
+
+    // If exactly one org, auto-select it as the publishing target
+    const selectedOrg = organizations.length === 1 ? organizations[0] : null;
+    const displayName = selectedOrg ? selectedOrg.orgName : accountName;
+    const displayId = selectedOrg ? selectedOrg.orgId : accountId;
+
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+    const metadata = {
+      name: accountName,
+      person_urn: personUrn,
+      organizations,
+      selected_org: selectedOrg ? {
+        org_id: selectedOrg.orgId,
+        org_name: selectedOrg.orgName,
+        org_urn: `urn:li:organization:${selectedOrg.orgId}`,
+      } : null,
+    };
 
     await sql`
       INSERT INTO social_accounts (
@@ -68,11 +88,11 @@ export async function GET(req: NextRequest) {
         scopes, status, metadata
       )
       VALUES (
-        ${state.subscriber_id}, 'linkedin', ${accountName}, ${accountId},
+        ${state.subscriber_id}, 'linkedin', ${displayName}, ${displayId},
         ${encrypt(accessToken)}, ${refreshToken ? encrypt(refreshToken) : null}, ${expiresAt},
-        ${"{openid,profile,w_member_social}"},
+        ${"{openid,profile,w_member_social,r_organization_social,w_organization_social}"},
         'active',
-        ${JSON.stringify({ name: accountName, person_urn: personUrn })}
+        ${JSON.stringify(metadata)}
       )
       ON CONFLICT (subscriber_id, platform, account_id)
       DO UPDATE SET
