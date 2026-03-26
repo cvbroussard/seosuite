@@ -16,13 +16,14 @@ interface Asset {
 }
 
 const statusColors: Record<string, string> = {
-  received: "bg-muted/20 text-muted",
-  triaged: "bg-accent/20 text-accent",
-  scheduled: "bg-success/20 text-success",
-  consumed: "bg-success/20 text-success",
-  shelved: "bg-warning/20 text-warning",
-  flagged: "bg-danger/20 text-danger",
-  rejected: "bg-danger/20 text-danger",
+  received: "bg-muted/10 text-muted/70",
+  ready: "bg-success/10 text-success/70",
+  triaged: "bg-accent/10 text-accent/70",
+  scheduled: "bg-success/10 text-success/70",
+  consumed: "bg-success/10 text-success/70",
+  shelved: "bg-warning/10 text-warning/70",
+  flagged: "bg-danger/10 text-danger/70",
+  rejected: "bg-danger/10 text-danger/70",
 };
 
 export function MediaGrid({
