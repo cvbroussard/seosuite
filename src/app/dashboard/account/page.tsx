@@ -24,6 +24,15 @@ export default async function MyAccountPage() {
   const meta = (subscriber.metadata || {}) as Record<string, unknown>;
   const stripe = meta.stripe as Record<string, string> | undefined;
 
+  // Fetch owner team member for phone
+  const [ownerMember] = await sql`
+    SELECT phone, last_active_at,
+           session_token_hash IS NOT NULL AS has_device
+    FROM team_members
+    WHERE subscriber_id = ${session.subscriberId} AND role = 'owner'
+    LIMIT 1
+  `;
+
   // Fetch all sites for this subscriber
   const allSites = await sql`
     SELECT id, name, business_type, location, provisioning_status,
@@ -57,11 +66,31 @@ export default async function MyAccountPage() {
             <span className="text-sm text-muted">Email</span>
             <span className="font-medium">{subscriber.email || "—"}</span>
           </div>
+          {ownerMember?.phone && (
+            <div className="flex items-baseline justify-between border-b border-border py-2">
+              <span className="text-sm text-muted">Phone</span>
+              <span className="font-medium">{ownerMember.phone as string}</span>
+            </div>
+          )}
           <AccountProfile
             subscriberId={subscriber.id as string}
             initialName={subscriber.name as string}
             hasPassword={subscriber.has_password as boolean}
           />
+          <div className="flex items-baseline justify-between border-b border-border py-2">
+            <span className="text-sm text-muted">Mobile App</span>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${ownerMember?.has_device ? "text-success" : "text-muted"}`}>
+                {ownerMember?.has_device ? "Connected" : "Not installed"}
+              </span>
+              <a
+                href="/dashboard/account/mobile-app"
+                className="text-xs text-accent hover:underline"
+              >
+                Manage
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 
