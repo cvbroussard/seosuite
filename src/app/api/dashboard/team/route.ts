@@ -86,7 +86,35 @@ export async function POST(req: NextRequest) {
     RETURNING id, name, role, invite_token, invite_expires
   `;
 
-  // TODO: If method === 'sms', send Twilio SMS with invite link
+  // Send invite via selected method
+  const inviteUrl = `https://tracpost.com/invite/${inviteToken}`;
+
+  if (method === "sms" && phone) {
+    try {
+      const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+      const twilioAuth = process.env.TWILIO_AUTH_TOKEN;
+      const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+
+      if (twilioSid && twilioAuth && twilioFrom) {
+        await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64")}`,
+          },
+          body: new URLSearchParams({
+            To: phone,
+            From: twilioFrom,
+            Body: `${session.subscriberName} invited you to TracPost Studio. Tap to get started: ${inviteUrl}`,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("SMS invite send failed:", err instanceof Error ? err.message : err);
+      // Non-fatal — invite is created, SMS delivery is best-effort
+    }
+  }
+
   // TODO: If method === 'email', send email with invite link
 
   return NextResponse.json({ member });
