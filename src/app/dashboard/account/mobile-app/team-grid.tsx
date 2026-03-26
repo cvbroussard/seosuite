@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PhoneField } from "@/components/phone-input";
+import { QRCodeSVG } from "qrcode.react";
 
 interface Member {
   id: string;
@@ -453,21 +454,11 @@ export function TeamGrid({
                             className="flex flex-col items-center border border-border p-3"
                             style={{ background: "#fff", borderRadius: "var(--tp-radius)" }}
                           >
-                            <div
-                              style={{
-                                width: 100,
-                                height: 100,
-                                background: "#f3f4f6",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                borderRadius: 4,
-                                fontSize: 10,
-                                color: "#6b7280",
-                              }}
-                            >
-                              QR Code
-                            </div>
+                            <QRCodeSVG
+                              value={`https://tracpost.com/invite/${member.inviteToken}`}
+                              size={100}
+                              level="M"
+                            />
                           </div>
                           {member.inviteExpires && (
                             <p className="mt-1 text-center text-[10px] text-dim" suppressHydrationWarning>
