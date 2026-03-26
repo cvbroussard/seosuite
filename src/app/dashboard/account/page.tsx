@@ -13,7 +13,7 @@ export default async function MyAccountPage() {
   if (!session) redirect("/login");
 
   const [subscriber] = await sql`
-    SELECT id, name, email, plan, password_hash IS NOT NULL AS has_password,
+    SELECT id, name, email, company_phone, plan, password_hash IS NOT NULL AS has_password,
            metadata, cancelled_at, created_at
     FROM subscribers
     WHERE id = ${session.subscriberId}
@@ -71,6 +71,7 @@ export default async function MyAccountPage() {
             initialName={subscriber.name as string}
             initialOwnerName={(ownerMember?.owner_name as string) || ""}
             initialPhone={(ownerMember?.phone as string) || ""}
+            initialCompanyPhone={(subscriber.company_phone as string) || ""}
             hasPassword={subscriber.has_password as boolean}
           />
           <div className="flex items-baseline justify-between border-b border-border py-2">

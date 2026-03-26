@@ -7,17 +7,20 @@ interface Props {
   initialName: string;
   initialOwnerName: string;
   initialPhone: string;
+  initialCompanyPhone: string;
   hasPassword: boolean;
 }
 
-export function AccountProfile({ subscriberId, initialName, initialOwnerName, initialPhone, hasPassword }: Props) {
+export function AccountProfile({ subscriberId, initialName, initialOwnerName, initialPhone, initialCompanyPhone, hasPassword }: Props) {
   const [name, setName] = useState(initialName);
   const [ownerName, setOwnerName] = useState(initialOwnerName);
   const [phone, setPhone] = useState(initialPhone);
+  const [companyPhone, setCompanyPhone] = useState(initialCompanyPhone);
   const [saving, setSaving] = useState(false);
   const [nameSuccess, setNameSuccess] = useState(false);
   const [ownerNameSuccess, setOwnerNameSuccess] = useState(false);
   const [phoneSuccess, setPhoneSuccess] = useState(false);
+  const [companyPhoneSuccess, setCompanyPhoneSuccess] = useState(false);
 
   // Password flow
   const [showPassword, setShowPassword] = useState(false);
@@ -29,6 +32,25 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  async function saveCompanyPhone() {
+    if (companyPhone === initialCompanyPhone) return;
+    setSaving(true);
+    setCompanyPhoneSuccess(false);
+    try {
+      const res = await fetch("/api/account/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyPhone: companyPhone.trim() }),
+      });
+      if (res.ok) {
+        setCompanyPhoneSuccess(true);
+        setTimeout(() => setCompanyPhoneSuccess(false), 3000);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function saveOwnerName() {
     if (!ownerName.trim() || ownerName === initialOwnerName) return;
@@ -225,6 +247,28 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
             className="border border-border px-3 py-1 text-sm text-muted hover:text-foreground disabled:opacity-30"
           >
             {saving ? "..." : phoneSuccess ? "Saved" : "Save"}
+          </button>
+        </div>
+      </div>
+
+      {/* Company phone */}
+      <div className="flex items-center justify-between border-b border-border py-2">
+        <span className="text-sm text-muted">Company phone</span>
+        <div className="flex items-center gap-2">
+          <input
+            value={companyPhone}
+            onChange={(e) => setCompanyPhone(e.target.value)}
+            className="px-2 py-1 text-right"
+            style={{ width: 160 }}
+            placeholder="(412) 555-0000"
+            type="tel"
+          />
+          <button
+            onClick={saveCompanyPhone}
+            disabled={saving || companyPhone === initialCompanyPhone}
+            className="border border-border px-3 py-1 text-sm text-muted hover:text-foreground disabled:opacity-30"
+          >
+            {saving ? "..." : companyPhoneSuccess ? "Saved" : "Save"}
           </button>
         </div>
       </div>

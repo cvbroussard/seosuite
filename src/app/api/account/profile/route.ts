@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, ownerName, phone } = body;
+  const { name, ownerName, phone, companyPhone } = body;
 
   if (name) {
     await sql`
@@ -21,8 +21,14 @@ export async function PATCH(req: NextRequest) {
     `;
   }
 
+  if (companyPhone !== undefined) {
+    await sql`
+      UPDATE subscribers SET company_phone = ${companyPhone || null}, updated_at = NOW()
+      WHERE id = ${auth.subscriberId}
+    `;
+  }
+
   if (ownerName) {
-    // Owner's personal name on team member record
     await sql`
       UPDATE team_members SET name = ${ownerName}
       WHERE subscriber_id = ${auth.subscriberId} AND role = 'owner'
