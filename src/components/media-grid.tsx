@@ -11,6 +11,7 @@ interface Asset {
   triage_status: string;
   quality_score: number | null;
   content_pillar: string | null;
+  content_pillars: string[] | null;
   flag_reason: string | null;
   created_at: string;
 }
@@ -92,11 +93,11 @@ export function MediaGrid({
                 <span className="text-[10px] text-muted">
                   {new Date(a.created_at).toLocaleDateString()}
                 </span>
-                {a.content_pillar && (
-                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px]">
-                    {a.content_pillar}
+                {(a.content_pillars || (a.content_pillar ? [a.content_pillar] : [])).map((p) => (
+                  <span key={p} className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px]">
+                    {p.replace(/_/g, " ")}
                   </span>
-                )}
+                ))}
                 {a.quality_score && (
                   <span className="text-[10px] text-muted">
                     {(a.quality_score * 100).toFixed(0)}%

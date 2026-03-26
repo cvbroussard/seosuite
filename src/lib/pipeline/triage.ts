@@ -66,6 +66,7 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
       triage_status = ${result.triage_status},
       quality_score = ${result.quality_score},
       content_pillar = ${result.content_pillar},
+      content_pillars = ${result.content_pillars},
       platform_fit = ${result.platform_fit},
       flag_reason = ${result.flag_reason || null},
       shelve_reason = ${result.shelve_reason || null},
@@ -132,7 +133,7 @@ ${brandContext}
 Respond with ONLY valid JSON (no markdown):
 {
   "quality_score": <0.0-1.0, based on: sharpness, lighting, composition, visual appeal>,
-  "content_pillar": "<best matching pillar from: ${pillarList}>",
+  "content_pillars": [<1-3 matching pillars from: ${pillarList}, ordered by relevance>],
   "platform_fit": [<array of: "ig_feed", "ig_story", "ig_reel", "gbp", "youtube", "youtube_short", "fb_feed", "tiktok", "twitter", "linkedin", "pinterest">],
   "has_faces": <true/false>,
   "has_text_overlay": <true/false>,
@@ -161,10 +162,18 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
     response.content[0].type === "text" ? response.content[0].text : "";
   const parsed = JSON.parse(text);
 
+  // Extract pillars from AI response (array) with fallback
+  let contentPillars: ContentPillar[] = Array.isArray(parsed.content_pillars)
+    ? parsed.content_pillars.filter((p: string) => pillars.includes(p as ContentPillar))
+    : parsed.content_pillar
+      ? [parsed.content_pillar]
+      : [pillars[0] || "general"];
+
   // Apply subscriber pillar override if valid
-  let pillar: ContentPillar = parsed.content_pillar || pillars[0] || "training_action";
   if (subscriberPillar && pillars.includes(subscriberPillar as ContentPillar)) {
-    pillar = subscriberPillar as ContentPillar;
+    if (!contentPillars.includes(subscriberPillar as ContentPillar)) {
+      contentPillars.unshift(subscriberPillar as ContentPillar);
+    }
   }
 
   const quality = Math.min(1, Math.max(0, parsed.quality_score || 0.5));
@@ -187,7 +196,8 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
 
   return {
     quality_score: Math.round(quality * 100) / 100,
-    content_pillar: pillar,
+    content_pillar: contentPillars[0],
+    content_pillars: contentPillars,
     platform_fit: platformFit,
     triage_status: triageStatus,
     flag_reason: flagReason,
@@ -274,6 +284,7 @@ function heuristicTriage(
   return {
     quality_score: Math.round(quality * 100) / 100,
     content_pillar: pillar,
+    content_pillars: [pillar],
     platform_fit: platformFit,
     triage_status: triageStatus,
     flag_reason: flagReason,

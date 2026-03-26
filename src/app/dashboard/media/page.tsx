@@ -22,7 +22,7 @@ export default async function MediaPage() {
   const [assets, siteData] = await Promise.all([
     sql`
       SELECT id, storage_url, media_type, context_note, triage_status,
-             quality_score, content_pillar, platform_fit, flag_reason,
+             quality_score, content_pillar, content_pillars, platform_fit, flag_reason,
              shelve_reason, created_at
       FROM media_assets
       WHERE site_id = ${siteId}

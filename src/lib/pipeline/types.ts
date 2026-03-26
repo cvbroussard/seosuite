@@ -82,7 +82,8 @@ export interface AutopilotConfig {
 /** AI triage result returned by the triage engine */
 export interface TriageResult {
   quality_score: number;       // 0.00 – 1.00
-  content_pillar: ContentPillar;
+  content_pillar: ContentPillar;   // primary (backward compat)
+  content_pillars: ContentPillar[]; // all matching pillars
   platform_fit: PlatformFormat[];
   triage_status: TriageStatus; // triaged | shelved | flagged
   flag_reason?: string;
