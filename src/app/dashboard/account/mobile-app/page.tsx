@@ -21,11 +21,20 @@ export default async function MobileAppPage() {
     const inviteToken = crypto.randomBytes(32).toString("base64url");
     const inviteExpires = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
+    // Pull subscriber email + phone from site metadata
+    const [sub] = await sql`SELECT email FROM subscribers WHERE id = ${session.subscriberId}`;
+    const [siteWithPhone] = session.activeSiteId
+      ? await sql`SELECT metadata FROM sites WHERE id = ${session.activeSiteId}`
+      : [null];
+    const ownerPhone = (siteWithPhone?.metadata as Record<string, unknown>)?.phone as string || null;
+
     await sql`
-      INSERT INTO team_members (subscriber_id, name, role, invite_token, invite_method, invite_expires)
+      INSERT INTO team_members (subscriber_id, name, email, phone, role, invite_token, invite_method, invite_expires)
       VALUES (
         ${session.subscriberId},
         ${session.subscriberName},
+        ${(sub?.email as string) || null},
+        ${ownerPhone},
         'owner',
         ${inviteToken},
         'qr',
