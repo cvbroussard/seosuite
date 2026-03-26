@@ -26,6 +26,7 @@ const siteNav = [
 
 const accountNav = [
   { label: "My Account", path: "/account", icon: "◯" },
+  { label: "Mobile App", path: "/account/mobile-app", icon: "◱" },
 ];
 
 interface SidebarProps {
