@@ -3,25 +3,28 @@
 import { useState } from "react";
 import { PlatformIcon } from "@/components/platform-icons";
 
-interface ConnectModalProps {
+interface ConnectButtonProps {
   siteId: string | null;
+  connectedPlatforms?: string[];
 }
 
 const PLATFORMS = [
-  { key: "instagram", label: "Instagram", ready: true },
-  { key: "tiktok", label: "TikTok", ready: true },
-  { key: "facebook", label: "Facebook", ready: true },
-  { key: "gbp", label: "Google Business", ready: true },
-  { key: "youtube", label: "YouTube", ready: true },
-  { key: "twitter", label: "Twitter / X", ready: true },
-  { key: "linkedin", label: "LinkedIn", ready: true },
-  { key: "pinterest", label: "Pinterest", ready: true },
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "facebook", label: "Facebook" },
+  { key: "gbp", label: "Google Business" },
+  { key: "youtube", label: "YouTube" },
+  { key: "twitter", label: "X (Twitter)" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "pinterest", label: "Pinterest" },
 ];
 
-export function ConnectButton({ siteId }: ConnectModalProps) {
+export function ConnectButton({ siteId, connectedPlatforms = [] }: ConnectButtonProps) {
   const [open, setOpen] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  const available = PLATFORMS.filter((p) => !connectedPlatforms.includes(p.key));
 
   async function handleConnect(platform: string) {
     setConnecting(platform);
@@ -49,6 +52,12 @@ export function ConnectButton({ siteId }: ConnectModalProps) {
     }
   }
 
+  if (available.length === 0) {
+    return (
+      <span className="text-xs text-success">All platforms connected</span>
+    );
+  }
+
   return (
     <>
       <button
@@ -60,13 +69,11 @@ export function ConnectButton({ siteId }: ConnectModalProps) {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => { setOpen(false); setError(""); }}
           />
 
-          {/* Modal */}
           <div className="relative w-full max-w-md border border-border bg-background p-6">
             <div className="mb-5 flex items-center justify-between">
               <h2>Connect Platform</h2>
@@ -79,34 +86,25 @@ export function ConnectButton({ siteId }: ConnectModalProps) {
             </div>
 
             {error && (
-              <div className="mb-4 rounded-lg bg-danger/10 p-2.5 text-sm text-danger">
+              <div className="mb-4 bg-danger/10 p-2.5 text-sm text-danger">
                 {error}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              {PLATFORMS.map((p) => {
+              {available.map((p) => {
                 const isConnecting = connecting === p.key;
                 return (
                   <button
                     key={p.key}
-                    onClick={() => p.ready && handleConnect(p.key)}
-                    disabled={!p.ready || isConnecting}
-                    className={`flex items-center gap-3 border p-3 text-left transition-colors ${
-                      p.ready
-                        ? "border-border hover:border-foreground"
-                        : "border-border opacity-40"
-                    }`}
+                    onClick={() => handleConnect(p.key)}
+                    disabled={isConnecting}
+                    className="flex items-center gap-3 border border-border p-3 text-left transition-colors hover:border-foreground disabled:opacity-50"
                   >
                     <PlatformIcon platform={p.key} size={20} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        {isConnecting ? "Connecting..." : p.label}
-                      </p>
-                      {!p.ready && (
-                        <p className="text-xs text-muted">Coming soon</p>
-                      )}
-                    </div>
+                    <p className="text-sm font-medium">
+                      {isConnecting ? "Connecting..." : p.label}
+                    </p>
                   </button>
                 );
               })}

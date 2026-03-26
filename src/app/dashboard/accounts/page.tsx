@@ -51,7 +51,10 @@ export default async function AccountsPage() {
           <h1 className="mb-1 text-lg font-semibold">Connections</h1>
           <p className="text-sm text-muted">{accounts.length} connected</p>
         </div>
-        <ConnectButton siteId={session.activeSiteId} />
+        <ConnectButton
+          siteId={session.activeSiteId}
+          connectedPlatforms={accountData.map((a) => a.platform)}
+        />
       </div>
 
       <AccountList accounts={accountData} />
