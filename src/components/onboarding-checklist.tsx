@@ -80,11 +80,11 @@ export function OnboardingChecklist({ state, prefix, defaultCollapsed = false }:
     const allExistingConnected = existingNotConnected.length === 0;
     steps.push({
       key: "connect-existing",
-      label: "Connect your accounts",
+      label: "Connect your platforms",
       done: allExistingConnected,
       detail: allExistingConnected
-        ? `${state.existingAccounts.length} account${state.existingAccounts.length !== 1 ? "s" : ""} connected`
-        : `${existingNotConnected.length} account${existingNotConnected.length !== 1 ? "s" : ""} to connect`,
+        ? `${state.existingAccounts.length} connection${state.existingAccounts.length !== 1 ? "s" : ""} active`
+        : `${existingNotConnected.length} platform${existingNotConnected.length !== 1 ? "s" : ""} to connect`,
       href: `${prefix}/accounts`,
       missing: existingNotConnected,
     });

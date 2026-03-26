@@ -8,7 +8,7 @@ const baseNav = [
   { label: "Provisioning", path: "/provisioning", icon: "▸" },
   { label: "Subscribers", path: "/subscribers", icon: "◇" },
   { label: "Pipeline", path: "/pipeline", icon: "▶" },
-  { label: "Social Accounts", path: "/social", icon: "◉" },
+  { label: "Connections", path: "/social", icon: "◉" },
   { label: "Content Queue", path: "/content", icon: "▤" },
   { label: "Usage & Billing", path: "/usage", icon: "◈" },
 ];

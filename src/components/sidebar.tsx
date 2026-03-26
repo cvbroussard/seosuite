@@ -20,7 +20,7 @@ const siteNav = [
   { label: "SEO", path: "/seo", icon: "◇" },
   { label: "Spotlight", path: "/spotlight", icon: "✦" },
   { label: "Analytics", path: "/analytics", icon: "▥" },
-  { label: "Accounts", path: "/accounts", icon: "◉" },
+  { label: "Connections", path: "/accounts", icon: "◉" },
   { label: "Settings", path: "/settings", icon: "⚙" },
 ];
 

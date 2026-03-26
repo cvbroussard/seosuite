@@ -48,7 +48,7 @@ export default async function AccountsPage() {
       />
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="mb-1 text-lg font-semibold">Social Accounts</h1>
+          <h1 className="mb-1 text-lg font-semibold">Connections</h1>
           <p className="text-sm text-muted">{accounts.length} connected</p>
         </div>
         <ConnectButton siteId={session.activeSiteId} />

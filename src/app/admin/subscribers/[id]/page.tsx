@@ -128,9 +128,9 @@ export default async function SubscriberDetail({
         </div>
       </section>
 
-      {/* Social Accounts */}
+      {/* Connections */}
       <section className="mb-8">
-        <h2 className="mb-3 text-sm font-medium">Social Accounts ({accounts.length})</h2>
+        <h2 className="mb-3 text-sm font-medium">Connections ({accounts.length})</h2>
         {accounts.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-sm">

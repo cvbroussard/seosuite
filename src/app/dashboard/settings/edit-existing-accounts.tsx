@@ -52,7 +52,7 @@ export function EditExistingAccounts({
 
   return (
     <section className="mb-8">
-      <h2 className="mb-1">Social Accounts</h2>
+      <h2 className="mb-1">Connections</h2>
       <p className="mb-4 text-sm text-muted">
         Update which platforms you already have accounts on. You can change this until provisioning begins.
       </p>

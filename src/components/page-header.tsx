@@ -17,7 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/calendar": "Calendar",
   "/seo": "SEO",
   "/analytics": "Analytics",
-  "/accounts": "Accounts",
+  "/accounts": "Connections",
   "/account": "My Account",
   "/settings": "Settings",
 };

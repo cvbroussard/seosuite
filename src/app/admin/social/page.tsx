@@ -22,8 +22,8 @@ export default async function SocialAccountsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1>Social Accounts</h1>
-      <p className="mt-2 mb-8 text-muted">All connected social accounts across subscribers</p>
+      <h1>Connections</h1>
+      <p className="mt-2 mb-8 text-muted">All platform connections across subscribers</p>
 
       <div>
         <table className="w-full">

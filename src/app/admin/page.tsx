@@ -28,7 +28,7 @@ export default async function AdminOverview() {
   const stats = [
     { label: "Subscribers", value: subscribers[0].active, sub: `${subscribers[0].count} total`, href: "/admin/subscribers" },
     { label: "Sites", value: sites[0].count, href: "/admin/subscribers" },
-    { label: "Social Accounts", value: accounts[0].active, sub: `${accounts[0].count} total`, href: "/admin/social" },
+    { label: "Connections", value: accounts[0].active, sub: `${accounts[0].count} total`, href: "/admin/social" },
     { label: "Scheduled Posts", value: posts[0].scheduled, href: "/admin/content" },
     { label: "Published", value: posts[0].published, href: "/admin/content" },
     { label: "Failed", value: posts[0].failed, href: "/admin/pipeline", danger: posts[0].failed > 0 },
