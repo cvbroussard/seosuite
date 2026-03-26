@@ -5,15 +5,18 @@ import { useState } from "react";
 interface Props {
   subscriberId: string;
   initialName: string;
+  initialOwnerName: string;
   initialPhone: string;
   hasPassword: boolean;
 }
 
-export function AccountProfile({ subscriberId, initialName, initialPhone, hasPassword }: Props) {
+export function AccountProfile({ subscriberId, initialName, initialOwnerName, initialPhone, hasPassword }: Props) {
   const [name, setName] = useState(initialName);
+  const [ownerName, setOwnerName] = useState(initialOwnerName);
   const [phone, setPhone] = useState(initialPhone);
   const [saving, setSaving] = useState(false);
   const [nameSuccess, setNameSuccess] = useState(false);
+  const [ownerNameSuccess, setOwnerNameSuccess] = useState(false);
   const [phoneSuccess, setPhoneSuccess] = useState(false);
 
   // Password flow
@@ -26,6 +29,25 @@ export function AccountProfile({ subscriberId, initialName, initialPhone, hasPas
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  async function saveOwnerName() {
+    if (!ownerName.trim() || ownerName === initialOwnerName) return;
+    setSaving(true);
+    setOwnerNameSuccess(false);
+    try {
+      const res = await fetch("/api/account/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerName: ownerName.trim() }),
+      });
+      if (res.ok) {
+        setOwnerNameSuccess(true);
+        setTimeout(() => setOwnerNameSuccess(false), 3000);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function savePhone() {
     if (phone === initialPhone) return;
@@ -144,7 +166,28 @@ export function AccountProfile({ subscriberId, initialName, initialPhone, hasPas
 
   return (
     <>
-      {/* Editable name */}
+      {/* Owner name */}
+      <div className="flex items-center justify-between border-b border-border py-2">
+        <span className="text-sm text-muted">Your name</span>
+        <div className="flex items-center gap-2">
+          <input
+            value={ownerName}
+            onChange={(e) => setOwnerName(e.target.value)}
+            className="px-2 py-1 text-right"
+            style={{ width: 200 }}
+            placeholder="Your full name"
+          />
+          <button
+            onClick={saveOwnerName}
+            disabled={saving || !ownerName.trim() || ownerName === initialOwnerName}
+            className="border border-border px-3 py-1 text-sm text-muted hover:text-foreground disabled:opacity-30"
+          >
+            {saving ? "..." : ownerNameSuccess ? "Saved" : "Save"}
+          </button>
+        </div>
+      </div>
+
+      {/* Business name */}
       <div className="flex items-center justify-between border-b border-border py-2">
         <span className="text-sm text-muted">Business name</span>
         <div className="flex items-center gap-2">

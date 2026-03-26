@@ -26,7 +26,7 @@ export default async function MyAccountPage() {
 
   // Fetch owner team member for phone
   const [ownerMember] = await sql`
-    SELECT phone, last_active_at,
+    SELECT name AS owner_name, phone, last_active_at,
            session_token_hash IS NOT NULL AS has_device
     FROM team_members
     WHERE subscriber_id = ${session.subscriberId} AND role = 'owner'
@@ -69,6 +69,7 @@ export default async function MyAccountPage() {
           <AccountProfile
             subscriberId={subscriber.id as string}
             initialName={subscriber.name as string}
+            initialOwnerName={(ownerMember?.owner_name as string) || ""}
             initialPhone={(ownerMember?.phone as string) || ""}
             hasPassword={subscriber.has_password as boolean}
           />
