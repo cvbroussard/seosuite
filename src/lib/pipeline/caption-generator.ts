@@ -92,14 +92,15 @@ export async function generateCaption({ postId }: CaptionRequest): Promise<Capti
   // Fetch post + asset + site in one chain
   const [post] = await sql`
     SELECT sp.id, sp.account_id, sp.content_pillar, sp.media_type, sp.slot_id,
-           sa.platform, sa.account_name, sa.site_id,
+           sa.platform, sa.account_name, ssl.site_id,
            s.name AS site_name, s.url AS site_url, s.brand_voice,
            s.brand_playbook,
            ma.context_note, ma.transcription, ma.ai_analysis, ma.metadata AS asset_metadata,
            ma.media_type AS asset_media_type, ma.source AS asset_source
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
-    JOIN sites s ON sa.site_id = s.id
+    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+    JOIN sites s ON ssl.site_id = s.id
     LEFT JOIN media_assets ma ON sp.source_asset_id = ma.id
     WHERE sp.id = ${postId}
   `;
@@ -410,7 +411,8 @@ export async function generateMissingCaptions(siteId: string): Promise<number> {
     SELECT sp.id
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
-    WHERE sa.site_id = ${siteId}
+    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+    WHERE ssl.site_id = ${siteId}
       AND sp.status = 'scheduled'
       AND sp.caption IS NULL
     ORDER BY sp.scheduled_at ASC
