@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { action } = body;
 
   const [member] = await sql`
-    SELECT id FROM team_members
+    SELECT id, phone, invite_token, name FROM team_members
     WHERE id = ${id} AND subscriber_id = ${session.subscriberId}
   `;
 
@@ -123,6 +123,43 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       SET session_token_hash = NULL, session_issued_at = NULL
       WHERE id = ${id}
     `;
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "resend-sms") {
+    const phone = member.phone as string;
+    const token = member.invite_token as string;
+
+    if (!phone) {
+      return NextResponse.json({ error: "No phone number on this member" }, { status: 400 });
+    }
+    if (!token) {
+      return NextResponse.json({ error: "No invite token — regenerate first" }, { status: 400 });
+    }
+
+    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+    const twilioAuth = process.env.TWILIO_AUTH_TOKEN;
+    const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+
+    if (!twilioSid || !twilioAuth || !twilioFrom) {
+      return NextResponse.json({ error: "SMS not configured" }, { status: 500 });
+    }
+
+    const inviteUrl = `https://tracpost.com/invite/${token}`;
+
+    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64")}`,
+      },
+      body: new URLSearchParams({
+        To: phone,
+        From: twilioFrom,
+        Body: `${session.subscriberName} invited you to TracPost Studio. Tap to get started: ${inviteUrl}`,
+      }),
+    });
+
     return NextResponse.json({ ok: true });
   }
 

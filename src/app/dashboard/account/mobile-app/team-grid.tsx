@@ -150,6 +150,20 @@ export function TeamGrid({
     setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, hasDevice: false } : m)));
   }
 
+  async function handleResendSms(id: string) {
+    const res = await fetch(`/api/dashboard/team/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resend-sms" }),
+    });
+    if (res.ok) {
+      alert("SMS invite sent");
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to send SMS");
+    }
+  }
+
   async function handleRegenerate(id: string) {
     const res = await fetch(`/api/dashboard/team/${id}`, {
       method: "POST",
@@ -472,6 +486,14 @@ export function TeamGrid({
                             >
                               Copy link
                             </button>
+                            {member.phone && (
+                              <button
+                                onClick={() => handleResendSms(member.id)}
+                                className="text-[10px] text-accent hover:underline"
+                              >
+                                Send SMS
+                              </button>
+                            )}
                             <button
                               onClick={() => handleRegenerate(member.id)}
                               className="text-[10px] text-muted hover:text-foreground"
