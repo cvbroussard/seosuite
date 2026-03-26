@@ -3,12 +3,36 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { TeamGrid } from "./team-grid";
 import { MobileSettings } from "./mobile-settings";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
 export default async function MobileAppPage() {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  // Auto-seed owner team member on first visit
+  const [existingOwner] = await sql`
+    SELECT id FROM team_members
+    WHERE subscriber_id = ${session.subscriberId} AND role = 'owner'
+  `;
+
+  if (!existingOwner) {
+    const inviteToken = crypto.randomBytes(32).toString("base64url");
+    const inviteExpires = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+    await sql`
+      INSERT INTO team_members (subscriber_id, name, role, invite_token, invite_method, invite_expires)
+      VALUES (
+        ${session.subscriberId},
+        ${session.subscriberName},
+        'owner',
+        ${inviteToken},
+        'qr',
+        ${inviteExpires}
+      )
+    `;
+  }
 
   const [subRow, members, sites, settingsRow] = await Promise.all([
     sql`SELECT plan FROM subscribers WHERE id = ${session.subscriberId}`,
