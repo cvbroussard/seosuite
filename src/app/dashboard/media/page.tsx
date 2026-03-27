@@ -50,7 +50,7 @@ export default async function MediaPage() {
       </div>
 
       {assets.length > 0 ? (
-        <MediaGrid initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]} availablePillars={pillars} pillarConfig={pillarConfig} />
+        <MediaGrid initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]} availablePillars={pillars} pillarConfig={pillarConfig} siteId={siteId} />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-8 py-16 text-center">
           <span className="mb-3 text-3xl">▣</span>

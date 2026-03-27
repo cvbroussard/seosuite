@@ -32,10 +32,12 @@ export function MediaGrid({
   initialAssets,
   availablePillars,
   pillarConfig,
+  siteId,
 }: {
   initialAssets: Asset[];
   availablePillars: string[];
   pillarConfig: PillarGroup[];
+  siteId: string;
 }) {
   const [assets, setAssets] = useState(initialAssets);
   const [editing, setEditing] = useState<Asset | null>(null);
@@ -118,6 +120,7 @@ export function MediaGrid({
       {editing && (
         <AssetEditModal
           assetId={editing.id}
+          siteId={siteId}
           initialNote={editing.context_note || ""}
           initialPillar={editing.content_pillar || ""}
           initialTags={editing.content_pillars || []}

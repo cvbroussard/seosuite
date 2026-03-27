@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { TagPicker, type PillarGroup } from "./tag-picker";
 
 interface AssetEditModalProps {
   assetId: string;
+  siteId: string;
   initialNote: string;
   initialPillar: string;
   initialTags: string[];
@@ -16,6 +17,7 @@ interface AssetEditModalProps {
 
 export function AssetEditModal({
   assetId,
+  siteId,
   initialNote,
   initialPillar,
   initialTags,
@@ -27,6 +29,32 @@ export function AssetEditModal({
   const [pillar, setPillar] = useState(initialPillar);
   const [tags, setTags] = useState<string[]>(initialTags || []);
   const [saving, setSaving] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [showFullPicker, setShowFullPicker] = useState(false);
+  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced AI tag suggestion
+  const suggestFromNote = useCallback((text: string) => {
+    if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    if (text.length < 15) return;
+
+    suggestTimer.current = setTimeout(async () => {
+      setSuggesting(true);
+      try {
+        const res = await fetch("/api/suggest-tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ siteId, contextNote: text }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.pillarId) setPillar(data.pillarId);
+          if (data.tagIds?.length > 0) setTags(data.tagIds);
+        }
+      } catch { /* ignore */ }
+      setSuggesting(false);
+    }, 800);
+  }, [siteId]);
 
   async function handleSave() {
     setSaving(true);
@@ -72,25 +100,64 @@ export function AssetEditModal({
         <label className="mb-1 block text-xs text-muted">Context Note</label>
         <textarea
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={(e) => {
+            setNote(e.target.value);
+            suggestFromNote(e.target.value);
+          }}
           className="mb-4 w-full text-sm"
           rows={6}
-          placeholder="Describe this content..."
+          placeholder="Describe this content — AI will suggest tags as you type..."
         />
 
+        {/* Suggested tags display */}
         {pillarConfig.length > 0 && (
-          <>
-            <label className="mb-2 block text-xs text-muted">Content Tags</label>
-            <div className="mb-4 max-h-48 overflow-y-auto">
-              <TagPicker
-                pillarConfig={pillarConfig}
-                selectedPillar={pillar}
-                selectedTags={tags}
-                onPillarChange={setPillar}
-                onTagsChange={setTags}
-              />
+          <div className="mb-4">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs text-muted">
+                {suggesting ? "Suggesting tags..." : tags.length > 0 ? "Tags" : "Tags (write a note to get suggestions)"}
+              </label>
+              <button
+                onClick={() => setShowFullPicker(!showFullPicker)}
+                className="text-[10px] text-accent hover:underline"
+              >
+                {showFullPicker ? "Hide all tags" : "Browse all tags"}
+              </button>
             </div>
-          </>
+
+            {/* Selected tags as chips */}
+            {tags.length > 0 && !showFullPicker && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {tags.map((tagId) => {
+                  const tagLabel = pillarConfig
+                    .flatMap((p) => p.tags)
+                    .find((t) => t.id === tagId)?.label || tagId;
+                  return (
+                    <button
+                      key={tagId}
+                      onClick={() => setTags(tags.filter((t) => t !== tagId))}
+                      className="flex items-center gap-1 rounded bg-accent/20 px-2 py-0.5 text-xs text-accent"
+                    >
+                      {tagLabel}
+                      <span className="text-accent/60">✕</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Full tag picker (expandable) */}
+            {showFullPicker && (
+              <div className="max-h-48 overflow-y-auto">
+                <TagPicker
+                  pillarConfig={pillarConfig}
+                  selectedPillar={pillar}
+                  selectedTags={tags}
+                  onPillarChange={setPillar}
+                  onTagsChange={setTags}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         <div className="flex justify-end gap-2">
