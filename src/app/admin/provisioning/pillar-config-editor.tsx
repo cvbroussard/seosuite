@@ -9,10 +9,19 @@ interface PillarTag {
 
 interface Pillar {
   id: string;
+  framework?: string;
   label: string;
   description: string;
   tags: PillarTag[];
 }
+
+const FRAMEWORK = [
+  { id: "what", framework: "What We Do" },
+  { id: "how", framework: "How We Do It" },
+  { id: "who", framework: "Who We Work With" },
+  { id: "proof", framework: "Proof It Works" },
+  { id: "why", framework: "Why It Matters" },
+];
 
 export function AdminPillarEditor({
   siteId,
@@ -21,11 +30,18 @@ export function AdminPillarEditor({
   siteId: string;
   initialConfig: Pillar[];
 }) {
-  const [config, setConfig] = useState<Pillar[]>(initialConfig);
+  const normalized = FRAMEWORK.map((f) => {
+    const existing = initialConfig.find((p) => p.id === f.id);
+    return existing || { ...f, label: "", description: "", tags: [] };
+  });
+
+  const [config, setConfig] = useState<Pillar[]>(normalized);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const hasConfig = config.some((p) => p.label && p.tags.length > 0);
 
   async function save() {
     setSaving(true);
@@ -47,11 +63,10 @@ export function AdminPillarEditor({
   }
 
   function addTag(pillarId: string) {
-    const tagNum = config.find((p) => p.id === pillarId)?.tags.length || 0;
     setConfig((prev) =>
       prev.map((p) =>
         p.id === pillarId
-          ? { ...p, tags: [...p.tags, { id: `new_tag_${tagNum}`, label: "New Tag" }] }
+          ? { ...p, tags: [...p.tags, { id: `new_${p.tags.length}`, label: "" }] }
           : p
       )
     );
@@ -62,7 +77,7 @@ export function AdminPillarEditor({
     setConfig((prev) =>
       prev.map((p) =>
         p.id === pillarId
-          ? { ...p, tags: p.tags.map((t, i) => (i === tagIndex ? { id, label } : t)) }
+          ? { ...p, tags: p.tags.map((t, i) => (i === tagIndex ? { id: id || t.id, label } : t)) }
           : p
       )
     );
@@ -78,22 +93,10 @@ export function AdminPillarEditor({
     );
   }
 
-  function addPillar() {
-    const num = config.length;
-    setConfig((prev) => [
-      ...prev,
-      { id: `pillar_${num}`, label: "New Pillar", description: "", tags: [] },
-    ]);
-  }
-
-  function removePillar(pillarId: string) {
-    setConfig((prev) => prev.filter((p) => p.id !== pillarId));
-  }
-
-  if (config.length === 0) {
+  if (!hasConfig) {
     return (
       <div className="mt-3">
-        <span className="text-xs text-muted">No pillar config — generates after playbook sharpening</span>
+        <span className="text-xs text-muted">Pillars generate after playbook sharpening</span>
       </div>
     );
   }
@@ -104,13 +107,15 @@ export function AdminPillarEditor({
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 text-xs font-medium text-accent hover:underline"
       >
-        {isOpen ? "▾" : "▸"} Content Pillars ({config.length} pillars, {config.reduce((s, p) => s + p.tags.length, 0)} tags)
+        {isOpen ? "▾" : "▸"} Content Pillars ({config.filter((p) => p.tags.length > 0).length}/5 configured)
       </button>
 
       {isOpen && (
-        <div className="mt-2 space-y-1 rounded border border-border bg-background p-3">
+        <div className="mt-2 rounded border border-border bg-background p-3">
           {config.map((pillar) => {
             const isExpanded = expanded === pillar.id;
+            const isConfigured = pillar.label && pillar.tags.length > 0;
+
             return (
               <div key={pillar.id} className="border-b border-border last:border-0">
                 <button
@@ -118,25 +123,41 @@ export function AdminPillarEditor({
                   className="flex w-full items-center justify-between py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">{pillar.label}</span>
-                    <span className="text-[10px] text-muted">{pillar.tags.length} tags</span>
+                    <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted">
+                      {pillar.framework}
+                    </span>
+                    <span className={`text-xs font-medium ${isConfigured ? "" : "text-muted italic"}`}>
+                      {pillar.label || "Not configured"}
+                    </span>
+                    {isConfigured && (
+                      <span className="text-[10px] text-muted">{pillar.tags.length} tags</span>
+                    )}
                   </div>
                   <span className="text-[10px] text-muted">{isExpanded ? "▾" : "▸"}</span>
                 </button>
 
                 {isExpanded && (
                   <div className="pb-3">
+                    <p className="mb-2 text-[10px] text-dim">
+                      {pillar.id === "what" ? "The craft, skill, or service itself" :
+                       pillar.id === "how" ? "The process, tools, infrastructure, standards" :
+                       pillar.id === "who" ? "Vendors, materials, partners, artisans" :
+                       pillar.id === "proof" ? "Projects, results, case studies, before/after" :
+                       "Philosophy, perspective, culture, community"}
+                    </p>
+
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
-                        <label className="mb-0.5 block text-[10px] text-muted">Label</label>
+                        <label className="mb-0.5 block text-[10px] text-muted">Industry Label</label>
                         <input
                           value={pillar.label}
                           onChange={(e) => updatePillar(pillar.id, "label", e.target.value)}
                           className="w-full text-xs"
+                          placeholder="e.g., Design, Menu, Training"
                         />
                       </div>
                       <div>
-                        <label className="mb-0.5 block text-[10px] text-muted">ID</label>
+                        <label className="mb-0.5 block text-[10px] text-muted">ID (fixed)</label>
                         <input value={pillar.id} className="w-full text-xs" disabled />
                       </div>
                     </div>
@@ -146,19 +167,20 @@ export function AdminPillarEditor({
                         value={pillar.description}
                         onChange={(e) => updatePillar(pillar.id, "description", e.target.value)}
                         className="w-full text-xs"
-                        placeholder="What AI reads for classification"
+                        placeholder="What AI reads during content classification"
                       />
                     </div>
 
                     <div className="mt-2">
-                      <label className="mb-1 block text-[10px] text-muted">Tags</label>
+                      <label className="mb-1 block text-[10px] text-muted">Tags (4-6 recommended)</label>
                       <div className="flex flex-wrap gap-1">
                         {pillar.tags.map((tag, i) => (
-                          <div key={tag.id} className="flex items-center gap-0.5 rounded bg-surface-hover px-1.5 py-0.5">
+                          <div key={tag.id || i} className="flex items-center gap-0.5 rounded bg-surface-hover px-1.5 py-0.5">
                             <input
                               value={tag.label}
                               onChange={(e) => updateTag(pillar.id, i, e.target.value)}
-                              className="w-20 bg-transparent text-[10px] outline-none"
+                              className="w-24 bg-transparent text-[10px] outline-none"
+                              placeholder="Tag name"
                             />
                             <button
                               onClick={() => removeTag(pillar.id, i)}
@@ -172,40 +194,25 @@ export function AdminPillarEditor({
                           onClick={() => addTag(pillar.id)}
                           className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground"
                         >
-                          +
+                          + Tag
                         </button>
                       </div>
                     </div>
-
-                    <button
-                      onClick={() => removePillar(pillar.id)}
-                      className="mt-2 text-[10px] text-danger hover:underline"
-                    >
-                      Remove pillar
-                    </button>
                   </div>
                 )}
               </div>
             );
           })}
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-end gap-2 pt-2">
+            {saving && <span className="text-[10px] text-muted">Saving...</span>}
+            {saved && <span className="text-[10px] text-success">Saved</span>}
             <button
-              onClick={addPillar}
-              className="text-[10px] text-muted hover:text-foreground"
+              onClick={save}
+              className="bg-accent px-2 py-0.5 text-[10px] font-medium text-white hover:bg-accent-hover"
             >
-              + Add Pillar
+              Save Pillars
             </button>
-            <div className="flex items-center gap-2">
-              {saving && <span className="text-[10px] text-muted">Saving...</span>}
-              {saved && <span className="text-[10px] text-success">Saved</span>}
-              <button
-                onClick={save}
-                className="bg-accent px-2 py-0.5 text-[10px] font-medium text-white hover:bg-accent-hover"
-              >
-                Save Pillars
-              </button>
-            </div>
           </div>
         </div>
       )}

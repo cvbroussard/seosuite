@@ -147,7 +147,7 @@ export default async function ProvisioningPage() {
                 <AdminPillarEditor
                   siteId={sub.site_id as string}
                   initialConfig={
-                    (sub.pillar_config as Array<{ id: string; label: string; description: string; tags: Array<{ id: string; label: string }> }>) || []
+                    (sub.pillar_config as Array<{ id: string; framework?: string; label: string; description: string; tags: Array<{ id: string; label: string }> }>) || []
                   }
                 />
 

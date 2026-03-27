@@ -9,10 +9,19 @@ interface PillarTag {
 
 interface Pillar {
   id: string;
+  framework?: string;
   label: string;
   description: string;
   tags: PillarTag[];
 }
+
+const FRAMEWORK = [
+  { id: "what", framework: "What We Do" },
+  { id: "how", framework: "How We Do It" },
+  { id: "who", framework: "Who We Work With" },
+  { id: "proof", framework: "Proof It Works" },
+  { id: "why", framework: "Why It Matters" },
+];
 
 export function PillarConfigEditor({
   siteId,
@@ -21,10 +30,17 @@ export function PillarConfigEditor({
   siteId: string;
   initialConfig: Pillar[];
 }) {
-  const [config, setConfig] = useState<Pillar[]>(initialConfig);
+  const normalized = FRAMEWORK.map((f) => {
+    const existing = initialConfig.find((p) => p.id === f.id);
+    return existing || { ...f, label: "", description: "", tags: [] };
+  });
+
+  const [config, setConfig] = useState<Pillar[]>(normalized);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const hasConfig = config.some((p) => p.label && p.tags.length > 0);
 
   async function save() {
     setSaving(true);
@@ -39,29 +55,22 @@ export function PillarConfigEditor({
     setTimeout(() => setSaved(false), 2000);
   }
 
-  function updatePillar(pillarId: string, field: keyof Pillar, value: string) {
-    setConfig((prev) =>
-      prev.map((p) => (p.id === pillarId ? { ...p, [field]: value } : p))
-    );
-  }
-
-  function addTag(pillarId: string) {
-    const tagNum = config.find((p) => p.id === pillarId)?.tags.length || 0;
+  function updateTag(pillarId: string, tagIndex: number, label: string) {
+    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 20);
     setConfig((prev) =>
       prev.map((p) =>
         p.id === pillarId
-          ? { ...p, tags: [...p.tags, { id: `new_tag_${tagNum}`, label: "New Tag" }] }
+          ? { ...p, tags: p.tags.map((t, i) => (i === tagIndex ? { id: id || t.id, label } : t)) }
           : p
       )
     );
   }
 
-  function updateTag(pillarId: string, tagIndex: number, label: string) {
-    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 20);
+  function addTag(pillarId: string) {
     setConfig((prev) =>
       prev.map((p) =>
         p.id === pillarId
-          ? { ...p, tags: p.tags.map((t, i) => (i === tagIndex ? { id, label } : t)) }
+          ? { ...p, tags: [...p.tags, { id: `new_${p.tags.length}`, label: "" }] }
           : p
       )
     );
@@ -77,16 +86,15 @@ export function PillarConfigEditor({
     );
   }
 
-  function addPillar() {
-    const num = config.length;
-    setConfig((prev) => [
-      ...prev,
-      { id: `pillar_${num}`, label: "New Pillar", description: "", tags: [] },
-    ]);
-  }
-
-  function removePillar(pillarId: string) {
-    setConfig((prev) => prev.filter((p) => p.id !== pillarId));
+  if (!hasConfig) {
+    return (
+      <section className="mb-8">
+        <h2 className="mb-1">Content Pillars</h2>
+        <p className="text-sm text-muted">
+          Your content pillars will be configured after your playbook is sharpened.
+        </p>
+      </section>
+    );
   }
 
   return (
@@ -95,7 +103,7 @@ export function PillarConfigEditor({
         <div>
           <h2>Content Pillars</h2>
           <p className="mt-1 text-xs text-muted">
-            Pillars organize your content. Tags within each pillar guide AI content generation.
+            Five pillars organize your content. Tags guide AI content generation.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,101 +118,72 @@ export function PillarConfigEditor({
         </div>
       </div>
 
-      <div>
-        {config.map((pillar) => {
-          const isOpen = expanded === pillar.id;
-          return (
-            <div key={pillar.id} className="border-b border-border last:border-0">
-              <button
-                onClick={() => setExpanded(isOpen ? null : pillar.id)}
-                className="flex w-full items-center justify-between py-3 text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{pillar.label}</span>
-                  <span className="text-[10px] text-muted">{pillar.tags.length} tags</span>
-                </div>
-                <span className="text-xs text-muted">{isOpen ? "▾" : "▸"}</span>
-              </button>
+      {config.map((pillar) => {
+        const isOpen = expanded === pillar.id;
+        const isConfigured = pillar.label && pillar.tags.length > 0;
 
-              {isOpen && (
-                <div className="pb-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-[10px] text-muted">Label</label>
-                      <input
-                        value={pillar.label}
-                        onChange={(e) => updatePillar(pillar.id, "label", e.target.value)}
-                        className="w-full text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] text-muted">ID</label>
-                      <input
-                        value={pillar.id}
-                        className="w-full text-sm"
-                        disabled
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <label className="mb-1 block text-[10px] text-muted">Description (AI reads this)</label>
-                    <input
-                      value={pillar.description}
-                      onChange={(e) => updatePillar(pillar.id, "description", e.target.value)}
-                      className="w-full text-sm"
-                      placeholder="What content belongs in this pillar?"
-                    />
-                  </div>
+        return (
+          <div key={pillar.id} className="border-b border-border last:border-0">
+            <button
+              onClick={() => setExpanded(isOpen ? null : pillar.id)}
+              className="flex w-full items-center justify-between py-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted">
+                  {pillar.framework}
+                </span>
+                <span className={`text-sm font-medium ${isConfigured ? "" : "text-muted italic"}`}>
+                  {pillar.label || "Not configured"}
+                </span>
+                {isConfigured && (
+                  <span className="text-xs text-muted">{pillar.tags.length} tags</span>
+                )}
+              </div>
+              <span className="text-xs text-muted">{isOpen ? "▾" : "▸"}</span>
+            </button>
 
-                  <div className="mt-3">
-                    <label className="mb-1.5 block text-[10px] text-muted">Tags</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {pillar.tags.map((tag, i) => (
-                        <div
-                          key={tag.id}
-                          className="flex items-center gap-1 rounded bg-surface-hover px-2 py-1"
+            {isOpen && (
+              <div className="pb-4">
+                <p className="mb-3 text-xs text-dim">
+                  {pillar.id === "what" ? "The craft, skill, or service itself" :
+                   pillar.id === "how" ? "The process, tools, infrastructure, standards" :
+                   pillar.id === "who" ? "Vendors, materials, partners, artisans" :
+                   pillar.id === "proof" ? "Projects, results, case studies, before/after" :
+                   "Philosophy, perspective, culture, community"}
+                </p>
+
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs text-muted">Tags</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pillar.tags.map((tag, i) => (
+                      <div key={tag.id || i} className="flex items-center gap-1 rounded bg-surface-hover px-2 py-1">
+                        <input
+                          value={tag.label}
+                          onChange={(e) => updateTag(pillar.id, i, e.target.value)}
+                          className="w-28 bg-transparent text-xs outline-none"
+                          placeholder="Tag name"
+                        />
+                        <button
+                          onClick={() => removeTag(pillar.id, i)}
+                          className="text-xs text-muted hover:text-danger"
                         >
-                          <input
-                            value={tag.label}
-                            onChange={(e) => updateTag(pillar.id, i, e.target.value)}
-                            className="w-24 bg-transparent text-[11px] outline-none"
-                          />
-                          <button
-                            onClick={() => removeTag(pillar.id, i)}
-                            className="text-[10px] text-muted hover:text-danger"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        onClick={() => addTag(pillar.id)}
-                        className="rounded bg-surface-hover px-2 py-1 text-[11px] text-muted hover:text-foreground"
-                      >
-                        + Tag
-                      </button>
-                    </div>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => addTag(pillar.id)}
+                      className="rounded bg-surface-hover px-2 py-1 text-xs text-muted hover:text-foreground"
+                    >
+                      + Tag
+                    </button>
                   </div>
-
-                  <button
-                    onClick={() => removePillar(pillar.id)}
-                    className="mt-3 text-xs text-danger hover:underline"
-                  >
-                    Remove pillar
-                  </button>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <button
-        onClick={addPillar}
-        className="mt-3 border border-border px-3 py-1 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-      >
-        + Add Pillar
-      </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
