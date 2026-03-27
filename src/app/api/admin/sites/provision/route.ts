@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { autoGeneratePlaybook } from "@/lib/brand-intelligence/auto-generate";
-import { seedBlogContent } from "@/lib/blog-seed";
 
 /**
  * POST /api/admin/sites/provision
@@ -52,6 +51,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Enable blog + seed content if not already enabled
+    // Enable blog settings (but don't seed content — wait for playbook sharpening)
     const [blogSettings] = await sql`
       SELECT blog_enabled FROM blog_settings WHERE site_id = ${siteId}
     `;
@@ -70,10 +70,6 @@ export async function POST(req: NextRequest) {
             blog_title = COALESCE(blog_settings.blog_title, ${site.name + " Blog"}),
             updated_at = NOW()
         `;
-        // Seed blog content (welcome post + topic queue)
-        await seedBlogContent(siteId).catch((err) => {
-          automationResults.push(`blog_seed_partial: ${err instanceof Error ? err.message : "unknown"}`);
-        });
         automationResults.push("blog_enabled");
       } catch (err) {
         automationResults.push(`blog_failed: ${err instanceof Error ? err.message : "unknown"}`);

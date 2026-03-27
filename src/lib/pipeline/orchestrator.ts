@@ -124,12 +124,19 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     result.errors.push(`captions: ${msg}`);
   }
 
-  // Step 5: Generate blog posts from triaged assets (if blog enabled)
-  try {
-    result.blogPostsGenerated = await generateMissingBlogPosts(siteId);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    result.errors.push(`blog-gen: ${msg}`);
+  // Step 5: Generate blog posts (only if playbook is sharpened — has subscriber angle)
+  const [siteVoice] = await sql`
+    SELECT brand_voice FROM sites WHERE id = ${siteId}
+  `;
+  const isSharpened = !!(siteVoice?.brand_voice as Record<string, unknown>)?._subscriberAngle;
+
+  if (isSharpened) {
+    try {
+      result.blogPostsGenerated = await generateMissingBlogPosts(siteId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      result.errors.push(`blog-gen: ${msg}`);
+    }
   }
 
   // Step 6: Publish posts that are due

@@ -159,10 +159,8 @@ Requirements:
     WHERE id = ${siteId}
   `;
 
-  // Generate content topics (fire and forget)
-  generateContentTopics(siteId, playbook).catch((err) => {
-    console.error("Content topic generation failed:", err instanceof Error ? err.message : err);
-  });
+  // Content topics and pillar config are NOT generated from the baseline.
+  // They are generated after the subscriber sharpens the playbook in refinePlaybook().
 
   return playbook;
 }
@@ -276,7 +274,117 @@ Respond with ONLY valid JSON (no markdown fencing).`,
     console.error("Topic regeneration failed:", err instanceof Error ? err.message : err);
   });
 
+  // Derive pillar+tag config from the sharpened playbook
+  const pillarConfig = derivePillarConfig(playbook);
+  await sql`
+    UPDATE sites
+    SET pillar_config = ${JSON.stringify(pillarConfig)}::jsonb, updated_at = NOW()
+    WHERE id = ${siteId}
+  `;
+
+  // Seed blog content now that the playbook is sharpened
+  try {
+    const { seedBlogContent } = await import("@/lib/blog-seed");
+    await seedBlogContent(siteId);
+  } catch (err) {
+    console.error("Blog seed after sharpen failed:", err instanceof Error ? err.message : err);
+  }
+
   return playbook;
+}
+
+/**
+ * Derive a two-tier pillar+tag config from a sharpened playbook.
+ * Content themes become pillars. Pain points and audience language inform tags.
+ */
+function derivePillarConfig(playbook: BrandPlaybook): Array<{
+  id: string;
+  label: string;
+  description: string;
+  tags: Array<{ id: string; label: string }>;
+}> {
+  const angle = playbook.brandPositioning.selectedAngles[0];
+  const themes = angle?.contentThemes || [];
+  const painPoints = playbook.audienceResearch.painPoints || [];
+
+  // Always include these structural pillars
+  const pillars: Array<{
+    id: string;
+    label: string;
+    description: string;
+    tags: Array<{ id: string; label: string }>;
+  }> = [];
+
+  // Derive pillars from content themes (up to 5)
+  for (const theme of themes.slice(0, 5)) {
+    const id = theme.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30);
+    pillars.push({
+      id,
+      label: theme,
+      description: `Content about: ${theme}. Part of the "${angle?.name || "general"}" brand angle.`,
+      tags: [], // Will be populated below
+    });
+  }
+
+  // If fewer than 3 pillars from themes, add structural defaults
+  if (pillars.length < 3) {
+    if (!pillars.some((p) => p.id.includes("project") || p.id.includes("reveal"))) {
+      pillars.push({
+        id: "projects",
+        label: "Projects & Results",
+        description: "Completed work, before/after transformations, client outcomes",
+        tags: [
+          { id: "before_after", label: "Before & After" },
+          { id: "client_story", label: "Client Stories" },
+        ],
+      });
+    }
+    if (!pillars.some((p) => p.id.includes("lifestyle") || p.id.includes("culture"))) {
+      pillars.push({
+        id: "lifestyle",
+        label: "Lifestyle & Culture",
+        description: "How the work integrates into the client's life, community, culture",
+        tags: [
+          { id: "community", label: "Community" },
+          { id: "culture", label: "Culture & Lifestyle" },
+        ],
+      });
+    }
+  }
+
+  // Distribute pain points as tags across the most relevant pillars
+  for (const pain of painPoints.slice(0, 8)) {
+    const tagId = pain.pain.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30);
+    const tagLabel = pain.pain.length > 40 ? pain.pain.slice(0, 40) + "..." : pain.pain;
+
+    // Find the most relevant pillar for this pain point
+    let bestPillar = pillars[0];
+    for (const pillar of pillars) {
+      const pillarWords = pillar.label.toLowerCase().split(/\s+/);
+      const painWords = pain.pain.toLowerCase().split(/\s+/);
+      const overlap = pillarWords.filter((w) => painWords.includes(w)).length;
+      if (overlap > 0) {
+        bestPillar = pillar;
+        break;
+      }
+    }
+
+    if (bestPillar && bestPillar.tags.length < 6) {
+      bestPillar.tags.push({ id: tagId, label: tagLabel });
+    }
+  }
+
+  // Add generic tags to pillars that have none
+  for (const pillar of pillars) {
+    if (pillar.tags.length === 0) {
+      pillar.tags.push(
+        { id: `${pillar.id}_general`, label: `General ${pillar.label}` },
+        { id: `${pillar.id}_deep_dive`, label: `${pillar.label} Deep Dive` },
+      );
+    }
+  }
+
+  return pillars;
 }
 
 /**
