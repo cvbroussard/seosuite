@@ -3,7 +3,6 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { SiteDeletion } from "./site-deletion";
 import { EditExistingAccounts } from "./edit-existing-accounts";
-import { PillarConfigEditor } from "./pillar-config";
 
 export const dynamic = "force-dynamic";
 
@@ -124,14 +123,6 @@ export default async function SettingsPage() {
           </p>
         )}
       </section>
-
-      {/* Content Pillars */}
-      <PillarConfigEditor
-        siteId={siteId}
-        initialConfig={
-          (site?.pillar_config as Array<{ id: string; label: string; description: string; tags: Array<{ id: string; label: string }> }>) || []
-        }
-      />
 
       {/* Editable existing accounts — only while provisioning is pending */}
       {site?.provisioning_status === "requested" && (
