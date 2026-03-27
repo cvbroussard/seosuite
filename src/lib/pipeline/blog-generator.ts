@@ -78,8 +78,14 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     context: img.context_note as string || "",
   }));
 
+  // Fetch existing post titles to avoid duplication
+  const existingPosts = await sql`
+    SELECT title FROM blog_posts WHERE site_id = ${asset.site_id} ORDER BY created_at DESC LIMIT 20
+  `;
+  const existingTitles = existingPosts.map((p) => p.title as string);
+
   const prompt = playbook
-    ? buildPlaybookBlogPrompt(asset, playbook, aiAnalysis, hookText, imageUrls)
+    ? buildPlaybookBlogPrompt(asset, playbook, aiAnalysis, hookText, imageUrls, existingTitles)
     : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis, imageUrls);
 
   const response = await anthropic.messages.create({
@@ -168,7 +174,13 @@ export async function generateBlogFromTopic(topicId: string): Promise<string | n
     context: img.context_note as string || "",
   }));
 
-  const prompt = buildTopicBlogPrompt(topic, playbook, hookText, imageUrls);
+  // Fetch existing post titles to avoid duplication
+  const existingPosts = await sql`
+    SELECT title FROM blog_posts WHERE site_id = ${topic.site_id} ORDER BY created_at DESC LIMIT 20
+  `;
+  const existingTitles = existingPosts.map((p) => p.title as string);
+
+  const prompt = buildTopicBlogPrompt(topic, playbook, hookText, imageUrls, existingTitles);
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -256,13 +268,14 @@ function buildPlaybookBlogPrompt(
   playbook: BrandPlaybook,
   aiAnalysis: Record<string, unknown>,
   hookText?: string,
-  inlineImages?: Array<{ url: string; context: string }>
+  inlineImages?: Array<{ url: string; context: string }>,
+  existingTitles?: string[]
 ): string {
   const { audienceResearch, brandPositioning, offerCore } = playbook;
   const angle = brandPositioning.selectedAngles[0];
   const lang = audienceResearch.languageMap;
 
-  return `In [2,000] words, write a comprehensive, authoritative, and semantically optimized article.
+  return `Write an article for a local service business blog. Length: 800-1200 words. No filler, no padding.
 
 ## Content Source
 Content pillar: ${asset.content_pillar || "general"}
@@ -270,57 +283,55 @@ ${asset.context_note ? `Creator's note: "${asset.context_note}"` : ""}
 ${aiAnalysis.description ? `Visual context: ${aiAnalysis.description}` : ""}
 ${hookText ? `Opening hook to weave in: "${hookText}"` : ""}
 
+## Research Instructions
+The creator's note may reference specific brands, vendors, products, materials, or techniques by name. If so:
+- **Research the named entity** using your knowledge. Include factual details: origin, craftsmanship, history, what makes it notable.
+- **Weave the story** into the article. A "Mitchel & Mitchel custom hood" isn't just a hood — it's a partnership, a craft, a design choice with reasoning.
+- **Name materials specifically**: Zellige is Moroccan hand-cut glazed tile from Fez, each piece unique. Don't just say "handcrafted tile."
+- If the entity is a vendor/brand, position the business's choice to work with them as a signal of quality and intentionality.
+- If you don't have knowledge about a specific entity, focus on the category and craftsmanship — never fabricate facts about real companies.
+
 ## Brand Context
 Business: ${asset.site_name} (${asset.site_url})
 Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
 Tone: ${angle?.tone || "professional, engaging"}
 Offer: ${offerCore.offerStatement.emotionalCore}
 
-## Audience Intelligence
-Current state: ${audienceResearch.transformationJourney.currentState.slice(0, 300)}
-Desired state: ${audienceResearch.transformationJourney.desiredState.slice(0, 300)}
-Pain phrases (use their language): ${lang.painPhrases.join(", ")}
-Desire phrases (use their language): ${lang.desirePhrases.join(", ")}
-Search phrases (optimize for): ${lang.searchPhrases.join(", ")}
-Emotional triggers: ${lang.emotionalTriggers.join(", ")}
+## Audience
+Their pain: ${lang.painPhrases.slice(0, 3).join("; ")}
+Their desire: ${lang.desirePhrases.slice(0, 3).join("; ")}
+Target search query: ${lang.searchPhrases[Math.floor(Math.random() * lang.searchPhrases.length)] || ""}
 
 ## Available Images
-Place 2-3 of these images at contextually relevant points in the article using markdown: ![brief description](url)
+Place 2-3 of these images at natural points using markdown: ![brief alt text](url)
 ${inlineImages && inlineImages.length > 0
-  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (context: ${img.context})` : ""}`).join("\n")
-  : "No additional images available — text only."}
+  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (${img.context})` : ""}`).join("\n")
+  : "No images available — text only."}
 
-## Core Writing Instructions
+${existingTitles && existingTitles.length > 0
+  ? `## ALREADY PUBLISHED (do NOT reuse these titles or similar phrasing)\n${existingTitles.map(t => `- ${t}`).join("\n")}\n`
+  : ""}
 
-1) Writing Style: Synthesize two contrasting voices:
-
-Voice 1 (Structured Authority): Organized arguments, analogy-rich storytelling, humble yet deeply insightful, Socratic and reflective, human-centered and meticulous.
-
-Voice 2 (Sharp Conversational): Provocative, candid, witty. Boldly honest in assessing flaws. Sharp metaphors and analogies. Conversational and direct, no jargon.
-
-Fusion: Lead paragraphs with vivid anecdotes or provocative metaphors, follow immediately with structured analysis. Blend humility with intellectual confidence. Maintain 9th-grade reading level — accessible without dumbing down.
-
-2) Embedding Coherence: Optimize for semantic similarity to real search queries. Naturally integrate the audience's pain phrases, desire phrases, and search phrases. Paragraphs should anchor key entities with clarity and repetition.
-
-3) Semantic Chunking: Each paragraph must be a dense, contextually complete semantic unit ideal for LLM indexing. Never break an idea across multiple fragments.
-
-4) Monosemanticity: Identify and implicitly define key entities. Ensure clear, consistent, unambiguous definitions throughout.
-
-5) Headings: Use descriptive, query-aligned headings matching real search prompts. Include 2-3 headings phrased as direct questions (e.g., "What is X?", "How Does X Affect Y?").
-
-6) Paragraph-First: Bullet points only when absolutely necessary. Prefer cohesive paragraph exposition with embedded entities and strong transitions.
-
-7) External Links: Include 1-2 outbound links to authoritative, non-competitor sources that support claims in the article. Use descriptive anchor text. Format as [anchor text](https://url). Never link to direct competitors.
+## Writing Rules
+- Title: 40-60 characters. Specific and unique. Do NOT start with the city name or "Chef's Kitchen." Lead with the insight, technique, or outcome.
+- Open with a hook or story — not a definition.
+- Write at a 9th-grade reading level. Conversational, not academic.
+- Use the audience's language naturally — don't force keywords.
+- 3-5 headings as ## (at least one as a question).
+- Paragraphs, not bullet lists. Dense and complete per paragraph.
+- End with a brief FAQ (3-4 Q&As) and 3-4 key takeaways.
+- Include 1 outbound link to an authoritative, non-competitor source.
+- Internal links: if relevant, link to other articles on the same blog.
 
 ## Response Format
 Respond with ONLY valid JSON (no markdown fencing):
 {
-  "title": "<engaging, SEO-optimized, 50-70 characters>",
-  "body": "<2000-word markdown article with ## headings, following all instructions above. End with ## Frequently Asked Questions section (5-7 Q&As optimized for LLM retrieval) and ## Key Takeaways section (5-7 bold, punchy, actionable statements)>",
-  "excerpt": "<1-2 sentence summary for previews>",
-  "meta_title": "<max 65 characters, semantic clarity for AI retrieval>",
-  "meta_description": "<max 155 characters, entity-salient, topically precise>",
-  "tags": ["<5-7 tags matching search intent>"]
+  "title": "<40-60 chars, unique, specific, NOT similar to existing titles>",
+  "body": "<800-1200 word markdown article>",
+  "excerpt": "<1-2 sentence summary>",
+  "meta_title": "<max 60 characters>",
+  "meta_description": "<max 155 characters>",
+  "tags": ["<3-5 relevant tags>"]
 }`;
 }
 
@@ -330,19 +341,20 @@ function buildTopicBlogPrompt(
   topic: Record<string, unknown>,
   playbook: BrandPlaybook,
   hookText?: string,
-  inlineImages?: Array<{ url: string; context: string }>
+  inlineImages?: Array<{ url: string; context: string }>,
+  existingTitles?: string[]
 ): string {
   const { audienceResearch, brandPositioning, offerCore } = playbook;
   const angle = brandPositioning.selectedAngles[0];
   const lang = audienceResearch.languageMap;
 
-  return `In [2,000] words, write a comprehensive, authoritative, and semantically optimized article about **${topic.topic_title}**.
+  return `Write an article for a local service business blog. Length: 800-1200 words. No filler, no padding.
 
-## Topic Context
+## Topic
+Subject: "${topic.topic_title}"
 Target search query: "${topic.search_query}"
 Search intent: ${topic.intent}
 Content pillar: ${topic.pillar || "general"}
-Topic cluster: ${topic.cluster || "general"}
 ${hookText ? `Opening hook to weave in: "${hookText}"` : ""}
 
 ## Brand Context
@@ -351,54 +363,47 @@ Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
 Tone: ${angle?.tone || "professional, engaging"}
 Offer: ${offerCore.offerStatement.emotionalCore}
 
-## Audience Intelligence
-Current state: ${audienceResearch.transformationJourney.currentState.slice(0, 300)}
-Desired state: ${audienceResearch.transformationJourney.desiredState.slice(0, 300)}
-Pain phrases (use their language): ${lang.painPhrases.join(", ")}
-Desire phrases (use their language): ${lang.desirePhrases.join(", ")}
-Search phrases (optimize for): ${lang.searchPhrases.join(", ")}
-Emotional triggers: ${lang.emotionalTriggers.join(", ")}
+## Audience
+Their pain: ${lang.painPhrases.slice(0, 3).join("; ")}
+Their desire: ${lang.desirePhrases.slice(0, 3).join("; ")}
+What they've tried that didn't work: ${audienceResearch.urgencyGateway.failedSolutions.slice(0, 2).join("; ")}
 
-## Failed Solutions the Audience Has Tried
-${audienceResearch.urgencyGateway.failedSolutions.join("\n")}
+## Research Instructions
+If the topic references specific brands, products, materials, techniques, or industry terms:
+- Research the entity using your knowledge. Include factual details: origin, process, craftsmanship, history.
+- Name things specifically — "Zellige tile from Fez, Morocco" not "handcrafted tile."
+- Position the business's expertise with these materials/techniques as a differentiator.
+- Never fabricate facts about real companies or products.
 
 ## Available Images
-Place 2-3 of these images at contextually relevant points in the article using markdown: ![brief description](url)
+Place 2-3 of these images at natural points using markdown: ![brief alt text](url)
 ${inlineImages && inlineImages.length > 0
-  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (context: ${img.context})` : ""}`).join("\n")
-  : "No additional images available — text only."}
+  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (${img.context})` : ""}`).join("\n")
+  : "No images available — text only."}
 
-## Core Writing Instructions
+${existingTitles && existingTitles.length > 0
+  ? `## ALREADY PUBLISHED (do NOT reuse these titles or similar phrasing)\n${existingTitles.map(t => `- ${t}`).join("\n")}\n`
+  : ""}
 
-1) Writing Style: Synthesize two contrasting voices:
-
-Voice 1 (Structured Authority): Organized arguments, analogy-rich storytelling, humble yet deeply insightful, Socratic and reflective, human-centered and meticulous.
-
-Voice 2 (Sharp Conversational): Provocative, candid, witty. Boldly honest in assessing flaws. Sharp metaphors and analogies. Conversational and direct, no jargon.
-
-Fusion: Lead paragraphs with vivid anecdotes or provocative metaphors, follow immediately with structured analysis. Blend humility with intellectual confidence. Maintain 9th-grade reading level — accessible without dumbing down.
-
-2) Embedding Coherence: Optimize for semantic similarity to the target search query "${topic.search_query}". Naturally integrate the audience's language patterns. Paragraphs should anchor key entities with clarity and repetition.
-
-3) Semantic Chunking: Each paragraph must be a dense, contextually complete semantic unit ideal for LLM indexing. Never break an idea across multiple fragments.
-
-4) Monosemanticity: Identify and implicitly define key entities. Ensure clear, consistent, unambiguous definitions throughout.
-
-5) Headings: Use descriptive, query-aligned headings matching real search prompts. Include 2-3 headings phrased as direct questions.
-
-6) Paragraph-First: Bullet points only when absolutely necessary. Prefer cohesive paragraph exposition.
-
-7) External Links: Include 1-2 outbound links to authoritative, non-competitor sources. Use descriptive anchor text. Format as [anchor text](https://url).
+## Writing Rules
+- Title: 40-60 characters. Specific and unique. Do NOT start with the city name or repeat the business category. Lead with the insight, technique, or outcome.
+- Open with a hook or story — not a definition.
+- Write at a 9th-grade reading level. Conversational, not academic.
+- Use the audience's language naturally — don't force keywords.
+- 3-5 headings as ## (at least one as a question).
+- Paragraphs, not bullet lists. Dense and complete per paragraph.
+- End with a brief FAQ (3-4 Q&As) and 3-4 key takeaways.
+- Include 1 outbound link to an authoritative, non-competitor source.
 
 ## Response Format
 Respond with ONLY valid JSON (no markdown fencing):
 {
-  "title": "<engaging, SEO-optimized, 50-70 characters>",
-  "body": "<2000-word markdown article with ## headings. End with ## Frequently Asked Questions section (5-7 Q&As optimized for LLM retrieval, questions matching conversational prompts to LLMs) and ## Key Takeaways section (5-7 bold, punchy, actionable statements)>",
-  "excerpt": "<1-2 sentence summary for previews>",
-  "meta_title": "<max 65 characters, semantic clarity for AI retrieval>",
-  "meta_description": "<max 155 characters, entity-salient, topically precise>",
-  "tags": ["<5-7 tags matching search intent>"]
+  "title": "<40-60 chars, unique, specific, NOT similar to existing titles>",
+  "body": "<800-1200 word markdown article>",
+  "excerpt": "<1-2 sentence summary>",
+  "meta_title": "<max 60 characters>",
+  "meta_description": "<max 155 characters>",
+  "tags": ["<3-5 relevant tags>"]
 }`;
 }
 
