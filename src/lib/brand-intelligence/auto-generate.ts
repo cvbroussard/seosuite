@@ -275,7 +275,7 @@ Respond with ONLY valid JSON (no markdown fencing).`,
   });
 
   // Derive pillar+tag config from the sharpened playbook
-  const pillarConfig = derivePillarConfig(playbook);
+  const pillarConfig = await derivePillarConfig(playbook);
   await sql`
     UPDATE sites
     SET pillar_config = ${JSON.stringify(pillarConfig)}::jsonb, updated_at = NOW()
@@ -295,96 +295,81 @@ Respond with ONLY valid JSON (no markdown fencing).`,
 
 /**
  * Derive a two-tier pillar+tag config from a sharpened playbook.
- * Content themes become pillars. Pain points and audience language inform tags.
+ * Uses Haiku to produce clean, concise pillar/tag names from the
+ * verbose playbook themes and pain points.
  */
-function derivePillarConfig(playbook: BrandPlaybook): Array<{
+async function derivePillarConfig(playbook: BrandPlaybook): Promise<Array<{
   id: string;
   label: string;
   description: string;
   tags: Array<{ id: string; label: string }>;
-}> {
+}>> {
   const angle = playbook.brandPositioning.selectedAngles[0];
   const themes = angle?.contentThemes || [];
   const painPoints = playbook.audienceResearch.painPoints || [];
+  const lang = playbook.audienceResearch.languageMap;
 
-  // Always include these structural pillars
-  const pillars: Array<{
-    id: string;
-    label: string;
-    description: string;
-    tags: Array<{ id: string; label: string }>;
-  }> = [];
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 2048,
+    messages: [{
+      role: "user",
+      content: `Generate a content pillar configuration from this brand playbook data.
 
-  // Derive pillars from content themes (up to 5)
-  for (const theme of themes.slice(0, 5)) {
-    const id = theme.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30);
-    pillars.push({
-      id,
-      label: theme,
-      description: `Content about: ${theme}. Part of the "${angle?.name || "general"}" brand angle.`,
-      tags: [], // Will be populated below
-    });
+## Content Themes (from brand positioning)
+${themes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+## Pain Points
+${painPoints.map((p) => `- ${p.pain}`).join("\n")}
+
+## Audience Search Phrases
+${lang.searchPhrases.slice(0, 5).join(", ")}
+
+## Rules
+- Create 4-6 pillars from the content themes above
+- Each pillar gets a short ID (snake_case, max 20 chars) and a clean 2-4 word label
+- Each pillar gets a 1-sentence description the AI reads during content classification
+- Each pillar gets 3-5 tags derived from pain points, search phrases, and theme specifics
+- Tag IDs: snake_case, max 20 chars. Tag labels: 2-4 words, clean and concise
+- Always include a "projects" pillar (before/after, reveals, client stories)
+- Tags should be specific enough to guide AI triage but generic enough to apply to multiple uploads
+
+Respond with ONLY valid JSON (no markdown fencing):
+[
+  {
+    "id": "short_snake_case",
+    "label": "Clean Label",
+    "description": "One sentence AI reads for classification",
+    "tags": [
+      {"id": "tag_id", "label": "Tag Label"}
+    ]
+  }
+]`,
+    }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const cleaned = text.replace(/```json?\s*/g, "").replace(/```/g, "").trim();
+
+  try {
+    const config = JSON.parse(cleaned);
+    if (Array.isArray(config) && config.length > 0) {
+      return config;
+    }
+  } catch {
+    console.error("Pillar config derivation failed to parse, using fallback");
   }
 
-  // If fewer than 3 pillars from themes, add structural defaults
-  if (pillars.length < 3) {
-    if (!pillars.some((p) => p.id.includes("project") || p.id.includes("reveal"))) {
-      pillars.push({
-        id: "projects",
-        label: "Projects & Results",
-        description: "Completed work, before/after transformations, client outcomes",
-        tags: [
-          { id: "before_after", label: "Before & After" },
-          { id: "client_story", label: "Client Stories" },
-        ],
-      });
-    }
-    if (!pillars.some((p) => p.id.includes("lifestyle") || p.id.includes("culture"))) {
-      pillars.push({
-        id: "lifestyle",
-        label: "Lifestyle & Culture",
-        description: "How the work integrates into the client's life, community, culture",
-        tags: [
-          { id: "community", label: "Community" },
-          { id: "culture", label: "Culture & Lifestyle" },
-        ],
-      });
-    }
-  }
-
-  // Distribute pain points as tags across the most relevant pillars
-  for (const pain of painPoints.slice(0, 8)) {
-    const tagId = pain.pain.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30);
-    const tagLabel = pain.pain.length > 40 ? pain.pain.slice(0, 40) + "..." : pain.pain;
-
-    // Find the most relevant pillar for this pain point
-    let bestPillar = pillars[0];
-    for (const pillar of pillars) {
-      const pillarWords = pillar.label.toLowerCase().split(/\s+/);
-      const painWords = pain.pain.toLowerCase().split(/\s+/);
-      const overlap = pillarWords.filter((w) => painWords.includes(w)).length;
-      if (overlap > 0) {
-        bestPillar = pillar;
-        break;
-      }
-    }
-
-    if (bestPillar && bestPillar.tags.length < 6) {
-      bestPillar.tags.push({ id: tagId, label: tagLabel });
-    }
-  }
-
-  // Add generic tags to pillars that have none
-  for (const pillar of pillars) {
-    if (pillar.tags.length === 0) {
-      pillar.tags.push(
-        { id: `${pillar.id}_general`, label: `General ${pillar.label}` },
-        { id: `${pillar.id}_deep_dive`, label: `${pillar.label} Deep Dive` },
-      );
-    }
-  }
-
-  return pillars;
+  // Fallback: simple derivation without AI
+  return themes.slice(0, 5).map((theme, i) => ({
+    id: theme.split(/[—\-:]/)[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 20),
+    label: theme.split(/[—\-:]/)[0].trim(),
+    description: theme,
+    tags: [
+      { id: `tag_${i}_a`, label: "General" },
+      { id: `tag_${i}_b`, label: "Deep Dive" },
+    ],
+  }));
 }
 
 /**
