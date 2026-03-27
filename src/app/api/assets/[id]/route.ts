@@ -59,7 +59,6 @@ export async function PATCH(
     if (Array.isArray(content_tags)) {
       await sql`UPDATE media_assets SET content_tags = ${content_tags} WHERE id = ${id}`;
     }
-    await sql`UPDATE media_assets SET updated_at = NOW() WHERE id = ${id}`;
 
     // Log the edit
     await sql`
