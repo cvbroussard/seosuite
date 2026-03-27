@@ -49,15 +49,17 @@ export async function PATCH(
         : {};
     const newMeta = pillar !== undefined ? { ...currentMeta, pillar } : currentMeta;
 
-    await sql`
-      UPDATE media_assets
-      SET context_note = COALESCE(${context_note ?? null}, context_note),
-          content_pillar = COALESCE(${pillar ?? null}, content_pillar),
-          content_tags = COALESCE(${content_tags ?? null}, content_tags),
-          metadata = ${JSON.stringify(newMeta)}::jsonb,
-          updated_at = NOW()
-      WHERE id = ${id}
-    `;
+    // Update fields individually to avoid type coercion issues
+    if (context_note !== undefined) {
+      await sql`UPDATE media_assets SET context_note = ${context_note} WHERE id = ${id}`;
+    }
+    if (pillar !== undefined) {
+      await sql`UPDATE media_assets SET content_pillar = ${pillar}, metadata = ${JSON.stringify(newMeta)}::jsonb WHERE id = ${id}`;
+    }
+    if (Array.isArray(content_tags)) {
+      await sql`UPDATE media_assets SET content_tags = ${content_tags} WHERE id = ${id}`;
+    }
+    await sql`UPDATE media_assets SET updated_at = NOW() WHERE id = ${id}`;
 
     // Log the edit
     await sql`
