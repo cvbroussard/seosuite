@@ -314,36 +314,39 @@ async function derivePillarConfig(playbook: BrandPlaybook): Promise<Array<{
     max_tokens: 2048,
     messages: [{
       role: "user",
-      content: `Generate a content pillar configuration from this brand playbook data.
+      content: `Generate a content pillar configuration for a business blog.
 
-## Content Themes (from brand positioning)
-${themes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+## Business Context
+Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
+Content themes: ${themes.join("; ")}
 
-## Pain Points
-${painPoints.map((p) => `- ${p.pain}`).join("\n")}
+## Playbook Data
+Pain points: ${painPoints.slice(0, 5).map((p) => p.pain).join("; ")}
+Search phrases: ${lang.searchPhrases.slice(0, 5).join(", ")}
 
-## Audience Search Phrases
-${lang.searchPhrases.slice(0, 5).join(", ")}
+## The Five-Pillar Framework
+Every business has the same 5 content pillars — only the labels and tags change:
+
+1. **What we do** — the craft, skill, or service itself (design, technique, methodology)
+2. **How we do it** — the process, tools, infrastructure, and standards behind the work
+3. **Who we work with** — vendors, materials, partners, artisans, suppliers
+4. **Proof it works** — projects, results, case studies, before/after, client stories
+5. **Why it matters** — philosophy, perspective, industry opinions, culture, community
 
 ## Rules
-- Create 4-6 pillars from the content themes above
-- Each pillar gets a short ID (snake_case, max 20 chars) and a clean 2-4 word label
-- Each pillar gets a 1-sentence description the AI reads during content classification
-- Each pillar gets 3-5 tags derived from pain points, search phrases, and theme specifics
-- Tag IDs: snake_case, max 20 chars. Tag labels: 2-4 words, clean and concise
-- Always include a "projects" pillar (before/after, reveals, client stories)
-- Tags should be specific enough to guide AI triage but generic enough to apply to multiple uploads
+- Generate exactly 5 pillars following the framework above
+- Use industry-specific labels (NOT "What We Do" — use the business's language, e.g., "Design" for a remodeler, "Menu" for a restaurant, "Method" for a trainer)
+- Each pillar: short ID (snake_case, max 15 chars), clean 2-4 word label
+- Each pillar: 1-sentence description the AI reads during content triage
+- Each pillar: 4-6 tags derived from the content themes, pain points, and search phrases
+- Tag IDs: snake_case, max 20 chars. Tag labels: 2-4 words
+- Each pillar should sustain 20+ unique blog posts — if it can't, it's too narrow
+- Tags should be specific enough to guide AI but reusable across many uploads
+- CRITICAL: Follow the 5-pillar framework exactly. Do NOT create a pillar for a single methodology or process — that belongs as a tag, not a pillar. Pillar 3 MUST be about vendors/materials/partners — not a process.
 
 Respond with ONLY valid JSON (no markdown fencing):
 [
-  {
-    "id": "short_snake_case",
-    "label": "Clean Label",
-    "description": "One sentence AI reads for classification",
-    "tags": [
-      {"id": "tag_id", "label": "Tag Label"}
-    ]
-  }
+  {"id": "...", "label": "...", "description": "...", "tags": [{"id": "...", "label": "..."}]}
 ]`,
     }],
   });
