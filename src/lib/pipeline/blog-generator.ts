@@ -1,6 +1,69 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
+import { researchContextNote } from "@/lib/research/wikipedia";
+
+/**
+ * Blog content types — determines structure, length, and prompt.
+ */
+type BlogContentType = "authority_overview" | "deep_dive" | "project_story" | "vendor_spotlight";
+
+interface ContentTypeConfig {
+  label: string;
+  wordRange: string;
+  maxTokens: number;
+  description: string;
+}
+
+const CONTENT_TYPES: Record<BlogContentType, ContentTypeConfig> = {
+  authority_overview: {
+    label: "Authority Overview",
+    wordRange: "1000-1500",
+    maxTokens: 8192,
+    description: "Wide coverage of capabilities told through client perspective. The 'why us' article.",
+  },
+  deep_dive: {
+    label: "Deep Dive",
+    wordRange: "800-1200",
+    maxTokens: 6144,
+    description: "Single topic expertise. Technical authority on one subject.",
+  },
+  project_story: {
+    label: "Project Story",
+    wordRange: "600-800",
+    maxTokens: 4096,
+    description: "Case study / before-after narrative. Specific client outcome.",
+  },
+  vendor_spotlight: {
+    label: "Vendor/Material Spotlight",
+    wordRange: "600-800",
+    maxTokens: 4096,
+    description: "Research-driven feature on a material, vendor, or technique.",
+  },
+};
+
+/**
+ * Classify what type of blog post to generate based on context.
+ */
+function classifyContentType(
+  contextNote: string,
+  research: string,
+  existingTypes: string[]
+): BlogContentType {
+  // If we haven't published an authority overview recently, prioritize it
+  const hasRecentAuthority = existingTypes.includes("authority_overview");
+  if (!hasRecentAuthority) return "authority_overview";
+
+  // If research found named entities (vendors, materials), do a spotlight
+  if (research.length > 200) return "vendor_spotlight";
+
+  // If context note describes a specific project outcome
+  const projectSignals = /\b(before|after|reveal|completed|finished|installed|client|customer|homeowner)\b/i;
+  if (projectSignals.test(contextNote)) return "project_story";
+
+  // Default to deep dive
+  return "deep_dive";
+}
 
 const anthropic = new Anthropic();
 
@@ -84,13 +147,31 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   `;
   const existingTitles = existingPosts.map((p) => p.title as string);
 
+  // Research entities mentioned in the context note
+  const research = await researchContextNote((asset.context_note as string) || "");
+
+  // Classify content type based on context
+  const existingTypeRows = await sql`
+    SELECT DISTINCT content_type
+    FROM blog_posts WHERE site_id = ${asset.site_id} AND status IN ('published', 'draft')
+  `;
+  const existingContentTypes = existingTypeRows
+    .map((r) => r.content_type as string)
+    .filter(Boolean);
+
+  const contentType = playbook
+    ? classifyContentType((asset.context_note as string) || "", research, existingContentTypes)
+    : "deep_dive" as BlogContentType;
+
+  const typeConfig = CONTENT_TYPES[contentType];
+
   const prompt = playbook
-    ? buildPlaybookBlogPrompt(asset, playbook, aiAnalysis, hookText, imageUrls, existingTitles)
+    ? buildTypedBlogPrompt(contentType, asset, playbook, aiAnalysis, hookText, imageUrls, existingTitles, research)
     : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis, imageUrls);
 
   const response = await anthropic.messages.create({
     model: playbook ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001",
-    max_tokens: playbook ? 6144 : 2048,
+    max_tokens: playbook ? typeConfig.maxTokens : 2048,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -103,7 +184,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     INSERT INTO blog_posts (
       site_id, source_asset_id, slug, title, body, excerpt,
       meta_title, meta_description, og_image_url, schema_json,
-      tags, content_pillar, status
+      tags, content_pillar, content_type, status
     ) VALUES (
       ${asset.site_id}, ${assetId}, ${slug}, ${parsed.title},
       ${parsed.body}, ${parsed.excerpt},
@@ -112,6 +193,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
       ${asset.storage_url},
       ${JSON.stringify(buildArticleSchema(parsed, asset))},
       ${parsed.tags}, ${asset.content_pillar || null},
+      ${contentType},
       'draft'
     )
     RETURNING id
@@ -261,7 +343,147 @@ export async function generateMissingBlogPosts(siteId: string): Promise<number> 
   return generated;
 }
 
-// ── AI-Native SEO Blog Prompt (Playbook-Driven) ───────────────────
+// ── Type-Specific Blog Prompt ─────────────────────────────────────
+
+function buildTypedBlogPrompt(
+  contentType: BlogContentType,
+  asset: Record<string, unknown>,
+  playbook: BrandPlaybook,
+  aiAnalysis: Record<string, unknown>,
+  hookText?: string,
+  inlineImages?: Array<{ url: string; context: string }>,
+  existingTitles?: string[],
+  research?: string
+): string {
+  const { audienceResearch, brandPositioning, offerCore } = playbook;
+  const angle = brandPositioning.selectedAngles[0];
+  const lang = audienceResearch.languageMap;
+  const typeConfig = CONTENT_TYPES[contentType];
+
+  // Type-specific writing instructions
+  const typeInstructions: Record<BlogContentType, string> = {
+    authority_overview: `## Article Type: Authority Overview ("Why Us")
+This is the flagship article — a wide tour of capabilities told through the client's perspective.
+
+Structure:
+1. Hook — the one thing this business does that no one else does (2-3 sentences)
+2. Brief overview sections (1-2 paragraphs each) covering the key capability areas:
+   - How they approach the work differently (methodology/process)
+   - Layouts, workflow, and spatial design
+   - Equipment, appliances, and performance infrastructure
+   - Materials, surfaces, and finishes
+   - Craftsmanship, custom features, and vendor partnerships
+   - Utility infrastructure (electrical, plumbing, ventilation)
+3. The outcome — what the finished result feels like to use
+4. Subtle CTA woven into the closing
+
+Each section should be wide, not deep — a taste that makes the reader want to learn more.
+Link to deeper articles where they exist. This article is the hub.
+Tone: confident generalist, not narrow specialist. "We do all of this, and here's a glimpse of each."`,
+
+    deep_dive: `## Article Type: Deep Dive
+Single topic technical authority. Go deep on one subject.
+
+Structure:
+1. Hook — why this specific topic matters more than people think
+2. The problem most people don't realize they have
+3. The technical detail — explain it clearly, no jargon, but don't dumb it down
+4. How this business approaches it differently
+5. FAQ (3-4 questions)
+6. Key takeaways (3-4 points)
+
+Tone: subject matter expert talking to an informed peer.`,
+
+    project_story: `## Article Type: Project Story
+A narrative about a specific project, client, or transformation.
+
+Structure:
+1. The client's situation before (frustration, limitation, what triggered the project)
+2. The discovery — what the team observed or learned
+3. The key design decisions and why each one was made
+4. The outcome — how the space performs now
+5. One unexpected benefit the client didn't anticipate
+
+Write as a story with a narrative arc. Use specific details — dimensions, materials, vendor names.
+Do NOT use client's real name — use "our client" or "a client in [neighborhood]".
+Tone: storyteller sharing a war story with genuine enthusiasm.`,
+
+    vendor_spotlight: `## Article Type: Vendor/Material Spotlight
+A research-driven feature about a specific material, vendor, technique, or product.
+
+Structure:
+1. Open with the material/vendor in context — how you encountered it, why you chose it
+2. The history and origin (use the research provided)
+3. What makes it special — technical properties, craftsmanship, uniqueness
+4. How it performs in real use — not just how it looks, but how it functions
+5. Why your business specifically chooses to work with this material/vendor
+6. What clients should know before requesting it
+
+Include any research images provided — they add visual credibility.
+Tone: curator introducing something they genuinely respect.`,
+  };
+
+  return `Write an article for a local service business blog. Length: ${typeConfig.wordRange} words. No filler.
+
+${typeInstructions[contentType]}
+
+## Content Source
+Content pillar: ${asset.content_pillar || "general"}
+${asset.context_note ? `Creator's note: "${asset.context_note}"` : ""}
+${aiAnalysis.description ? `Visual context: ${aiAnalysis.description}` : ""}
+${hookText ? `Opening hook to weave in: "${hookText}"` : ""}
+
+## Research Instructions
+If the creator's note references specific brands, vendors, products, materials, or techniques:
+- Research the named entity. Include factual details: origin, craftsmanship, history.
+- Name things specifically — not generically.
+- Position the business's choice to work with them as intentional and quality-driven.
+- Never fabricate facts about real companies or products.
+${research ? `\n## Background Research (from Wikipedia)\n${research}` : ""}
+
+## Brand Context
+Business: ${asset.site_name} (${asset.site_url})
+Brand angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
+Tone: ${angle?.tone || "professional, engaging"}
+Offer: ${offerCore.offerStatement.emotionalCore}
+
+## Audience
+Their pain: ${lang.painPhrases.slice(0, 3).join("; ")}
+Their desire: ${lang.desirePhrases.slice(0, 3).join("; ")}
+Target search query: ${lang.searchPhrases[Math.floor(Math.random() * lang.searchPhrases.length)] || ""}
+
+## Available Images
+Place images at natural points using markdown: ![brief alt text](url)
+${inlineImages && inlineImages.length > 0
+  ? inlineImages.map((img, i) => `Image ${i + 1}: ${img.url}${img.context ? ` (${img.context})` : ""}`).join("\n")
+  : "No images available — text only."}
+
+${existingTitles && existingTitles.length > 0
+  ? `## ALREADY PUBLISHED (do NOT reuse these titles or similar phrasing)\n${existingTitles.map(t => `- ${t}`).join("\n")}\n`
+  : ""}
+
+## Writing Rules
+- Title: 40-60 characters. Specific and unique. Lead with the insight, not the category.
+- Open with a hook or story — not a definition.
+- 9th-grade reading level. Conversational, not academic.
+- Use the audience's language naturally.
+- 3-5 headings as ## (at least one as a question).
+- Paragraphs over bullet lists.
+- 1 outbound link to an authoritative, non-competitor source.
+
+## Response Format
+Respond with ONLY valid JSON (no markdown fencing):
+{
+  "title": "<40-60 chars, unique>",
+  "body": "<${typeConfig.wordRange} word markdown article>",
+  "excerpt": "<1-2 sentence summary>",
+  "meta_title": "<max 60 characters>",
+  "meta_description": "<max 155 characters>",
+  "tags": ["<3-5 relevant tags>"]
+}`;
+}
+
+// ── Legacy Playbook Blog Prompt (kept for backward compat) ────────
 
 function buildPlaybookBlogPrompt(
   asset: Record<string, unknown>,
@@ -269,7 +491,8 @@ function buildPlaybookBlogPrompt(
   aiAnalysis: Record<string, unknown>,
   hookText?: string,
   inlineImages?: Array<{ url: string; context: string }>,
-  existingTitles?: string[]
+  existingTitles?: string[],
+  research?: string
 ): string {
   const { audienceResearch, brandPositioning, offerCore } = playbook;
   const angle = brandPositioning.selectedAngles[0];
@@ -290,6 +513,7 @@ The creator's note may reference specific brands, vendors, products, materials, 
 - **Name materials specifically**: Zellige is Moroccan hand-cut glazed tile from Fez, each piece unique. Don't just say "handcrafted tile."
 - If the entity is a vendor/brand, position the business's choice to work with them as a signal of quality and intentionality.
 - If you don't have knowledge about a specific entity, focus on the category and craftsmanship — never fabricate facts about real companies.
+${research ? `\n## Background Research (from Wikipedia)\n${research}` : ""}
 
 ## Brand Context
 Business: ${asset.site_name} (${asset.site_url})
