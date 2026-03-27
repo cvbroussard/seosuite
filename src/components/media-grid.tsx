@@ -13,6 +13,7 @@ interface Asset {
   quality_score: number | null;
   content_pillar: string | null;
   content_pillars: string[] | null;
+  content_tags: string[] | null;
   flag_reason: string | null;
   created_at: string;
 }
@@ -47,7 +48,7 @@ export function MediaGrid({
     setAssets((prev) =>
       prev.map((a) =>
         a.id === editing.id
-          ? { ...a, context_note: note, content_pillar: pillar || a.content_pillar, content_pillars: tags.length > 0 ? tags : a.content_pillars }
+          ? { ...a, context_note: note, content_pillar: pillar || a.content_pillar, content_tags: tags.length > 0 ? tags : a.content_tags }
           : a
       )
     );
@@ -125,7 +126,7 @@ export function MediaGrid({
           mediaType={editing.media_type}
           initialNote={editing.context_note || ""}
           initialPillar={editing.content_pillar || ""}
-          initialTags={editing.content_pillars || []}
+          initialTags={editing.content_tags || editing.content_pillars || []}
           pillarConfig={pillarConfig}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
