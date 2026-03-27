@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { resolveBlogSiteBySlug, resolveBlogSite, getBlogPost } from "@/lib/blog";
 import { generateArticleSchema } from "@/lib/blog/schema";
+import { autoLinkEntities } from "@/lib/blog/auto-linker";
 
 export const dynamic = "force-dynamic";
 
@@ -143,10 +144,17 @@ export default async function ArticlePage({ params }: Props) {
         />
       )}
 
-      {/* Blog body */}
+      {/* Blog body — auto-linked to related posts at render time */}
       <div
         className="blog-prose"
-        dangerouslySetInnerHTML={{ __html: markdownToHtml(body) }}
+        dangerouslySetInnerHTML={{
+          __html: await autoLinkEntities(
+            markdownToHtml(body),
+            site.siteId,
+            siteSlug,
+            articleSlug
+          ),
+        }}
       />
 
       {/* Tags */}
