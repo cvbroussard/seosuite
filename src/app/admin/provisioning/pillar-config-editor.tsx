@@ -175,7 +175,7 @@ export function AdminPillarEditor({
                       <label className="mb-1 block text-[10px] text-muted">Tags (4-6 recommended)</label>
                       <div className="flex flex-wrap gap-1">
                         {pillar.tags.map((tag, i) => (
-                          <div key={tag.id || i} className="flex items-center gap-0.5 rounded bg-surface-hover px-1.5 py-0.5">
+                          <div key={i} className="flex items-center gap-0.5 rounded bg-surface-hover px-1.5 py-0.5">
                             <input
                               value={tag.label}
                               onChange={(e) => updateTag(pillar.id, i, e.target.value)}
