@@ -5,6 +5,7 @@ import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
 import { ProfileKitPanel } from "./profile-kit-panel";
 import { ProvisionActions } from "./provision-actions";
 import { AdminConnectButton } from "./admin-connect-button";
+import { AdminPillarEditor } from "./pillar-config-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function ProvisioningPage() {
       s.brand_playbook,
       s.brand_playbook IS NOT NULL AS has_playbook,
       s.provisioning_status,
+      s.pillar_config,
       s.metadata AS site_metadata,
       s.deleted_at,
       (
@@ -139,6 +141,14 @@ export default async function ProvisioningPage() {
                   siteId={sub.site_id as string}
                   subscriberId={sub.subscriber_id as string}
                   connectedPlatforms={connected}
+                />
+
+                {/* Pillar+Tag Config */}
+                <AdminPillarEditor
+                  siteId={sub.site_id as string}
+                  initialConfig={
+                    (sub.pillar_config as Array<{ id: string; label: string; description: string; tags: Array<{ id: string; label: string }> }>) || []
+                  }
                 />
 
                 {profileKit && (
