@@ -29,10 +29,14 @@ export default async function MediaPage() {
       ORDER BY created_at DESC
       LIMIT 50
     `,
-    sql`SELECT content_pillars FROM sites WHERE id = ${siteId}`,
+    sql`SELECT content_pillars, pillar_config FROM sites WHERE id = ${siteId}`,
   ]);
 
   const pillars = (siteData[0]?.content_pillars || []) as string[];
+  const pillarConfig = (siteData[0]?.pillar_config || []) as Array<{
+    id: string; label: string; description: string;
+    tags: Array<{ id: string; label: string }>;
+  }>;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -46,7 +50,7 @@ export default async function MediaPage() {
       </div>
 
       {assets.length > 0 ? (
-        <MediaGrid initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]} availablePillars={pillars} />
+        <MediaGrid initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]} availablePillars={pillars} pillarConfig={pillarConfig} />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-8 py-16 text-center">
           <span className="mb-3 text-3xl">▣</span>

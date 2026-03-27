@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AssetEditModal } from "./asset-edit-modal";
+import type { PillarGroup } from "./tag-picker";
 
 interface Asset {
   id: string;
@@ -30,19 +31,21 @@ const statusColors: Record<string, string> = {
 export function MediaGrid({
   initialAssets,
   availablePillars,
+  pillarConfig,
 }: {
   initialAssets: Asset[];
   availablePillars: string[];
+  pillarConfig: PillarGroup[];
 }) {
   const [assets, setAssets] = useState(initialAssets);
   const [editing, setEditing] = useState<Asset | null>(null);
 
-  function handleSaved(note: string, pillar: string) {
+  function handleSaved(note: string, pillar: string, tags: string[]) {
     if (!editing) return;
     setAssets((prev) =>
       prev.map((a) =>
         a.id === editing.id
-          ? { ...a, context_note: note, content_pillar: pillar || a.content_pillar }
+          ? { ...a, context_note: note, content_pillar: pillar || a.content_pillar, content_pillars: tags.length > 0 ? tags : a.content_pillars }
           : a
       )
     );
@@ -117,7 +120,8 @@ export function MediaGrid({
           assetId={editing.id}
           initialNote={editing.context_note || ""}
           initialPillar={editing.content_pillar || ""}
-          availablePillars={availablePillars}
+          initialTags={editing.content_pillars || []}
+          pillarConfig={pillarConfig}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />

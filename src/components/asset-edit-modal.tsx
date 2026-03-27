@@ -1,34 +1,40 @@
 "use client";
 
 import { useState } from "react";
+import { TagPicker, type PillarGroup } from "./tag-picker";
 
 interface AssetEditModalProps {
   assetId: string;
   initialNote: string;
   initialPillar: string;
-  availablePillars: string[];
+  initialTags: string[];
+  pillarConfig: PillarGroup[];
+  availablePillars?: string[];
   onClose: () => void;
-  onSaved: (note: string, pillar: string) => void;
+  onSaved: (note: string, pillar: string, tags: string[]) => void;
 }
 
 export function AssetEditModal({
   assetId,
   initialNote,
   initialPillar,
-  availablePillars,
+  initialTags,
+  pillarConfig,
   onClose,
   onSaved,
 }: AssetEditModalProps) {
   const [note, setNote] = useState(initialNote);
   const [pillar, setPillar] = useState(initialPillar);
+  const [tags, setTags] = useState<string[]>(initialTags || []);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     setSaving(true);
     try {
-      const body: Record<string, string> = {};
+      const body: Record<string, unknown> = {};
       if (note !== initialNote) body.context_note = note;
       if (pillar !== initialPillar) body.pillar = pillar;
+      if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
 
       if (Object.keys(body).length === 0) {
         onClose();
@@ -43,7 +49,7 @@ export function AssetEditModal({
 
       if (!res.ok) throw new Error("Save failed");
 
-      onSaved(note, pillar);
+      onSaved(note, pillar, tags);
       onClose();
     } catch {
       alert("Failed to save changes");
@@ -58,7 +64,7 @@ export function AssetEditModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl border border-border bg-surface p-6"
+        className="w-full max-w-lg border border-border bg-surface p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="mb-4 text-sm font-semibold">Edit Asset</h3>
@@ -67,28 +73,22 @@ export function AssetEditModal({
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="mb-4 w-full rounded-lg border border-border bg-background p-3 text-sm text-foreground outline-none focus:border-accent"
+          className="mb-4 w-full text-sm"
           rows={6}
           placeholder="Describe this content..."
         />
 
-        {availablePillars.length > 0 && (
+        {pillarConfig.length > 0 && (
           <>
-            <label className="mb-2 block text-xs text-muted">Content Pillar</label>
-            <div className="mb-4 flex flex-wrap gap-2">
-              {availablePillars.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPillar(p === pillar ? "" : p)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    p === pillar
-                      ? "bg-accent text-white"
-                      : "bg-surface-hover text-muted hover:text-foreground"
-                  }`}
-                >
-                  {p.replace("_", " ")}
-                </button>
-              ))}
+            <label className="mb-2 block text-xs text-muted">Content Tags</label>
+            <div className="mb-4 max-h-48 overflow-y-auto">
+              <TagPicker
+                pillarConfig={pillarConfig}
+                selectedPillar={pillar}
+                selectedTags={tags}
+                onPillarChange={setPillar}
+                onTagsChange={setTags}
+              />
             </div>
           </>
         )}
@@ -96,14 +96,14 @@ export function AssetEditModal({
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-xs text-muted hover:text-foreground"
+            className="px-4 py-2 text-xs text-muted hover:text-foreground"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save"}
           </button>

@@ -18,11 +18,11 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { context_note, pillar } = body;
+    const { context_note, pillar, content_tags } = body;
 
-    if (context_note === undefined && pillar === undefined) {
+    if (context_note === undefined && pillar === undefined && content_tags === undefined) {
       return NextResponse.json(
-        { error: "Nothing to update — provide context_note or pillar" },
+        { error: "Nothing to update" },
         { status: 400 }
       );
     }
@@ -42,64 +42,22 @@ export async function PATCH(
       );
     }
 
-    // Build update fields
-    const updates: string[] = [];
-    const values: unknown[] = [];
+    // Build metadata with pillar override
+    const currentMeta =
+      typeof asset.metadata === "object" && asset.metadata !== null
+        ? (asset.metadata as Record<string, unknown>)
+        : {};
+    const newMeta = pillar !== undefined ? { ...currentMeta, pillar } : currentMeta;
 
-    if (context_note !== undefined) {
-      updates.push("context_note");
-      values.push(context_note);
-    }
-
-    if (pillar !== undefined) {
-      // Store pillar in metadata.pillar
-      const currentMeta =
-        typeof asset.metadata === "object" && asset.metadata !== null
-          ? asset.metadata
-          : {};
-      const newMeta = { ...currentMeta, pillar };
-      updates.push("metadata");
-      values.push(JSON.stringify(newMeta));
-
-      // Also update content_pillar directly if asset is already triaged
-      updates.push("content_pillar");
-      values.push(pillar);
-    }
-
-    // Use individual update statements since Neon tagged template
-    // doesn't support dynamic column lists easily
-    if (context_note !== undefined && pillar !== undefined) {
-      const currentMeta =
-        typeof asset.metadata === "object" && asset.metadata !== null
-          ? asset.metadata
-          : {};
-      const newMeta = { ...currentMeta, pillar };
-      await sql`
-        UPDATE media_assets
-        SET context_note = ${context_note},
-            content_pillar = ${pillar},
-            metadata = ${JSON.stringify(newMeta)}
-        WHERE id = ${id}
-      `;
-    } else if (context_note !== undefined) {
-      await sql`
-        UPDATE media_assets
-        SET context_note = ${context_note}
-        WHERE id = ${id}
-      `;
-    } else if (pillar !== undefined) {
-      const currentMeta =
-        typeof asset.metadata === "object" && asset.metadata !== null
-          ? asset.metadata
-          : {};
-      const newMeta = { ...currentMeta, pillar };
-      await sql`
-        UPDATE media_assets
-        SET content_pillar = ${pillar},
-            metadata = ${JSON.stringify(newMeta)}
-        WHERE id = ${id}
-      `;
-    }
+    await sql`
+      UPDATE media_assets
+      SET context_note = COALESCE(${context_note ?? null}, context_note),
+          content_pillar = COALESCE(${pillar ?? null}, content_pillar),
+          content_tags = COALESCE(${content_tags ?? null}, content_tags),
+          metadata = ${JSON.stringify(newMeta)}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${id}
+    `;
 
     // Log the edit
     await sql`
