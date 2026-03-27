@@ -22,8 +22,8 @@ export default async function BlogPage() {
 
   const [posts, settingsRows] = await Promise.all([
     sql`
-      SELECT id, slug, title, excerpt, og_image_url, status,
-             content_pillar, published_at, created_at
+      SELECT id, slug, title, excerpt, body, og_image_url, status,
+             content_type, content_pillar, published_at, created_at
       FROM blog_posts
       WHERE site_id = ${siteId}
       ORDER BY created_at DESC

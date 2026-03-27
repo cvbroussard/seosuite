@@ -16,8 +16,10 @@ interface Post {
   slug: string;
   title: string;
   excerpt: string | null;
+  body: string | null;
   og_image_url: string | null;
   status: string;
+  content_type: string | null;
   content_pillar: string | null;
   published_at: string | null;
   created_at: string;
@@ -36,6 +38,7 @@ export function BlogDashboard({
   const [posts, setPosts] = useState(initialPosts);
   const [saving, setSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [title, setTitle] = useState(settings.blog_title || "");
   const [description, setDescription] = useState(settings.blog_description || "");
   const [subdomain, setSubdomain] = useState(settings.subdomain || "");
@@ -185,44 +188,69 @@ export function BlogDashboard({
         </div>
       ) : (
         <div className="space-y-3">
-          {posts.map((post) => (
-            <div
-              key={post.id}
-              className="flex items-center gap-4 rounded-lg border border-border bg-surface p-4"
-            >
-              {post.og_image_url && (
-                <img
-                  src={post.og_image_url}
-                  alt=""
-                  className="h-14 w-14 shrink-0 rounded-lg object-cover"
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{post.title}</p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      post.status === "published"
-                        ? "bg-success/20 text-success"
-                        : "bg-muted/20 text-muted"
-                    }`}
-                  >
-                    {post.status}
-                  </span>
-                  <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                  {post.content_pillar && (
-                    <span className="rounded bg-surface-hover px-1.5 py-0.5">{post.content_pillar}</span>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => togglePost(post.id, post.status)}
-                className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-accent hover:text-foreground"
+          {posts.map((post) => {
+            const isExpanded = expanded === post.id;
+            return (
+              <div
+                key={post.id}
+                className="rounded-lg border border-border bg-surface"
               >
-                {post.status === "published" ? "Unpublish" : "Publish"}
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-4 p-4">
+                  {post.og_image_url && (
+                    <img
+                      src={post.og_image_url}
+                      alt=""
+                      className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                    />
+                  )}
+                  <button
+                    onClick={() => setExpanded(isExpanded ? null : post.id)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="truncate text-sm font-medium">{post.title}</p>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                          post.status === "published"
+                            ? "bg-success/20 text-success"
+                            : "bg-muted/20 text-muted"
+                        }`}
+                      >
+                        {post.status}
+                      </span>
+                      {post.content_type && (
+                        <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                          {post.content_type.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                      {post.content_pillar && (
+                        <span className="rounded bg-surface-hover px-1.5 py-0.5">{post.content_pillar}</span>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => togglePost(post.id, post.status)}
+                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-accent hover:text-foreground"
+                  >
+                    {post.status === "published" ? "Unpublish" : "Publish"}
+                  </button>
+                </div>
+
+                {isExpanded && post.body && (
+                  <div className="border-t border-border px-4 py-4">
+                    {post.excerpt && (
+                      <p className="mb-3 text-sm italic text-muted">{post.excerpt}</p>
+                    )}
+                    <div
+                      className="prose prose-sm max-w-none text-foreground prose-headings:text-foreground prose-a:text-accent"
+                      dangerouslySetInnerHTML={{ __html: post.body }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </>
