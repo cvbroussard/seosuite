@@ -48,17 +48,26 @@ export async function suggestTags(
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 128,
+    max_tokens: 256,
     messages: [{
       role: "user",
-      content: `Pick the best pillar and 2-4 tags for this content.
+      content: `Select ALL matching tags for this content. Be thorough — every entity, material, technique, and feature mentioned should map to a tag.
 
 Context note: "${contextNote}"
 
 Pillars and tags:
 ${tagMap.map((p) => `[${p.pillar}] ${p.pillarLabel}: ${p.description}\n  Tags: ${p.tags}`).join("\n\n")}
 
-Return ONLY JSON, no markdown: {"pillar":"pillar_id","tags":["tag_id_1","tag_id_2"]}`,
+Rules:
+- Pick the PRIMARY pillar (the one that best fits the overall content)
+- Select 3-8 tags from ANY pillar — tags can span multiple pillars
+- If a brand/vendor is mentioned → include the vendor tag
+- If a material is mentioned → include the material tag
+- If equipment/appliances are mentioned → include the equipment tag
+- If a technique or method is mentioned → include the technique tag
+- Be generous — more tags is better than fewer
+
+Return ONLY JSON, no markdown: {"pillar":"pillar_id","tags":["tag_id_1","tag_id_2","tag_id_3"]}`,
     }],
   });
 

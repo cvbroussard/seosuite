@@ -53,7 +53,13 @@ export function AssetEditModal({
         if (res.ok) {
           const data = await res.json();
           if (data.pillarId) setPillar(data.pillarId);
-          if (data.tagIds?.length > 0) setTags(data.tagIds);
+          if (data.tagIds?.length > 0) {
+            // Merge new suggestions with existing — don't overwrite
+            setTags((prev) => {
+              const merged = new Set([...prev, ...data.tagIds]);
+              return Array.from(merged);
+            });
+          }
         }
       } catch { /* ignore */ }
       setSuggesting(false);
