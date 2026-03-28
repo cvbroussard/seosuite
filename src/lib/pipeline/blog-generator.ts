@@ -150,16 +150,41 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   // Research entities mentioned in the context note
   const research = await researchContextNote((asset.context_note as string) || "");
 
-  // Fetch vendor URLs linked to this asset
+  // Fetch vendor URLs linked to this asset (from vendor table)
   const assetVendors = await sql`
     SELECT v.name, v.url
     FROM asset_vendors av
     JOIN vendors v ON v.id = av.vendor_id
-    WHERE av.asset_id = ${assetId} AND v.url IS NOT NULL
+    WHERE av.asset_id = ${assetId}
   `;
-  const vendorLinks = assetVendors.map(
-    (v: Record<string, unknown>) => `${v.name}: ${v.url}`
-  );
+  const vendorLinks: string[] = [];
+  for (const v of assetVendors) {
+    if (v.url) vendorLinks.push(`${v.name}: ${v.url}`);
+  }
+
+  // Extract inline URLs from context note and associate with nearest vendor
+  const contextNote = (asset.context_note as string) || "";
+  const inlineUrls = contextNote.match(/https?:\/\/[^\s,]+/g) || [];
+  for (const url of inlineUrls) {
+    // Check if this URL is already covered by a vendor link
+    const alreadyCovered = vendorLinks.some((vl) => vl.includes(url));
+    if (!alreadyCovered) {
+      // Try to match URL domain to a tagged vendor
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, "");
+        const matchedVendor = assetVendors.find((v: Record<string, unknown>) =>
+          v.url && (v.url as string).includes(domain)
+        );
+        if (matchedVendor) {
+          vendorLinks.push(`${matchedVendor.name}: ${url}`);
+        } else {
+          vendorLinks.push(url);
+        }
+      } catch {
+        vendorLinks.push(url);
+      }
+    }
+  }
 
   // Classify content type based on context
   const existingTypeRows = await sql`

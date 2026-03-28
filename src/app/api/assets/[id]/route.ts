@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { parseContextNote } from "@/lib/context-note-parser";
 
 /**
  * PATCH /api/assets/:id — Update an asset's context note or pillar.
@@ -59,10 +60,20 @@ export async function PATCH(
     if (Array.isArray(content_tags)) {
       await sql`UPDATE media_assets SET content_tags = ${content_tags} WHERE id = ${id}`;
     }
-    if (Array.isArray(vendor_ids)) {
-      // Replace all vendor associations for this asset
+    // Parse hashtags from context note and merge with explicit vendor_ids
+    let resolvedVendorIds = Array.isArray(vendor_ids) ? [...vendor_ids] : null;
+    if (context_note !== undefined && typeof context_note === "string") {
+      const parsed = await parseContextNote(context_note, auth.subscriberId);
+      if (parsed.vendorIds.length > 0) {
+        const existing = resolvedVendorIds || [];
+        const merged = [...new Set([...existing, ...parsed.vendorIds])];
+        resolvedVendorIds = merged;
+      }
+    }
+
+    if (Array.isArray(resolvedVendorIds)) {
       await sql`DELETE FROM asset_vendors WHERE asset_id = ${id}`;
-      for (const vendorId of vendor_ids) {
+      for (const vendorId of resolvedVendorIds) {
         await sql`INSERT INTO asset_vendors (asset_id, vendor_id) VALUES (${id}, ${vendorId}) ON CONFLICT DO NOTHING`;
       }
     }
