@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { markdownToHtml, blogProseStyles } from "@/lib/blog/markdown";
 
@@ -130,8 +131,17 @@ export function BlogPostList({
     Array.isArray(post.metadata?.editorial_images) && (post.metadata.editorial_images as unknown[]).length > 0;
 
   // Attach click handlers to editorial images in the prose container
+  const repromptFormRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!proseRef.current || !previewing) return;
+
+    // Clean up any previously injected form
+    if (repromptFormRef.current) {
+      repromptFormRef.current.remove();
+      repromptFormRef.current = null;
+    }
+
     const imgs = proseRef.current.querySelectorAll("img");
     imgs.forEach((img) => {
       if (img.src.includes("/editorial/")) {
@@ -143,6 +153,15 @@ export function BlogPostList({
           setRepromptUrl(img.src);
           setRepromptNote("");
         };
+
+        // Inject form right after the selected image
+        if (repromptUrl === img.src) {
+          const form = document.createElement("div");
+          form.id = "reprompt-inline-form";
+          form.style.cssText = "margin: 12px 0; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface-hover);";
+          repromptFormRef.current = form;
+          img.insertAdjacentElement("afterend", form);
+        }
       }
     });
   }, [previewing, repromptUrl]);
@@ -374,12 +393,12 @@ export function BlogPostList({
                 />
               )}
 
-              {/* Image re-prompt form */}
-              {repromptUrl && hasEditorialImages(previewing) && (
-                <div className="mt-4 rounded border border-accent/30 bg-accent/5 p-4">
-                  <p className="mb-2 text-xs font-medium">Adjust this image</p>
+              {/* Image re-prompt form — portaled inline below the clicked image */}
+              {repromptUrl && hasEditorialImages(previewing) && repromptFormRef.current && createPortal(
+                <div>
+                  <p className="mb-1 text-xs font-medium">Adjust this image</p>
                   <p className="mb-2 text-[10px] text-muted">
-                    Describe what should change. This correction will apply to all future articles.
+                    This correction will apply to all future articles.
                   </p>
                   <div className="flex gap-2">
                     <input
@@ -387,24 +406,25 @@ export function BlogPostList({
                       onChange={(e) => setRepromptNote(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleReprompt()}
                       className="flex-1 text-sm"
-                      placeholder="e.g., spray paint line not brush, woman making tile not man"
+                      placeholder="e.g., spray paint line not brush"
                       autoFocus
                     />
                     <button
                       onClick={handleReprompt}
                       disabled={reprompting || !repromptNote.trim()}
-                      className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                      className="bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                     >
                       {reprompting ? "Generating..." : "Regenerate"}
                     </button>
                     <button
                       onClick={() => { setRepromptUrl(null); setRepromptNote(""); }}
-                      className="px-3 py-2 text-xs text-muted hover:text-foreground"
+                      className="px-2 py-1.5 text-xs text-muted hover:text-foreground"
                     >
                       Cancel
                     </button>
                   </div>
-                </div>
+                </div>,
+                repromptFormRef.current
               )}
             </div>
 
