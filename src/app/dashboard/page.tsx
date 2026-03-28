@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AddSiteForm } from "./add-site";
+import { detectContentGaps } from "@/lib/blog/content-gaps";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function DashboardOverview() {
 
   const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [site, accounts, postStats, assetStats, upcoming, healthData] = await Promise.all([
+  const [site, accounts, postStats, assetStats, upcoming, healthData, contentGaps] = await Promise.all([
     sql`SELECT name, url, autopilot_enabled FROM sites WHERE id = ${siteId}`,
     sql`
       SELECT COUNT(*)::int AS total,
@@ -74,6 +75,7 @@ export default async function DashboardOverview() {
          WHERE site_id = ${siteId} AND status = 'open'
            AND scheduled_at <= ${sevenDaysFromNow}) AS open_slots
     `,
+    detectContentGaps(siteId),
   ]);
 
   const p = postStats[0];
@@ -170,6 +172,32 @@ export default async function DashboardOverview() {
           </div>
         </div>
       </section>
+
+      {/* Content Gap Suggestions */}
+      {contentGaps.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4">Suggested Uploads</h2>
+          <p className="mb-3 text-sm text-muted">
+            These topics appear in your articles but don&apos;t have a dedicated deep dive yet.
+          </p>
+          <div className="space-y-2">
+            {contentGaps.slice(0, 5).map((gap) => (
+              <div
+                key={gap.tag}
+                className="flex items-start justify-between border-b border-border py-3 last:border-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{gap.tagLabel}</p>
+                  <p className="mt-0.5 text-xs text-muted">{gap.suggestion}</p>
+                </div>
+                <span className="ml-4 shrink-0 rounded bg-accent/10 px-2 py-0.5 text-xs text-accent">
+                  {gap.mentionedIn.length} {gap.mentionedIn.length === 1 ? "article" : "articles"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Upcoming Posts */}
       <section>
