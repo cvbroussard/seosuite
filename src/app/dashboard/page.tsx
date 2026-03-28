@@ -33,7 +33,7 @@ export default async function DashboardOverview() {
 
   const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [site, accounts, postStats, assetStats, upcoming, healthData, contentGaps] = await Promise.all([
+  const [site, accounts, postStats, assetStats, upcoming, healthData, contentGaps, blogStats] = await Promise.all([
     sql`SELECT name, url, autopilot_enabled FROM sites WHERE id = ${siteId}`,
     sql`
       SELECT COUNT(*)::int AS total,
@@ -87,6 +87,13 @@ export default async function DashboardOverview() {
            AND status IN ('draft', 'published')) AS unique_assets_used
     `,
     detectContentGaps(siteId),
+    sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'draft')::int AS drafts,
+        COUNT(*) FILTER (WHERE status = 'flagged')::int AS flagged,
+        COUNT(*) FILTER (WHERE status = 'published')::int AS published
+      FROM blog_posts WHERE site_id = ${siteId}
+    `,
   ]);
 
   const p = postStats[0];
@@ -255,6 +262,36 @@ export default async function DashboardOverview() {
                 </span>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Blog Posts */}
+      {(blogStats[0]?.drafts > 0 || blogStats[0]?.flagged > 0 || blogStats[0]?.published > 0) && (
+        <section className="mb-8">
+          <div className="mb-4 flex items-center justify-between">
+            <h2>Blog Posts</h2>
+            <Link href="/dashboard/blog" className="text-sm text-accent hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="flex gap-6">
+            {blogStats[0]?.drafts > 0 && (
+              <Link href="/dashboard/blog?status=draft" className="group">
+                <p className="text-2xl font-semibold">{blogStats[0].drafts}</p>
+                <p className="text-sm text-muted group-hover:text-accent">Awaiting review</p>
+              </Link>
+            )}
+            {blogStats[0]?.flagged > 0 && (
+              <Link href="/dashboard/blog?status=flagged" className="group">
+                <p className="text-2xl font-semibold text-danger">{blogStats[0].flagged}</p>
+                <p className="text-sm text-muted group-hover:text-accent">Flagged</p>
+              </Link>
+            )}
+            <Link href="/dashboard/blog?status=published" className="group">
+              <p className="text-2xl font-semibold text-success">{blogStats[0]?.published || 0}</p>
+              <p className="text-sm text-muted group-hover:text-accent">Published</p>
+            </Link>
           </div>
         </section>
       )}

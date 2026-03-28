@@ -5,6 +5,7 @@ import Link from "next/link";
 import { resolveBlogSiteBySlug, resolveBlogSite, getBlogPost } from "@/lib/blog";
 import { generateArticleSchema } from "@/lib/blog/schema";
 import { autoLinkEntities } from "@/lib/blog/auto-linker";
+import { markdownToHtml } from "@/lib/blog/markdown";
 
 export const dynamic = "force-dynamic";
 
@@ -182,27 +183,3 @@ export default async function ArticlePage({ params }: Props) {
   );
 }
 
-/**
- * Markdown→HTML converter for blog body content.
- */
-function markdownToHtml(md: string): string {
-  return md
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\[(.+?)\]\((https?:\/\/.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`)
-    .split(/\n\n+/)
-    .map((block) => {
-      const trimmed = block.trim();
-      if (!trimmed) return "";
-      if (trimmed.startsWith("<h") || trimmed.startsWith("<ul") || trimmed.startsWith("<img")) return trimmed;
-      return `<p>${trimmed.replace(/\n/g, "<br>")}</p>`;
-    })
-    .join("\n");
-}

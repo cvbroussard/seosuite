@@ -17,6 +17,7 @@ const siteNav = [
   { label: "Media", path: "/media", icon: "▣" },
   { label: "Calendar", path: "/calendar", icon: "▦" },
   { label: "Inbox", path: "/inbox", icon: "▤" },
+  { label: "Blog", path: "/blog", icon: "✎" },
   { label: "SEO", path: "/seo", icon: "◇" },
   { label: "Spotlight", path: "/spotlight", icon: "✦" },
   { label: "Analytics", path: "/analytics", icon: "▥" },

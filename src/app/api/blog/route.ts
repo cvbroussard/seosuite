@@ -134,5 +134,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
+  if (action === "reject") {
+    const { post_id } = body;
+    if (!post_id) return NextResponse.json({ error: "post_id required" }, { status: 400 });
+
+    const [post] = await sql`
+      SELECT bp.id
+      FROM blog_posts bp
+      JOIN sites s ON s.id = bp.site_id
+      WHERE bp.id = ${post_id} AND s.subscriber_id = ${auth.subscriberId}
+    `;
+    if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+
+    await sql`DELETE FROM blog_posts WHERE id = ${post_id}`;
+    return NextResponse.json({ success: true });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

@@ -1,12 +1,19 @@
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { BlogDashboard } from "./blog-dashboard";
+import { BlogSettings } from "./blog-settings";
+import { BlogPostList } from "./blog-post-list";
 import { OnboardingTip } from "@/components/onboarding-tip";
 
 export const dynamic = "force-dynamic";
 
-export default async function BlogPage() {
+const PER_PAGE = 10;
+
+interface Props {
+  searchParams: Promise<{ status?: string; sort?: string; page?: string }>;
+}
+
+export default async function BlogPage({ searchParams }: Props) {
   const session = await getSession();
   if (!session) redirect("/login");
   if (!session.activeSiteId) {
@@ -19,16 +26,14 @@ export default async function BlogPage() {
   }
 
   const siteId = session.activeSiteId;
+  const params = await searchParams;
+  const statusFilter = params.status || "all";
+  const sortOrder = params.sort || "newest";
+  const currentPage = Math.max(1, parseInt(params.page || "1", 10));
+  const offset = (currentPage - 1) * PER_PAGE;
 
-  const [posts, settingsRows] = await Promise.all([
-    sql`
-      SELECT id, slug, title, excerpt, body, og_image_url, status,
-             content_type, content_pillar, metadata, published_at, created_at
-      FROM blog_posts
-      WHERE site_id = ${siteId}
-      ORDER BY created_at DESC
-      LIMIT 50
-    `,
+  // Settings query
+  const [settingsRows] = await Promise.all([
     sql`
       SELECT blog_enabled, subdomain, custom_domain, blog_title, blog_description
       FROM blog_settings
@@ -36,13 +41,83 @@ export default async function BlogPage() {
     `,
   ]);
 
-  const settings = settingsRows[0] || {
+  const settings = settingsRows || {
     blog_enabled: false,
     subdomain: null,
     custom_domain: null,
     blog_title: null,
     blog_description: null,
   };
+
+  // Post queries — branch on status filter and sort
+  // Count query for pagination
+  let posts;
+  let totalCount;
+
+  if (statusFilter === "all") {
+    if (sortOrder === "oldest") {
+      posts = await sql`
+        SELECT id, slug, title, excerpt, body, og_image_url, status,
+               content_type, content_pillar, metadata, published_at, created_at
+        FROM blog_posts WHERE site_id = ${siteId}
+        ORDER BY created_at ASC LIMIT ${PER_PAGE} OFFSET ${offset}
+      `;
+    } else if (sortOrder === "title") {
+      posts = await sql`
+        SELECT id, slug, title, excerpt, body, og_image_url, status,
+               content_type, content_pillar, metadata, published_at, created_at
+        FROM blog_posts WHERE site_id = ${siteId}
+        ORDER BY title ASC LIMIT ${PER_PAGE} OFFSET ${offset}
+      `;
+    } else {
+      posts = await sql`
+        SELECT id, slug, title, excerpt, body, og_image_url, status,
+               content_type, content_pillar, metadata, published_at, created_at
+        FROM blog_posts WHERE site_id = ${siteId}
+        ORDER BY created_at DESC LIMIT ${PER_PAGE} OFFSET ${offset}
+      `;
+    }
+    const [countRow] = await sql`SELECT COUNT(*)::int AS total FROM blog_posts WHERE site_id = ${siteId}`;
+    totalCount = countRow?.total || 0;
+  } else {
+    if (sortOrder === "oldest") {
+      posts = await sql`
+        SELECT id, slug, title, excerpt, body, og_image_url, status,
+               content_type, content_pillar, metadata, published_at, created_at
+        FROM blog_posts WHERE site_id = ${siteId} AND status = ${statusFilter}
+        ORDER BY created_at ASC LIMIT ${PER_PAGE} OFFSET ${offset}
+      `;
+    } else if (sortOrder === "title") {
+      posts = await sql`
+        SELECT id, slug, title, excerpt, body, og_image_url, status,
+               content_type, content_pillar, metadata, published_at, created_at
+        FROM blog_posts WHERE site_id = ${siteId} AND status = ${statusFilter}
+        ORDER BY title ASC LIMIT ${PER_PAGE} OFFSET ${offset}
+      `;
+    } else {
+      posts = await sql`
+        SELECT id, slug, title, excerpt, body, og_image_url, status,
+               content_type, content_pillar, metadata, published_at, created_at
+        FROM blog_posts WHERE site_id = ${siteId} AND status = ${statusFilter}
+        ORDER BY created_at DESC LIMIT ${PER_PAGE} OFFSET ${offset}
+      `;
+    }
+    const [countRow] = await sql`SELECT COUNT(*)::int AS total FROM blog_posts WHERE site_id = ${siteId} AND status = ${statusFilter}`;
+    totalCount = countRow?.total || 0;
+  }
+
+  // Status counts for filter badges
+  const statusCounts = await sql`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status = 'draft')::int AS draft,
+      COUNT(*) FILTER (WHERE status = 'published')::int AS published,
+      COUNT(*) FILTER (WHERE status = 'flagged')::int AS flagged
+    FROM blog_posts WHERE site_id = ${siteId}
+  `;
+  const counts = statusCounts[0] || { total: 0, draft: 0, published: 0, flagged: 0 };
+
+  const totalPages = Math.ceil(totalCount / PER_PAGE);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -51,17 +126,43 @@ export default async function BlogPage() {
         message="Your blog is your SEO engine. Every post is a page Google indexes. This is how clients find you when they search for what you do."
         incomplete={!settings.blog_enabled}
       />
-      <h1 className="mb-1 text-lg font-semibold">Blog</h1>
-      <p className="mb-8 text-sm text-muted">
-        {settings.blog_enabled
-          ? "Blog is active — posts generate automatically from your uploads"
-          : "Enable the blog to auto-generate posts from your content"}
-      </p>
 
-      <BlogDashboard
+      <div className="mb-6 flex items-baseline justify-between">
+        <div>
+          <h1 className="mb-1 text-lg font-semibold">Blog</h1>
+          <p className="text-sm text-muted">
+            {settings.blog_enabled
+              ? "Posts generate automatically from your uploads"
+              : "Enable the blog to start generating posts"}
+          </p>
+        </div>
+      </div>
+
+      <BlogSettings
         siteId={siteId}
-        initialSettings={settings as Parameters<typeof BlogDashboard>[0]["initialSettings"]}
-        initialPosts={posts as Parameters<typeof BlogDashboard>[0]["initialPosts"]}
+        initialSettings={settings as {
+          blog_enabled: boolean;
+          subdomain: string | null;
+          custom_domain: string | null;
+          blog_title: string | null;
+          blog_description: string | null;
+        }}
+      />
+
+      <BlogPostList
+        posts={posts as Array<{
+          id: string; slug: string; title: string; excerpt: string | null;
+          body: string | null; og_image_url: string | null; status: string;
+          content_type: string | null; content_pillar: string | null;
+          metadata: Record<string, unknown> | null;
+          published_at: string | null; created_at: string;
+        }>}
+        statusFilter={statusFilter}
+        sortOrder={sortOrder}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        counts={counts as { total: number; draft: number; published: number; flagged: number }}
       />
     </div>
   );
