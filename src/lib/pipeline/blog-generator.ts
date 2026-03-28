@@ -163,7 +163,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   }
 
   // Research entities mentioned in the context note
-  const research = await researchContextNote((asset.context_note as string) || "", usedImageUrls);
+  const research = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string);
 
   // Fetch vendor URLs linked to this asset (from vendor table)
   const assetVendors = await sql`

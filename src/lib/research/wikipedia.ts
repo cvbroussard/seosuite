@@ -4,6 +4,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { generateEditorialImage } from "@/lib/image-gen/gemini";
+import { uploadBufferToR2 } from "@/lib/r2";
 
 const anthropic = new Anthropic();
 
@@ -289,14 +291,14 @@ async function searchCommonsImages(
 }
 
 /**
- * AI-powered visual gap analysis.
- * Given extracted entities, generates targeted image search queries
- * for Wikimedia Commons that complement the subscriber's own photos.
+ * AI-powered editorial image prompt generation.
+ * Given extracted entities and context, generates prompts for AI image generation
+ * that complement the subscriber's own photos.
  */
-async function generateImageSearchQueries(
+async function generateImagePrompts(
   entities: ExtractedEntities,
   contextNote: string
-): Promise<string[]> {
+): Promise<Array<{ prompt: string; alt: string }>> {
   const allEntities = [
     ...entities.materials,
     ...entities.brands,
@@ -309,35 +311,39 @@ async function generateImageSearchQueries(
   try {
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 256,
+      max_tokens: 512,
       messages: [{
         role: "user",
-        content: `Generate 2-4 SHORT image search queries for Wikimedia Commons.
+        content: `Generate 2-3 editorial photograph prompts for AI image generation.
 
 Context note (how these materials/vendors are being used):
 "${contextNote}"
 
 Entities: ${allEntities.join(", ")}
 
-I need editorial photos that show HOW these materials exist BEFORE they become a finished product:
-- Material in its raw/processed form as used in this context (e.g., "walnut lumber slab" not "walnut tree autumn")
-- Workshop or manufacturing process
-- Origin location or cultural context
+Generate prompts for images that show the CRAFT and ORIGIN behind these materials:
+- Raw materials being processed (lumber mill, metal workshop, tile workshop)
+- Artisans and craftspeople working with these materials
+- The material in its pre-installation state (slab, sheet, raw tile)
 
-CRITICAL: Match the image to how the material is USED, not its biological/botanical identity.
-- "black walnut countertop" → search "walnut wood slab" or "walnut lumber grain"
-- "zellige backsplash" → search "zellige workshop Morocco" or "zellige tiles Fez"
-- NOT tree photos, NOT leaf close-ups, NOT botanical specimens
+Each prompt should be a detailed editorial photograph description.
+Include: subject, setting, lighting, composition, "documentary style"
 
-KEEP QUERIES SHORT — 2-3 words max.
-Return ONLY a JSON array of strings.`,
+Return ONLY JSON array, no markdown:
+[{"prompt": "Editorial photograph of...", "alt": "Short alt text for the image"}]
+
+Example:
+[
+  {"prompt": "Editorial photograph of a Moroccan artisan hand-cutting zellige tiles in a traditional workshop in Fez, natural daylight, raw terracotta pieces and finished glazed tiles on the workbench, documentary style", "alt": "Artisan hand-cutting zellige tiles in a Fez workshop"},
+  {"prompt": "Editorial photograph of a black walnut wood slab being planed on a workbench in a lumber mill, visible grain pattern, sawdust, natural light from workshop windows, documentary style", "alt": "Black walnut slab being planed in a lumber mill"}
+]`,
       }],
     });
 
     const text = response.content[0].type === "text" ? response.content[0].text : "";
     const cleaned = text.replace(/```json?\s*/g, "").replace(/```/g, "").trim();
-    const queries = JSON.parse(cleaned);
-    return Array.isArray(queries) ? queries.slice(0, 4) : [];
+    const prompts = JSON.parse(cleaned);
+    return Array.isArray(prompts) ? prompts.slice(0, 3) : [];
   } catch {
     return [];
   }
@@ -383,10 +389,10 @@ function isRelevantResult(summary: WikiSummary, searchTerm: string, contextNote:
  */
 export async function researchContextNote(
   contextNote: string,
-  excludeImageUrls: string[] = []
+  excludeImageUrls: string[] = [],
+  siteId?: string
 ): Promise<string> {
   if (!contextNote) return "";
-  const excludeSet = new Set(excludeImageUrls);
 
   const terms = await extractResearchTerms(contextNote);
   if (terms.length === 0) return "";
@@ -438,28 +444,34 @@ Content note: "${contextNote}"
     }
   }
 
-  // 2. Targeted Wikimedia Commons search for editorial images
-  const imageQueries = await generateImageSearchQueries(entities, contextNote);
-  if (imageQueries.length > 0) {
-    const commonsImages: Array<{ url: string; description: string; query: string }> = [];
+  // 2. AI-generated editorial images (Gemini / Nano Banana)
+  if (siteId) {
+    const imagePrompts = await generateImagePrompts(entities, contextNote);
+    if (imagePrompts.length > 0) {
+      const editorialImages: Array<{ url: string; alt: string }> = [];
 
-    for (const query of imageQueries) {
-      const images = await searchCommonsImages(query, 2);
-      for (const img of images) {
-        // Deduplicate by URL and exclude already-used images
-        if (!commonsImages.some((c) => c.url === img.url) && !excludeSet.has(img.url)) {
-          commonsImages.push({ ...img, query });
+      for (const imgPrompt of imagePrompts.slice(0, 3)) {
+        try {
+          const image = await generateEditorialImage(imgPrompt.prompt);
+          if (image) {
+            const ext = image.mimeType.includes("png") ? "png" : "jpg";
+            const key = `sites/${siteId}/editorial/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+            const url = await uploadBufferToR2(key, image.data, image.mimeType);
+            editorialImages.push({ url, alt: imgPrompt.alt });
+          }
+        } catch (err) {
+          console.warn("Editorial image gen failed:", err instanceof Error ? err.message : err);
         }
       }
-    }
 
-    if (commonsImages.length > 0) {
-      let entry = "## Editorial Images (from Wikimedia Commons — public domain, embed these in the article)";
-      entry += "\nThese are research/editorial images that complement the subscriber's own photos:";
-      for (const img of commonsImages.slice(0, 4)) {
-        entry += `\n- ![${img.description}](${img.url}) — searched: "${img.query}"`;
+      if (editorialImages.length > 0) {
+        let entry = "## Editorial Images (AI-generated, embed these in the article)";
+        entry += "\nThese are editorial images that complement the subscriber's own photos:";
+        for (const img of editorialImages) {
+          entry += `\n- ![${img.alt}](${img.url})`;
+        }
+        results.push(entry);
       }
-      results.push(entry);
     }
   }
 
