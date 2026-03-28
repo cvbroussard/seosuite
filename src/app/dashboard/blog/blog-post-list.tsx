@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { markdownToHtml, blogProseStyles } from "@/lib/blog/markdown";
 
@@ -56,8 +55,6 @@ export function BlogPostList({
   const [repromptUrl, setRepromptUrl] = useState<string | null>(null);
   const [repromptNote, setRepromptNote] = useState("");
   const [reprompting, setReprompting] = useState(false);
-  const [portalTarget, setPortalTarget] = useState<HTMLDivElement | null>(null);
-  const proseRef = useRef<HTMLDivElement>(null);
 
   function updateParams(updates: Record<string, string>) {
     const params = new URLSearchParams();
@@ -131,39 +128,15 @@ export function BlogPostList({
   const hasEditorialImages = (post: Post): boolean =>
     Array.isArray(post.metadata?.editorial_images) && (post.metadata.editorial_images as unknown[]).length > 0;
 
-  // Attach click handlers to editorial images in the prose container
-  useEffect(() => {
-    if (!proseRef.current || !previewing) return;
-
-    // Clean up any previously injected form container
-    const existing = proseRef.current.querySelector("#reprompt-inline-form");
-    if (existing) existing.remove();
-    setPortalTarget(null);
-
-    const imgs = proseRef.current.querySelectorAll("img");
-    imgs.forEach((img) => {
-      if (img.src.includes("/editorial/")) {
-        img.style.cursor = "pointer";
-        img.style.outline = repromptUrl === img.src ? "2px solid var(--accent)" : "";
-        img.title = "Click to adjust this image";
-        img.onclick = (e) => {
-          e.preventDefault();
-          setRepromptUrl(img.src);
-          setRepromptNote("");
-        };
-
-        // Inject portal container right after the selected image
-        if (repromptUrl === img.src) {
-          const container = document.createElement("div");
-          container.id = "reprompt-inline-form";
-          container.style.cssText = "margin: 12px 0; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface-hover);";
-          img.insertAdjacentElement("afterend", container);
-          // Use state setter to trigger re-render so portal picks up the target
-          setPortalTarget(container);
-        }
-      }
-    });
-  }, [previewing, repromptUrl]);
+  // Build prose HTML with clickable editorial images
+  function buildProseHtml(body: string): string {
+    const html = markdownToHtml(body);
+    // Add data attribute to editorial images so we can handle clicks
+    return html.replace(
+      /<img ([^>]*src="[^"]*\/editorial\/[^"]*"[^>]*)>/g,
+      '<img $1 data-editorial="true" style="cursor:pointer;border:2px solid transparent;border-radius:8px;" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'transparent\'">'
+    );
+  }
 
   async function handleReprompt() {
     if (!previewing || !repromptUrl || !repromptNote.trim()) return;
@@ -384,47 +357,82 @@ export function BlogPostList({
                 <p className="mb-6 text-sm italic text-muted">{previewing.excerpt}</p>
               )}
 
-              {previewing.body && (
-                <div
-                  ref={proseRef}
-                  className="preview-prose"
-                  dangerouslySetInnerHTML={{ __html: markdownToHtml(previewing.body) }}
-                />
-              )}
+              {previewing.body && (() => {
+                const html = buildProseHtml(previewing.body);
 
-              {/* Image re-prompt form — portaled inline below the clicked image */}
-              {repromptUrl && hasEditorialImages(previewing) && portalTarget && createPortal(
-                <div>
-                  <p className="mb-1 text-xs font-medium">Adjust this image</p>
-                  <p className="mb-2 text-[10px] text-muted">
-                    This correction will apply to all future articles.
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      value={repromptNote}
-                      onChange={(e) => setRepromptNote(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleReprompt()}
-                      className="flex-1 text-sm"
-                      placeholder="e.g., spray paint line not brush"
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleReprompt}
-                      disabled={reprompting || !repromptNote.trim()}
-                      className="bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                    >
-                      {reprompting ? "Generating..." : "Regenerate"}
-                    </button>
-                    <button
-                      onClick={() => { setRepromptUrl(null); setRepromptNote(""); }}
-                      className="px-2 py-1.5 text-xs text-muted hover:text-foreground"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>,
-                portalTarget
-              )}
+                // If an editorial image is selected, split HTML and inject form
+                if (repromptUrl && hasEditorialImages(previewing)) {
+                  // Find the img tag with this URL and split after it
+                  const imgPattern = `<img [^>]*src="${repromptUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*>`;
+                  const match = html.match(new RegExp(imgPattern));
+                  if (match && match.index !== undefined) {
+                    const splitAt = match.index + match[0].length;
+                    const before = html.slice(0, splitAt);
+                    const after = html.slice(splitAt);
+                    return (
+                      <>
+                        <div
+                          className="preview-prose"
+                          onClick={(e) => {
+                            const img = (e.target as HTMLElement).closest("img[data-editorial]") as HTMLImageElement | null;
+                            if (img) { setRepromptUrl(img.src); setRepromptNote(""); }
+                          }}
+                          dangerouslySetInnerHTML={{ __html: before }}
+                        />
+                        <div className="my-3 rounded border border-accent/30 bg-accent/5 p-3">
+                          <p className="mb-1 text-xs font-medium">Adjust this image</p>
+                          <p className="mb-2 text-[10px] text-muted">
+                            This correction will apply to all future articles.
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              value={repromptNote}
+                              onChange={(e) => setRepromptNote(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleReprompt()}
+                              className="flex-1 text-sm"
+                              placeholder="e.g., spray paint line not brush"
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleReprompt}
+                              disabled={reprompting || !repromptNote.trim()}
+                              className="bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                            >
+                              {reprompting ? "Generating..." : "Regenerate"}
+                            </button>
+                            <button
+                              onClick={() => { setRepromptUrl(null); setRepromptNote(""); }}
+                              className="px-2 py-1.5 text-xs text-muted hover:text-foreground"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                        <div
+                          className="preview-prose"
+                          onClick={(e) => {
+                            const img = (e.target as HTMLElement).closest("img[data-editorial]") as HTMLImageElement | null;
+                            if (img) { setRepromptUrl(img.src); setRepromptNote(""); }
+                          }}
+                          dangerouslySetInnerHTML={{ __html: after }}
+                        />
+                      </>
+                    );
+                  }
+                }
+
+                // Default: no image selected, render full body with click detection
+                return (
+                  <div
+                    className="preview-prose"
+                    onClick={(e) => {
+                      const img = (e.target as HTMLElement).closest("img[data-editorial]") as HTMLImageElement | null;
+                      if (img && hasEditorialImages(previewing)) { setRepromptUrl(img.src); setRepromptNote(""); }
+                    }}
+                    dangerouslySetInnerHTML={{ __html: html }}
+                  />
+                );
+              })()}
             </div>
 
             {/* SEO metadata preview */}
