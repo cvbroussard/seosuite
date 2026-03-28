@@ -40,16 +40,16 @@ export async function extractResearchTerms(contextNote: string): Promise<string[
 
 Content note: "${contextNote}"
 
-Extract named entities and make them Wikipedia-searchable. Add category context to disambiguate:
-- brands: Company names with their industry (e.g., "Wolf appliances", "Thermador refrigerator", "Sub-Zero refrigeration")
-- materials: Specific materials with context (e.g., "zellige tile", "black walnut wood", "Calacatta marble")
-- techniques: Industry methods (e.g., "inset cabinetry", "sous vide cooking")
-- products: Specific product lines (e.g., "Brizo Litze faucet", "Viking Professional range")
+Extract named entities. Use the PROPER NAME as it would appear on Wikipedia:
+- brands: Company/manufacturer proper names (e.g., "Sub-Zero", "Thermador", "Wolf")
+- materials: Material proper names (e.g., "zellige", "black walnut", "Calacatta marble")
+- techniques: Technique proper names (e.g., "inset cabinetry", "sous vide")
+- products: Product line proper names (e.g., "Brizo Litze", "Viking Professional")
 
-IMPORTANT: Add a disambiguating word to each term so Wikipedia finds the right article.
-For example: "Sub-Zero" alone → Mortal Kombat character. "Sub-Zero refrigeration" → the appliance brand.
+Use the entity's actual name — NOT with generic suffixes like "tile", "wood", "appliance", "refrigeration".
+For example: "zellige" not "zellige tile". "black walnut" not "black walnut wood". "Sub-Zero" not "Sub-Zero refrigeration".
 
-Only include terms that are specific and researchable. Skip generic words and small/local vendors unlikely to have Wikipedia pages.
+Only include terms that are specific and researchable on Wikipedia. Skip generic words and small/local vendors.
 If nothing specific is found, return empty arrays.
 
 {"brands":[],"materials":[],"techniques":[],"products":[]}`,
@@ -101,7 +101,7 @@ export async function lookupWikipedia(term: string): Promise<WikiSummary | null>
 
     // Fallback: search API
     const fallbackRes = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`,
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1`,
       { signal: AbortSignal.timeout(5000) }
     );
 
@@ -143,7 +143,7 @@ export async function lookupWikipedia(term: string): Promise<WikiSummary | null>
 async function fetchWikiImages(title: string): Promise<Array<{ url: string; description: string }>> {
   try {
     const res = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=images&format=json&imlimit=10&origin=*`,
+      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=images&format=json&imlimit=10`,
       { signal: AbortSignal.timeout(5000) }
     );
 
@@ -154,21 +154,104 @@ async function fetchWikiImages(title: string): Promise<Array<{ url: string; desc
     const page = Object.values(pages)[0] as Record<string, unknown>;
     const imageList = (page?.images || []) as Array<{ title: string }>;
 
-    // Filter out icons, logos, and common non-content images
+    // Filter out icons, logos, fractals, and non-content images
     const contentImages = imageList.filter((img) => {
       const name = img.title.toLowerCase();
       return !name.includes("icon") && !name.includes("logo") && !name.includes("flag")
         && !name.includes("symbol") && !name.includes("commons-logo")
+        && !name.includes("fractal") && !name.includes("fibonacci")
+        && !name.includes("diagram") && !name.includes("graph")
         && (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png"));
     }).slice(0, 3);
 
-    // Get actual URLs for filtered images
+    return resolveImageUrls(contentImages);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve File: titles to actual URLs with metadata.
+ */
+async function resolveImageUrls(
+  images: Array<{ title: string }>
+): Promise<Array<{ url: string; description: string }>> {
+  const results: Array<{ url: string; description: string }> = [];
+
+  for (const img of images) {
+    try {
+      const infoRes = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(img.title)}&prop=imageinfo&iiprop=url|size|extmetadata&format=json`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+
+      if (!infoRes.ok) continue;
+
+      const infoData = await infoRes.json();
+      const infoPages = infoData.query?.pages || {};
+      const infoPage = Object.values(infoPages)[0] as Record<string, unknown>;
+      const imageInfo = (infoPage?.imageinfo as Array<Record<string, unknown>>)?.[0];
+
+      if (!imageInfo?.url) continue;
+
+      // Quality filter: skip images smaller than 400px wide
+      const width = (imageInfo.width as number) || 0;
+      if (width > 0 && width < 400) continue;
+
+      const extMeta = imageInfo.extmetadata as Record<string, { value: string }> | undefined;
+      const desc = extMeta?.ImageDescription?.value?.replace(/<[^>]+>/g, "").slice(0, 100)
+        || img.title.replace("File:", "").replace(/\.[^.]+$/, "").replace(/_/g, " ");
+
+      results.push({
+        url: imageInfo.url as string,
+        description: desc,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Search Wikimedia Commons directly for targeted visual content.
+ * More intentional than grabbing whatever's on the Wikipedia article page.
+ */
+async function searchCommonsImages(
+  query: string,
+  limit = 3
+): Promise<Array<{ url: string; description: string }>> {
+  try {
+    const res = await fetch(
+      `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json&srlimit=${limit}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const searchResults = (data.query?.search || []) as Array<{ title: string }>;
+
+    if (searchResults.length === 0) return [];
+
+    // Filter to photos only — no PDFs, SVGs, icons, logos, maps
+    const photoResults = searchResults.filter((r) => {
+      const name = r.title.toLowerCase();
+      return (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png"))
+        && !name.includes("icon") && !name.includes("logo") && !name.includes("flag")
+        && !name.includes("coat_of_arms") && !name.includes("map")
+        && !name.includes("diagram") && !name.includes("chart")
+        && !name.includes("table") && !name.includes("graph");
+    });
+
+    // Resolve URLs using Commons API (not Wikipedia)
     const results: Array<{ url: string; description: string }> = [];
 
-    for (const img of contentImages) {
+    for (const img of photoResults.slice(0, limit)) {
       try {
         const infoRes = await fetch(
-          `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(img.title)}&prop=imageinfo&iiprop=url|extmetadata&format=json&origin=*`,
+          `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(img.title)}&prop=imageinfo&iiprop=url|size|extmetadata&format=json`,
           { signal: AbortSignal.timeout(5000) }
         );
 
@@ -179,22 +262,70 @@ async function fetchWikiImages(title: string): Promise<Array<{ url: string; desc
         const infoPage = Object.values(infoPages)[0] as Record<string, unknown>;
         const imageInfo = (infoPage?.imageinfo as Array<Record<string, unknown>>)?.[0];
 
-        if (imageInfo?.url) {
-          const extMeta = imageInfo.extmetadata as Record<string, { value: string }> | undefined;
-          const desc = extMeta?.ImageDescription?.value?.replace(/<[^>]+>/g, "").slice(0, 100)
-            || img.title.replace("File:", "").replace(/\.[^.]+$/, "").replace(/_/g, " ");
+        if (!imageInfo?.url) continue;
 
-          results.push({
-            url: imageInfo.url as string,
-            description: desc,
-          });
-        }
+        const width = (imageInfo.width as number) || 0;
+        if (width > 0 && width < 400) continue;
+
+        const extMeta = imageInfo.extmetadata as Record<string, { value: string }> | undefined;
+        const desc = extMeta?.ImageDescription?.value?.replace(/<[^>]+>/g, "").slice(0, 120)
+          || img.title.replace("File:", "").replace(/\.[^.]+$/, "").replace(/_/g, " ");
+
+        results.push({
+          url: imageInfo.url as string,
+          description: desc,
+        });
       } catch {
         continue;
       }
     }
 
     return results;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * AI-powered visual gap analysis.
+ * Given extracted entities, generates targeted image search queries
+ * for Wikimedia Commons that complement the subscriber's own photos.
+ */
+async function generateImageSearchQueries(
+  entities: ExtractedEntities
+): Promise<string[]> {
+  const allEntities = [
+    ...entities.materials,
+    ...entities.brands,
+    ...entities.techniques,
+    ...entities.products,
+  ];
+
+  if (allEntities.length === 0) return [];
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 256,
+      messages: [{
+        role: "user",
+        content: `Generate 2-4 SHORT image search queries for Wikimedia Commons. Topics: ${allEntities.join(", ")}
+
+I need photos of: raw materials, workshops, craftsmanship, origin locations, or historical context.
+NOT finished products — the business has those.
+
+KEEP QUERIES SHORT — 2-3 words max. Commons search works best with simple terms.
+Good: "zellige Morocco", "walnut lumber", "cabinetry workshop"
+Bad: "zellige tilework craftsmanship Morocco traditional artisan" (too long, zero results)
+
+Return ONLY a JSON array of strings.`,
+      }],
+    });
+
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const cleaned = text.replace(/```json?\s*/g, "").replace(/```/g, "").trim();
+    const queries = JSON.parse(cleaned);
+    return Array.isArray(queries) ? queries.slice(0, 4) : [];
   } catch {
     return [];
   }
@@ -232,7 +363,11 @@ function isRelevantResult(summary: WikiSummary, searchTerm: string, contextNote:
 
 /**
  * Research all entities from a context note and return combined background.
- * Includes text summaries and image references.
+ * Includes text summaries and targeted visual references.
+ *
+ * Two image sources:
+ * 1. Wikipedia article images (incidental — whatever's on the page)
+ * 2. Wikimedia Commons search (intentional — targeted visual queries)
  */
 export async function researchContextNote(contextNote: string): Promise<string> {
   if (!contextNote) return "";
@@ -240,16 +375,33 @@ export async function researchContextNote(contextNote: string): Promise<string> 
   const terms = await extractResearchTerms(contextNote);
   if (terms.length === 0) return "";
 
+  // Re-extract structured entities for image query generation
+  let entities: ExtractedEntities = { brands: [], materials: [], techniques: [], products: [] };
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 256,
+      messages: [{
+        role: "user",
+        content: `Extract named entities from this content note. Return ONLY valid JSON, no markdown.
+
+Content note: "${contextNote}"
+
+{"brands":[],"materials":[],"techniques":[],"products":[]}`,
+      }],
+    });
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const cleaned = text.replace(/```json?\s*/g, "").replace(/```/g, "").trim();
+    entities = JSON.parse(cleaned);
+  } catch { /* use empty entities */ }
+
   const results: string[] = [];
 
+  // 1. Wikipedia text research + article images
   for (const term of terms) {
-    // Add context to disambiguate — try the specific term first,
-    // then fall back to term + category hint from context
     let summary = await lookupWikipedia(term);
 
-    // Check relevance — reject pop culture / fictional matches
     if (summary && !isRelevantResult(summary, term, contextNote)) {
-      // Retry with category context appended
       const categoryHints = ["material", "manufacturer", "appliance", "tile", "woodworking"];
       let found = false;
       for (const hint of categoryHints) {
@@ -261,15 +413,12 @@ export async function researchContextNote(contextNote: string): Promise<string> 
           }
         }
       }
-      if (!found) {
-        summary = null; // Drop irrelevant result entirely
-      }
+      if (!found) summary = null;
     }
 
     if (summary) {
       let entry = `**${summary.title}**: ${summary.extract}`;
 
-      // Add image references for the blog to use
       if (summary.images.length > 0) {
         entry += "\nReference images (public domain, can be embedded in blog):";
         for (const img of summary.images) {
@@ -279,6 +428,31 @@ export async function researchContextNote(contextNote: string): Promise<string> 
         entry += `\nReference image: ![${summary.title}](${summary.thumbnail})`;
       }
 
+      results.push(entry);
+    }
+  }
+
+  // 2. Targeted Wikimedia Commons search for editorial images
+  const imageQueries = await generateImageSearchQueries(entities);
+  if (imageQueries.length > 0) {
+    const commonsImages: Array<{ url: string; description: string; query: string }> = [];
+
+    for (const query of imageQueries) {
+      const images = await searchCommonsImages(query, 2);
+      for (const img of images) {
+        // Deduplicate by URL
+        if (!commonsImages.some((c) => c.url === img.url)) {
+          commonsImages.push({ ...img, query });
+        }
+      }
+    }
+
+    if (commonsImages.length > 0) {
+      let entry = "## Editorial Images (from Wikimedia Commons — public domain, embed these in the article)";
+      entry += "\nThese are research/editorial images that complement the subscriber's own photos:";
+      for (const img of commonsImages.slice(0, 4)) {
+        entry += `\n- ![${img.description}](${img.url}) — searched: "${img.query}"`;
+      }
       results.push(entry);
     }
   }
