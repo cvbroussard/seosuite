@@ -6,8 +6,21 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { generateEditorialImage } from "@/lib/image-gen/gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
+import { sql } from "@/lib/db";
 
 const anthropic = new Anthropic();
+
+export interface EditorialImageMeta {
+  url: string;
+  prompt: string;
+  alt: string;
+  entities: string[];
+}
+
+export interface ResearchResult {
+  text: string;
+  editorialImages: EditorialImageMeta[];
+}
 
 interface WikiSummary {
   title: string;
@@ -297,7 +310,8 @@ async function searchCommonsImages(
  */
 async function generateImagePrompts(
   entities: ExtractedEntities,
-  contextNote: string
+  contextNote: string,
+  corrections: Array<{ entity_key: string; correction: string }> = []
 ): Promise<Array<{ prompt: string; alt: string }>> {
   const allEntities = [
     ...entities.materials,
@@ -336,6 +350,9 @@ CRITICAL: Each image MUST use a DIFFERENT photographic style. Pick from these:
 - Bright clean studio-adjacent, even lighting, product-forward composition
 
 Do NOT repeat the same lighting or mood across prompts. Vary framing (wide, medium, close-up).
+${corrections.length > 0
+  ? `\nIMPORTANT — Apply these subscriber corrections for accuracy:\n${corrections.map((c) => `- ${c.entity_key}: "${c.correction}"`).join("\n")}`
+  : ""}
 
 Return ONLY JSON array, no markdown:
 [{"prompt": "Editorial photograph of...", "alt": "Short alt text for the image"}]`,
@@ -393,11 +410,12 @@ export async function researchContextNote(
   contextNote: string,
   excludeImageUrls: string[] = [],
   siteId?: string
-): Promise<string> {
-  if (!contextNote) return "";
+): Promise<ResearchResult> {
+  const empty: ResearchResult = { text: "", editorialImages: [] };
+  if (!contextNote) return empty;
 
   const terms = await extractResearchTerms(contextNote);
-  if (terms.length === 0) return "";
+  if (terms.length === 0) return empty;
 
   // Re-extract structured entities for image query generation
   let entities: ExtractedEntities = { brands: [], materials: [], techniques: [], products: [] };
@@ -447,11 +465,25 @@ Content note: "${contextNote}"
   }
 
   // 2. AI-generated editorial images (Gemini / Nano Banana)
-  if (siteId) {
-    const imagePrompts = await generateImagePrompts(entities, contextNote);
-    if (imagePrompts.length > 0) {
-      const editorialImages: Array<{ url: string; alt: string }> = [];
+  const editorialImagesMeta: EditorialImageMeta[] = [];
 
+  if (siteId) {
+    // Fetch persistent corrections for entities in this context
+    const allEntityKeys = [
+      ...entities.brands, ...entities.materials,
+      ...entities.techniques, ...entities.products,
+    ].map((e) => e.toLowerCase());
+
+    let corrections: Array<{ entity_key: string; correction: string }> = [];
+    if (allEntityKeys.length > 0) {
+      corrections = await sql`
+        SELECT entity_key, correction FROM image_corrections
+        WHERE site_id = ${siteId} AND entity_key = ANY(${allEntityKeys})
+      ` as Array<{ entity_key: string; correction: string }>;
+    }
+
+    const imagePrompts = await generateImagePrompts(entities, contextNote, corrections);
+    if (imagePrompts.length > 0) {
       for (const imgPrompt of imagePrompts.slice(0, 3)) {
         try {
           const image = await generateEditorialImage(imgPrompt.prompt);
@@ -459,17 +491,24 @@ Content note: "${contextNote}"
             const ext = image.mimeType.includes("png") ? "png" : "jpg";
             const key = `sites/${siteId}/editorial/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
             const url = await uploadBufferToR2(key, image.data, image.mimeType);
-            editorialImages.push({ url, alt: imgPrompt.alt });
+
+            const meta: EditorialImageMeta = {
+              url,
+              prompt: imgPrompt.prompt,
+              alt: imgPrompt.alt,
+              entities: allEntityKeys.slice(0, 5),
+            };
+            editorialImagesMeta.push(meta);
           }
         } catch (err) {
           console.warn("Editorial image gen failed:", err instanceof Error ? err.message : err);
         }
       }
 
-      if (editorialImages.length > 0) {
+      if (editorialImagesMeta.length > 0) {
         let entry = "## Editorial Images (AI-generated, embed these in the article)";
         entry += "\nThese are editorial images that complement the subscriber's own photos:";
-        for (const img of editorialImages) {
+        for (const img of editorialImagesMeta) {
           entry += `\n- ![${img.alt}](${img.url})`;
         }
         results.push(entry);
@@ -477,7 +516,10 @@ Content note: "${contextNote}"
     }
   }
 
-  if (results.length === 0) return "";
+  if (results.length === 0) return empty;
 
-  return results.join("\n\n");
+  return {
+    text: results.join("\n\n"),
+    editorialImages: editorialImagesMeta,
+  };
 }

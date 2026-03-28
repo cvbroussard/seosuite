@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { markdownToHtml, blogProseStyles } from "@/lib/blog/markdown";
 
@@ -52,6 +52,10 @@ export function BlogPostList({
   const router = useRouter();
   const [previewing, setPreviewing] = useState<Post | null>(null);
   const [acting, setActing] = useState<string | null>(null);
+  const [repromptUrl, setRepromptUrl] = useState<string | null>(null);
+  const [repromptNote, setRepromptNote] = useState("");
+  const [reprompting, setReprompting] = useState(false);
+  const proseRef = useRef<HTMLDivElement>(null);
 
   function updateParams(updates: Record<string, string>) {
     const params = new URLSearchParams();
@@ -122,6 +126,62 @@ export function BlogPostList({
   const guardFlags = (post: Post): string[] =>
     (post.metadata?.guard_flags as string[]) || [];
 
+  const hasEditorialImages = (post: Post): boolean =>
+    Array.isArray(post.metadata?.editorial_images) && (post.metadata.editorial_images as unknown[]).length > 0;
+
+  // Attach click handlers to editorial images in the prose container
+  useEffect(() => {
+    if (!proseRef.current || !previewing) return;
+    const imgs = proseRef.current.querySelectorAll("img");
+    imgs.forEach((img) => {
+      if (img.src.includes("/editorial/")) {
+        img.style.cursor = "pointer";
+        img.style.outline = repromptUrl === img.src ? "2px solid var(--accent)" : "";
+        img.title = "Click to adjust this image";
+        img.onclick = (e) => {
+          e.preventDefault();
+          setRepromptUrl(img.src);
+          setRepromptNote("");
+        };
+      }
+    });
+  }, [previewing, repromptUrl]);
+
+  async function handleReprompt() {
+    if (!previewing || !repromptUrl || !repromptNote.trim()) return;
+    setReprompting(true);
+    try {
+      const res = await fetch("/api/blog/reprompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_id: previewing.id,
+          image_url: repromptUrl,
+          adjustment: repromptNote.trim(),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Update the previewing post body with the new URL
+        if (previewing.body) {
+          setPreviewing({
+            ...previewing,
+            body: previewing.body.replace(repromptUrl, data.new_url),
+          });
+        }
+        setRepromptUrl(null);
+        setRepromptNote("");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Re-prompt failed");
+      }
+    } catch {
+      alert("Re-prompt failed");
+    } finally {
+      setReprompting(false);
+    }
+  }
+
   return (
     <>
       {/* Filter bar */}
@@ -178,7 +238,7 @@ export function BlogPostList({
             return (
               <button
                 key={post.id}
-                onClick={() => setPreviewing(post)}
+                onClick={() => { setPreviewing(post); setRepromptUrl(null); setRepromptNote(""); }}
                 className="flex w-full items-center gap-4 rounded-lg border border-border bg-surface p-4 text-left transition-colors hover:border-accent/30"
               >
                 {post.og_image_url && (
@@ -308,9 +368,43 @@ export function BlogPostList({
 
               {previewing.body && (
                 <div
+                  ref={proseRef}
                   className="preview-prose"
                   dangerouslySetInnerHTML={{ __html: markdownToHtml(previewing.body) }}
                 />
+              )}
+
+              {/* Image re-prompt form */}
+              {repromptUrl && hasEditorialImages(previewing) && (
+                <div className="mt-4 rounded border border-accent/30 bg-accent/5 p-4">
+                  <p className="mb-2 text-xs font-medium">Adjust this image</p>
+                  <p className="mb-2 text-[10px] text-muted">
+                    Describe what should change. This correction will apply to all future articles.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      value={repromptNote}
+                      onChange={(e) => setRepromptNote(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleReprompt()}
+                      className="flex-1 text-sm"
+                      placeholder="e.g., spray paint line not brush, woman making tile not man"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleReprompt}
+                      disabled={reprompting || !repromptNote.trim()}
+                      className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                    >
+                      {reprompting ? "Generating..." : "Regenerate"}
+                    </button>
+                    <button
+                      onClick={() => { setRepromptUrl(null); setRepromptNote(""); }}
+                      className="px-3 py-2 text-xs text-muted hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 

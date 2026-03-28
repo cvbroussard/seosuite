@@ -1,0 +1,103 @@
+import { NextRequest, NextResponse } from "next/server";
+import { authenticateRequest, AuthContext } from "@/lib/auth";
+import { sql } from "@/lib/db";
+import { generateEditorialImage } from "@/lib/image-gen/gemini";
+import { uploadBufferToR2 } from "@/lib/r2";
+
+/**
+ * POST /api/blog/reprompt — Re-generate an editorial image with adjustments.
+ *
+ * Body: { post_id, image_url, adjustment }
+ *
+ * Persists the correction at the entity level so future articles
+ * automatically incorporate it.
+ */
+export async function POST(req: NextRequest) {
+  const authResult = await authenticateRequest(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const auth = authResult as AuthContext;
+
+  const body = await req.json();
+  const { post_id, image_url, adjustment } = body;
+
+  if (!post_id || !image_url || !adjustment) {
+    return NextResponse.json(
+      { error: "post_id, image_url, and adjustment are required" },
+      { status: 400 }
+    );
+  }
+
+  // Verify ownership
+  const [post] = await sql`
+    SELECT bp.id, bp.site_id, bp.body, bp.metadata
+    FROM blog_posts bp
+    JOIN sites s ON s.id = bp.site_id
+    WHERE bp.id = ${post_id} AND s.subscriber_id = ${auth.subscriberId}
+  `;
+  if (!post) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  const metadata = (typeof post.metadata === "object" && post.metadata !== null
+    ? post.metadata
+    : {}) as Record<string, unknown>;
+
+  const editorialImages = (metadata.editorial_images || []) as Array<{
+    url: string;
+    prompt: string;
+    alt: string;
+    entities: string[];
+  }>;
+
+  // Find the image entry by URL
+  const imageEntry = editorialImages.find((img) => img.url === image_url);
+  if (!imageEntry) {
+    return NextResponse.json(
+      { error: "Image not found in post metadata. Only editorial images can be re-prompted." },
+      { status: 400 }
+    );
+  }
+
+  // Generate new image with original prompt + adjustment
+  const adjustedPrompt = `${imageEntry.prompt}. IMPORTANT CORRECTION: ${adjustment}`;
+  const image = await generateEditorialImage(adjustedPrompt);
+  if (!image) {
+    return NextResponse.json(
+      { error: "Image generation failed" },
+      { status: 500 }
+    );
+  }
+
+  // Upload to R2
+  const ext = image.mimeType.includes("png") ? "png" : "jpg";
+  const key = `sites/${post.site_id}/editorial/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const newUrl = await uploadBufferToR2(key, image.data, image.mimeType);
+
+  // Replace URL in post body
+  const newBody = (post.body as string).replace(image_url, newUrl);
+
+  // Update editorial_images metadata
+  const updatedImages = editorialImages.map((img) =>
+    img.url === image_url
+      ? { ...img, url: newUrl, prompt: adjustedPrompt }
+      : img
+  );
+  const updatedMetadata = { ...metadata, editorial_images: updatedImages };
+
+  await sql`
+    UPDATE blog_posts
+    SET body = ${newBody}, metadata = ${JSON.stringify(updatedMetadata)}::jsonb
+    WHERE id = ${post_id}
+  `;
+
+  // Persist correction at entity level for future articles
+  for (const entityKey of imageEntry.entities) {
+    await sql`
+      INSERT INTO image_corrections (site_id, entity_key, correction)
+      VALUES (${post.site_id as string}, ${entityKey.toLowerCase()}, ${adjustment})
+      ON CONFLICT (site_id, entity_key, correction) DO NOTHING
+    `;
+  }
+
+  return NextResponse.json({ success: true, new_url: newUrl });
+}

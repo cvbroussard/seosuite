@@ -163,7 +163,8 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   }
 
   // Research entities mentioned in the context note
-  const research = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string);
+  const researchResult = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string);
+  const research = researchResult.text;
 
   // Fetch vendor URLs linked to this asset (from vendor table)
   const assetVendors = await sql`
@@ -302,11 +303,18 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     RETURNING id
   `;
 
-  // Store guard flags if any
+  // Store metadata: guard flags + editorial image manifests
+  const metadata: Record<string, unknown> = {};
   if (!guard.pass && guard.flags.length > 0) {
+    metadata.guard_flags = guard.flags;
+  }
+  if (researchResult.editorialImages.length > 0) {
+    metadata.editorial_images = researchResult.editorialImages;
+  }
+  if (Object.keys(metadata).length > 0) {
     await sql`
       UPDATE blog_posts
-      SET metadata = ${JSON.stringify({ guard_flags: guard.flags })}::jsonb
+      SET metadata = ${JSON.stringify(metadata)}::jsonb
       WHERE id = ${post.id}
     `;
   }
