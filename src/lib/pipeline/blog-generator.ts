@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
 import { researchContextNote } from "@/lib/research/wikipedia";
+import { scanContent } from "@/lib/pipeline/content-guard";
 
 /**
  * Blog content types — determines structure, length, and prompt.
@@ -225,6 +226,14 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
   const parsed = parseBlogResponse(text);
 
+  // Content safety scan — flag issues before storing
+  const guard = await scanContent(
+    parsed.title,
+    parsed.body,
+    (asset.site_name as string) || ""
+  );
+  const postStatus = guard.pass ? "draft" : "flagged";
+
   const slug = generateSlug(parsed.title);
 
   const [post] = await sql`
@@ -241,10 +250,19 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
       ${JSON.stringify(buildArticleSchema(parsed, asset))},
       ${parsed.tags}, ${asset.content_pillar || null},
       ${contentType},
-      'draft'
+      ${postStatus}
     )
     RETURNING id
   `;
+
+  // Store guard flags if any
+  if (!guard.pass && guard.flags.length > 0) {
+    await sql`
+      UPDATE blog_posts
+      SET metadata = ${JSON.stringify({ guard_flags: guard.flags })}::jsonb
+      WHERE id = ${post.id}
+    `;
+  }
 
   return post.id;
 }

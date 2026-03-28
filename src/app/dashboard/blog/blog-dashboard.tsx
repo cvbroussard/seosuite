@@ -21,6 +21,7 @@ interface Post {
   status: string;
   content_type: string | null;
   content_pillar: string | null;
+  metadata: Record<string, unknown> | null;
   published_at: string | null;
   created_at: string;
 }
@@ -213,6 +214,8 @@ export function BlogDashboard({
                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                           post.status === "published"
                             ? "bg-success/20 text-success"
+                            : post.status === "flagged"
+                            ? "bg-danger/20 text-danger"
                             : "bg-muted/20 text-muted"
                         }`}
                       >
@@ -239,6 +242,14 @@ export function BlogDashboard({
 
                 {isExpanded && post.body && (
                   <div className="border-t border-border px-4 py-4">
+                    {post.status === "flagged" && post.metadata?.guard_flags && (
+                      <div className="mb-3 rounded bg-danger/10 px-3 py-2">
+                        <p className="mb-1 text-xs font-medium text-danger">Content flagged:</p>
+                        {(post.metadata.guard_flags as string[]).map((flag, i) => (
+                          <p key={i} className="text-xs text-danger/80">- {flag}</p>
+                        ))}
+                      </div>
+                    )}
                     {post.excerpt && (
                       <p className="mb-3 text-sm italic text-muted">{post.excerpt}</p>
                     )}
