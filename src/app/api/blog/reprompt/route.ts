@@ -60,17 +60,23 @@ export async function POST(req: NextRequest) {
 
   // Generate or edit image based on mode
   let image;
-  if (mode === "edit") {
-    // Edit: send existing image + instruction to Gemini for in-place modification
-    image = await editEditorialImage(image_url, adjustment);
-  } else {
-    // New: full regeneration from adjusted prompt
-    const adjustedPrompt = `${imageEntry.prompt}. IMPORTANT CORRECTION: ${adjustment}`;
-    image = await generateEditorialImage(adjustedPrompt);
+  try {
+    if (mode === "edit") {
+      image = await editEditorialImage(image_url, adjustment);
+    } else {
+      const adjustedPrompt = `${imageEntry.prompt}. IMPORTANT CORRECTION: ${adjustment}`;
+      image = await generateEditorialImage(adjustedPrompt);
+    }
+  } catch (genErr) {
+    console.error("Image gen/edit error:", genErr instanceof Error ? genErr.message : genErr);
+    return NextResponse.json(
+      { error: `Image ${mode} failed: ${genErr instanceof Error ? genErr.message : "unknown error"}` },
+      { status: 500 }
+    );
   }
   if (!image) {
     return NextResponse.json(
-      { error: "Image generation failed" },
+      { error: `Image ${mode} returned no result` },
       { status: 500 }
     );
   }
