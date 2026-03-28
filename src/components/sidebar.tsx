@@ -66,10 +66,11 @@ export function Sidebar({ subscriberName, sites, activeSiteId }: SidebarProps) {
       <nav className="flex flex-1 flex-col px-2 py-3">
         <div className="flex flex-col gap-0.5">
           {siteLinks.map((item) => {
+            const fullPath = prefix + item.path;
             const active =
               item.path === ""
                 ? pathname === prefix || pathname === prefix + "/"
-                : pathname.startsWith(prefix + item.path);
+                : pathname === fullPath || pathname === fullPath + "/";
             return (
               <Link
                 key={item.href}
@@ -89,7 +90,9 @@ export function Sidebar({ subscriberName, sites, activeSiteId }: SidebarProps) {
         <div className="mx-3 my-2 border-t border-border" />
         <div className="flex flex-col gap-0.5">
           {accountLinks.map((item) => {
-            const active = pathname.startsWith(prefix + item.path);
+            const fullPath = prefix + item.path;
+            // Exact match only — prevent parent highlighting when a child is active
+            const active = pathname === fullPath || pathname === fullPath + "/";
             return (
               <Link
                 key={item.href}
