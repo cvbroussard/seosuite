@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { generateEditorialImage } from "@/lib/image-gen/gemini";
+import { generateEditorialImage, editEditorialImage } from "@/lib/image-gen/gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
 
 /**
  * POST /api/blog/reprompt — Re-generate an editorial image with adjustments.
  *
- * Body: { post_id, image_url, adjustment }
+ * Body: { post_id, image_url, adjustment, mode?: "new" | "edit" }
  *
  * Persists the correction at the entity level so future articles
  * automatically incorporate it.
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { post_id, image_url, adjustment } = body;
+  const { post_id, image_url, adjustment, mode = "new" } = body;
 
   if (!post_id || !image_url || !adjustment) {
     return NextResponse.json(
@@ -58,9 +58,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Generate new image with original prompt + adjustment
-  const adjustedPrompt = `${imageEntry.prompt}. IMPORTANT CORRECTION: ${adjustment}`;
-  const image = await generateEditorialImage(adjustedPrompt);
+  // Generate or edit image based on mode
+  let image;
+  if (mode === "edit") {
+    // Edit: send existing image + instruction to Gemini for in-place modification
+    image = await editEditorialImage(image_url, adjustment);
+  } else {
+    // New: full regeneration from adjusted prompt
+    const adjustedPrompt = `${imageEntry.prompt}. IMPORTANT CORRECTION: ${adjustment}`;
+    image = await generateEditorialImage(adjustedPrompt);
+  }
   if (!image) {
     return NextResponse.json(
       { error: "Image generation failed" },

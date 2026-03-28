@@ -54,6 +54,7 @@ export function BlogPostList({
   const [acting, setActing] = useState<string | null>(null);
   const [repromptUrl, setRepromptUrl] = useState<string | null>(null);
   const [repromptNote, setRepromptNote] = useState("");
+  const [repromptMode, setRepromptMode] = useState<"edit" | "new">("edit");
   const [reprompting, setReprompting] = useState(false);
 
   function updateParams(updates: Record<string, string>) {
@@ -149,6 +150,7 @@ export function BlogPostList({
           post_id: previewing.id,
           image_url: repromptUrl,
           adjustment: repromptNote.trim(),
+          mode: repromptMode,
         }),
       });
       if (res.ok) {
@@ -376,14 +378,32 @@ export function BlogPostList({
                           className="preview-prose"
                           onClick={(e) => {
                             const img = (e.target as HTMLElement).closest("img[data-editorial]") as HTMLImageElement | null;
-                            if (img) { setRepromptUrl(img.src); setRepromptNote(""); }
+                            if (img) { setRepromptUrl(img.src); setRepromptNote(""); setRepromptMode("edit"); }
                           }}
                           dangerouslySetInnerHTML={{ __html: before }}
                         />
                         <div className="my-3 rounded border border-accent/30 bg-accent/5 p-3">
-                          <p className="mb-1 text-xs font-medium">Adjust this image</p>
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-xs font-medium">Adjust this image</p>
+                            <div className="flex rounded bg-surface-hover text-[10px]">
+                              <button
+                                onClick={() => setRepromptMode("edit")}
+                                className={`px-2.5 py-1 rounded-l ${repromptMode === "edit" ? "bg-accent text-white" : "text-muted"}`}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => setRepromptMode("new")}
+                                className={`px-2.5 py-1 rounded-r ${repromptMode === "new" ? "bg-accent text-white" : "text-muted"}`}
+                              >
+                                New
+                              </button>
+                            </div>
+                          </div>
                           <p className="mb-2 text-[10px] text-muted">
-                            This correction will apply to all future articles.
+                            {repromptMode === "edit"
+                              ? "Modify this image in place — keeps composition, changes details."
+                              : "Generate a completely new image from the adjusted prompt."}
                           </p>
                           <div className="flex gap-2">
                             <input
@@ -391,7 +411,9 @@ export function BlogPostList({
                               onChange={(e) => setRepromptNote(e.target.value)}
                               onKeyDown={(e) => e.key === "Enter" && handleReprompt()}
                               className="flex-1 text-sm"
-                              placeholder="e.g., spray paint line not brush"
+                              placeholder={repromptMode === "edit"
+                                ? "e.g., change sign to Mitchel & Mitchel, remove person on left"
+                                : "e.g., spray paint line not brush, woman making tile"}
                               autoFocus
                             />
                             <button
@@ -399,7 +421,7 @@ export function BlogPostList({
                               disabled={reprompting || !repromptNote.trim()}
                               className="bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                             >
-                              {reprompting ? "Generating..." : "Regenerate"}
+                              {reprompting ? (repromptMode === "edit" ? "Editing..." : "Generating...") : (repromptMode === "edit" ? "Edit" : "Regenerate")}
                             </button>
                             <button
                               onClick={() => { setRepromptUrl(null); setRepromptNote(""); }}
@@ -413,7 +435,7 @@ export function BlogPostList({
                           className="preview-prose"
                           onClick={(e) => {
                             const img = (e.target as HTMLElement).closest("img[data-editorial]") as HTMLImageElement | null;
-                            if (img) { setRepromptUrl(img.src); setRepromptNote(""); }
+                            if (img) { setRepromptUrl(img.src); setRepromptNote(""); setRepromptMode("edit"); }
                           }}
                           dangerouslySetInnerHTML={{ __html: after }}
                         />
@@ -428,7 +450,7 @@ export function BlogPostList({
                     className="preview-prose"
                     onClick={(e) => {
                       const img = (e.target as HTMLElement).closest("img[data-editorial]") as HTMLImageElement | null;
-                      if (img && hasEditorialImages(previewing)) { setRepromptUrl(img.src); setRepromptNote(""); }
+                      if (img && hasEditorialImages(previewing)) { setRepromptUrl(img.src); setRepromptNote(""); setRepromptMode("edit"); }
                     }}
                     dangerouslySetInnerHTML={{ __html: html }}
                   />
