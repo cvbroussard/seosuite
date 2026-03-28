@@ -40,13 +40,16 @@ export async function extractResearchTerms(contextNote: string): Promise<string[
 
 Content note: "${contextNote}"
 
-Extract:
-- brands: Company names, manufacturer names, vendor names (e.g., "Wolf", "Thermador", "Mitchel & Mitchel")
-- materials: Specific materials, finishes, stones, woods, fabrics (e.g., "zellige tile", "black walnut", "Calacatta marble")
-- techniques: Industry-specific methods, styles, certifications (e.g., "inset cabinetry", "sous vide", "NKBA certified")
-- products: Specific product lines, models, collections (e.g., "Brizo Litze collection", "Viking Professional range")
+Extract named entities and make them Wikipedia-searchable. Add category context to disambiguate:
+- brands: Company names with their industry (e.g., "Wolf appliances", "Thermador refrigerator", "Sub-Zero refrigeration")
+- materials: Specific materials with context (e.g., "zellige tile", "black walnut wood", "Calacatta marble")
+- techniques: Industry methods (e.g., "inset cabinetry", "sous vide cooking")
+- products: Specific product lines (e.g., "Brizo Litze faucet", "Viking Professional range")
 
-Only include terms that are specific and researchable. Skip generic words like "custom", "beautiful", "high-end".
+IMPORTANT: Add a disambiguating word to each term so Wikipedia finds the right article.
+For example: "Sub-Zero" alone → Mortal Kombat character. "Sub-Zero refrigeration" → the appliance brand.
+
+Only include terms that are specific and researchable. Skip generic words and small/local vendors unlikely to have Wikipedia pages.
 If nothing specific is found, return empty arrays.
 
 {"brands":[],"materials":[],"techniques":[],"products":[]}`,
@@ -198,6 +201,36 @@ async function fetchWikiImages(title: string): Promise<Array<{ url: string; desc
 }
 
 /**
+ * Check if a Wikipedia result is relevant to the original search context.
+ * Filters out pop culture, fictional characters, and other irrelevant matches.
+ */
+function isRelevantResult(summary: WikiSummary, searchTerm: string, contextNote: string): boolean {
+  const desc = (summary.description || "").toLowerCase();
+  const extract = summary.extract.toLowerCase();
+
+  // Reject fictional characters, entertainment, electronics, software, and other irrelevant domains
+  const irrelevantPatterns = [
+    /fictional character/i, /video game/i, /television/i, /tv series/i,
+    /\bactor\b/i, /\bactress\b/i, /\bsinger\b/i, /\bmusician\b/i,
+    /\bathlete\b/i, /\bfilm\b/i, /\bmovie\b/i, /\bband\b/i,
+    /\bnovel\b/i, /\bcomic\b/i, /\banime\b/i, /\bmanga\b/i,
+    /mortal kombat/i, /disney/i, /marvel/i, /dc comics/i,
+    /\bpolitician\b/i, /\bfootball\b/i, /\bbaseball\b/i, /\bsoccer\b/i,
+    /\bsoftware\b/i, /\bcomputer\b/i, /\bsimulator\b/i, /\belectronic circuit\b/i,
+    /\bprogramming\b/i, /\bsemiconductor\b/i, /\balgorithm\b/i,
+    /\bcity in\b/i, /\btown in\b/i, /\bvillage in\b/i, /\bmunicipality\b/i,
+    /\bstate of\b/i, /\bprovince\b/i, /\bcounty in\b/i, /\bdistrict\b/i,
+  ];
+
+  const combined = desc + " " + extract;
+  for (const pattern of irrelevantPatterns) {
+    if (pattern.test(combined)) return false;
+  }
+
+  return true;
+}
+
+/**
  * Research all entities from a context note and return combined background.
  * Includes text summaries and image references.
  */
@@ -210,7 +243,29 @@ export async function researchContextNote(contextNote: string): Promise<string> 
   const results: string[] = [];
 
   for (const term of terms) {
-    const summary = await lookupWikipedia(term);
+    // Add context to disambiguate — try the specific term first,
+    // then fall back to term + category hint from context
+    let summary = await lookupWikipedia(term);
+
+    // Check relevance — reject pop culture / fictional matches
+    if (summary && !isRelevantResult(summary, term, contextNote)) {
+      // Retry with category context appended
+      const categoryHints = ["material", "manufacturer", "appliance", "tile", "woodworking"];
+      let found = false;
+      for (const hint of categoryHints) {
+        if (contextNote.toLowerCase().includes(hint) || term.toLowerCase().includes(hint)) {
+          summary = await lookupWikipedia(`${term} ${hint}`);
+          if (summary && isRelevantResult(summary, term, contextNote)) {
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) {
+        summary = null; // Drop irrelevant result entirely
+      }
+    }
+
     if (summary) {
       let entry = `**${summary.title}**: ${summary.extract}`;
 
