@@ -82,7 +82,7 @@ export async function lookupWikipedia(term: string): Promise<WikiSummary | null>
     // Direct page summary lookup
     const searchRes = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`,
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
     );
 
     if (searchRes.ok) {
@@ -102,7 +102,7 @@ export async function lookupWikipedia(term: string): Promise<WikiSummary | null>
     // Fallback: search API
     const fallbackRes = await fetch(
       `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1`,
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
     );
 
     if (!fallbackRes.ok) return null;
@@ -113,7 +113,7 @@ export async function lookupWikipedia(term: string): Promise<WikiSummary | null>
 
     const summaryRes = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(firstResult.title)}`,
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
     );
 
     if (!summaryRes.ok) return null;
@@ -144,7 +144,7 @@ async function fetchWikiImages(title: string): Promise<Array<{ url: string; desc
   try {
     const res = await fetch(
       `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=images&format=json&imlimit=10`,
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
     );
 
     if (!res.ok) return [];
@@ -182,7 +182,7 @@ async function resolveImageUrls(
     try {
       const infoRes = await fetch(
         `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(img.title)}&prop=imageinfo&iiprop=url|size|extmetadata&format=json`,
-        { signal: AbortSignal.timeout(5000) }
+        { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
       );
 
       if (!infoRes.ok) continue;
@@ -224,8 +224,8 @@ async function searchCommonsImages(
 ): Promise<Array<{ url: string; description: string }>> {
   try {
     const res = await fetch(
-      `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json&srlimit=${limit}`,
-      { signal: AbortSignal.timeout(5000) }
+      `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json&srlimit=${limit}&origin=*`,
+      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
     );
 
     if (!res.ok) return [];
@@ -235,14 +235,16 @@ async function searchCommonsImages(
 
     if (searchResults.length === 0) return [];
 
-    // Filter to photos only — no PDFs, SVGs, icons, logos, maps
+    // Filter to photos only — no PDFs, SVGs, icons, logos, maps, vehicles, people
     const photoResults = searchResults.filter((r) => {
       const name = r.title.toLowerCase();
       return (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png"))
         && !name.includes("icon") && !name.includes("logo") && !name.includes("flag")
         && !name.includes("coat_of_arms") && !name.includes("map")
         && !name.includes("diagram") && !name.includes("chart")
-        && !name.includes("table") && !name.includes("graph");
+        && !name.includes("table") && !name.includes("graph")
+        && !name.includes("lambretta") && !name.includes("vespa")
+        && !name.includes("automobile") && !name.includes("motorcycle");
     });
 
     // Resolve URLs using Commons API (not Wikipedia)
@@ -251,8 +253,8 @@ async function searchCommonsImages(
     for (const img of photoResults.slice(0, limit)) {
       try {
         const infoRes = await fetch(
-          `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(img.title)}&prop=imageinfo&iiprop=url|size|extmetadata&format=json`,
-          { signal: AbortSignal.timeout(5000) }
+          `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(img.title)}&prop=imageinfo&iiprop=url|size|extmetadata&format=json&origin=*`,
+          { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "TracPost/1.0 (blog research)" } }
         );
 
         if (!infoRes.ok) continue;
@@ -431,19 +433,8 @@ Content note: "${contextNote}"
     }
 
     if (summary) {
-      let entry = `**${summary.title}**: ${summary.extract}`;
-
-      const freshImages = summary.images.filter((img) => !excludeSet.has(img.url));
-      if (freshImages.length > 0) {
-        entry += "\nReference images (public domain, can be embedded in blog):";
-        for (const img of freshImages) {
-          entry += `\n- ![${img.description}](${img.url})`;
-        }
-      } else if (summary.thumbnail && !excludeSet.has(summary.thumbnail)) {
-        entry += `\nReference image: ![${summary.title}](${summary.thumbnail})`;
-      }
-
-      results.push(entry);
+      // Text research only — images come from targeted Commons search below
+      results.push(`**${summary.title}**: ${summary.extract}`);
     }
   }
 
