@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ timeout: 15000 });
 
 interface GuardResult {
   pass: boolean;
@@ -11,15 +11,8 @@ interface GuardResult {
  * Automated content safety scan for generated blog posts.
  * Runs between generation and draft storage.
  *
- * Checks for:
- * - Fabricated facts about real companies/products
- * - Inappropriate, exploitative, or violent content
- * - Specific prices, dollar amounts, cost estimates
- * - Defamatory or disparaging language about competitors
- * - Medical, legal, or financial claims that create liability
- * - Contact info that looks hallucinated (phone numbers, emails, addresses)
- *
- * Returns pass/fail with specific flag reasons.
+ * Only flags content that would damage the business if published.
+ * Not a fact-checker — a safety net for egregious issues.
  */
 export async function scanContent(
   title: string,
@@ -32,26 +25,32 @@ export async function scanContent(
       max_tokens: 256,
       messages: [{
         role: "user",
-        content: `Review this blog article for a local business called "${businessName}". Flag any issues.
+        content: `You are a content safety reviewer for a local business blog. The business is "${businessName}".
 
 Title: ${title}
 
 Article (first 2000 chars):
 ${body.slice(0, 2000)}
 
-Check for these issues and return ONLY JSON:
-1. "fabrication" — Claims specific facts about real companies/products that sound made up (founding dates, revenue, employee counts, awards not widely known)
-2. "inappropriate" — Violence, exploitation, sexual content, hate speech, discrimination
-3. "pricing" — Any specific dollar amounts, price ranges, or cost estimates
-4. "defamation" — Negative claims about named competitors or their products
-5. "liability" — Medical advice, legal guidance, financial recommendations, safety claims that could create liability
-6. "hallucinated_contact" — Phone numbers, email addresses, street addresses that appear in the body (these are likely hallucinated)
-7. "off_topic" — Content that has nothing to do with the business's industry
+ONLY flag content that would DAMAGE the business if published. Do NOT flag:
+- General industry facts or historical claims (founding dates, origins, etc.) — these are acceptable even if imprecise
+- Subjective quality claims ("best", "finest", "serious") — this is marketing
+- Vendor/brand mentions — the business chose these partners intentionally
 
-Return: {"pass": true, "flags": []}
-Or: {"pass": false, "flags": ["pricing: mentions $80,000 kitchen remodel", "fabrication: claims Sub-Zero was founded in 1943"]}
+DO flag:
+1. "inappropriate" — Violence, exploitation, sexual content, hate speech, discrimination
+2. "pricing" — Specific dollar amounts ($80,000, $500/sq ft, "starting at $X")
+3. "defamation" — Explicitly negative claims about a named competitor
+4. "hallucinated_contact" — Phone numbers, email addresses, or street addresses in the article body (the AI likely invented these)
+5. "off_topic" — Content completely unrelated to the business's industry
+6. "medical_legal" — Specific medical, legal, or financial advice that creates liability
 
-Be strict on pricing and hallucinated contact info. Be lenient on general industry claims.`,
+Return ONLY valid JSON, no markdown:
+{"pass": true, "flags": []}
+
+If flagging: {"pass": false, "flags": ["pricing: mentions $80,000 remodel cost"]}
+
+When in doubt, PASS. False positives waste the subscriber's time.`,
       }],
     });
 
@@ -63,10 +62,11 @@ Be strict on pricing and hallucinated contact info. Be lenient on general indust
       pass: result.pass === true,
       flags: Array.isArray(result.flags) ? result.flags : [],
     };
-  } catch {
-    // If the guard itself fails, pass the content through
-    // but log it — don't block publishing on a scan failure
-    console.warn("Content guard scan failed — defaulting to pass");
+  } catch (err) {
+    console.warn(
+      "Content guard scan failed — defaulting to pass:",
+      err instanceof Error ? err.message : err
+    );
     return { pass: true, flags: [] };
   }
 }
