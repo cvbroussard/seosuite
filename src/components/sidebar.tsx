@@ -15,7 +15,6 @@ const siteNav = [
   { label: "Brand", path: "/brand", icon: "◈" },
   { label: "Capture", path: "/capture", icon: "◎" },
   { label: "Media", path: "/media", icon: "▣" },
-  { label: "Vendors", path: "/vendors", icon: "◫" },
   { label: "Calendar", path: "/calendar", icon: "▦" },
   { label: "Inbox", path: "/inbox", icon: "▤" },
   { label: "SEO", path: "/seo", icon: "◇" },
@@ -27,6 +26,7 @@ const siteNav = [
 
 const accountNav = [
   { label: "My Account", path: "/account", icon: "◯" },
+  { label: "Vendors", path: "/account/vendors", icon: "◫" },
   { label: "Mobile App", path: "/account/mobile-app", icon: "◱" },
 ];
 

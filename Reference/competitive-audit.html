@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracpost Competitive Audit</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface-hover: #1a1a1a;
+    --border: #262626;
+    --text: #e5e5e5;
+    --muted: #737373;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --orange: #f97316;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.5rem; margin: 3rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--accent); }
+  h4 { font-size: 0.95rem; margin: 1rem 0 0.25rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin-bottom: 0.75rem; }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; }
+  .timestamp { color: var(--muted); font-size: 0.85rem; }
+
+  /* Competitor Cards */
+  .competitor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+  .card-name { font-size: 1.2rem; font-weight: 600; }
+  .card-price {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .card-tagline { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+  .card-section { margin-bottom: 0.75rem; }
+  .card-section-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+
+  /* Tags */
+  .tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .tag {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .tag.green { border-color: var(--green); color: var(--green); }
+  .tag.yellow { border-color: var(--yellow); color: var(--yellow); }
+  .tag.red { border-color: var(--red); color: var(--red); }
+  .tag.accent { border-color: var(--accent); color: var(--accent); }
+
+  /* Feature Matrix */
+  .matrix-container { overflow-x: auto; margin: 1rem 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  th, td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    position: sticky;
+    top: 0;
+  }
+  td { background: var(--bg); }
+  tr:hover td { background: var(--surface-hover); }
+  .check { color: var(--green); }
+  .cross { color: var(--red); }
+  .partial { color: var(--yellow); }
+
+  /* Tier badges */
+  .tier-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  .tier-free { background: #064e3b; color: #6ee7b7; }
+  .tier-budget { background: #1e3a5f; color: #93c5fd; }
+  .tier-mid { background: #4c1d95; color: #c4b5fd; }
+  .tier-premium { background: #7c2d12; color: #fdba74; }
+  .tier-enterprise { background: #450a0a; color: #fca5a5; }
+
+  /* Brand Voice Section */
+  .voice-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .voice-card .card-name { margin-bottom: 0.5rem; }
+  .voice-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .voice-item { }
+  .voice-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.25rem; }
+  .voice-value { font-size: 0.9rem; }
+
+  /* Insights */
+  .insight-box {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+  }
+  .insight-box.green { border-left-color: var(--green); }
+  .insight-box.yellow { border-left-color: var(--yellow); }
+  .insight-box.red { border-left-color: var(--red); }
+
+  /* Tracpost positioning */
+  .tracpost-box {
+    background: linear-gradient(135deg, #1e1b4b 0%, #0a0a0a 100%);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 2rem;
+    margin: 2rem 0;
+  }
+
+  ul { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+  li { margin-bottom: 0.25rem; font-size: 0.9rem; }
+
+  .section-intro { color: var(--muted); margin-bottom: 1.5rem; max-width: 800px; }
+</style>
+</head>
+<body>
+
+<h1>Tracpost Competitive Audit</h1>
+<p class="subtitle">Social Media Management Platform Landscape Analysis</p>
+<p class="timestamp">Compiled: March 22, 2026</p>
+
+<!-- ============================================ -->
+<h2>1. Market Landscape Overview</h2>
+<p class="section-intro">The social media management market is dominated by Hootsuite as the incumbent, with 18+ challengers competing across different segments. The market segments into four tiers by pricing and three archetypes by positioning.</p>
+
+<div class="competitor-grid">
+  <div class="insight-box">
+    <h4>Pricing Tiers</h4>
+    <p><span class="tier-badge tier-free">FREE</span> Buffer ($0) &mdash; only remaining free tier</p>
+    <p><span class="tier-badge tier-budget">BUDGET</span> $4-19/mo &mdash; Social Champ, Sendible, Zoho Social, SocialBu</p>
+    <p><span class="tier-badge tier-mid">MID-MARKET</span> $59-149/mo &mdash; Sked Social, eClincher, Statusbrew, Agorapulse</p>
+    <p><span class="tier-badge tier-premium">PREMIUM</span> $149-399/user/mo &mdash; Hootsuite, Sprout Social</p>
+    <p><span class="tier-badge tier-enterprise">ENTERPRISE</span> Custom &mdash; Sprinklr, Brandwatch, HubSpot</p>
+  </div>
+  <div class="insight-box">
+    <h4>Market Archetypes</h4>
+    <p><strong>All-in-One Platforms</strong> &mdash; Hootsuite, Sprout Social, Statusbrew, Agorapulse</p>
+    <p><strong>Niche Specialists</strong> &mdash; YouScan (listening), Brandwatch (intelligence), Nuelink (e-commerce), Tailwind (Pinterest/IG)</p>
+    <p><strong>Agency-First</strong> &mdash; Cloud Campaign, Sendible (whitelabel), Zoho Social</p>
+    <p><strong>AI/Automation-First</strong> &mdash; SocialBu, SocialBee, RecurPost &mdash; <em>Tracpost's category</em></p>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<h2>2. Competitor Profiles</h2>
+<p class="section-intro">Detailed breakdown of each competitor's positioning, pricing, key features, and competitive advantages.</p>
+
+<div class="competitor-grid">
+
+  <!-- Hootsuite -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Hootsuite</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag red">Incumbent</span><span class="tag">G2: 4.2/5</span></div>
+      </div>
+      <div class="card-price">$149+/user/mo</div>
+    </div>
+    <p class="card-tagline">The category-defining platform everyone benchmarks against. Legacy UI, premium pricing, broadest feature set.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Scheduling</span><span class="tag">Streams (columnar)</span><span class="tag">Listening (Talkwalker)</span>
+        <span class="tag">Ads Management</span><span class="tag">Employee Advocacy</span><span class="tag">AI Chatbot</span>
+        <span class="tag">Review Management</span><span class="tag">Salesforce Integration</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Weaknesses</div>
+      <ul>
+        <li>Approval workflows only in Enterprise tier</li>
+        <li>Advanced reporting gated at $399+/mo</li>
+        <li>Discontinued free plan (March 2023)</li>
+        <li>"Feels outdated" &mdash; common user complaint</li>
+        <li>Listening/monitoring as premium add-ons</li>
+      </ul>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Target</div>
+      <p style="font-size:0.9rem">SMBs to Enterprise. Broadest target but losing SMB segment due to pricing.</p>
+    </div>
+  </div>
+
+  <!-- Sprout Social -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Sprout Social</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag accent">Premium</span><span class="tag">G2: 4.4/5</span></div>
+      </div>
+      <div class="card-price">$199+/user/mo</div>
+    </div>
+    <p class="card-tagline">Enterprise-grade social management. Modern UI but highest per-user cost. "Safe choice" for large teams.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Smart Inbox</span><span class="tag">CRM-like Profiles</span><span class="tag">Sentiment Analysis</span>
+        <span class="tag">Competitor Insights</span><span class="tag">AI Composition</span><span class="tag">Helpdesk Integration</span>
+        <span class="tag">Review Management</span><span class="tag">BI Integrations</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Pricing Details</div>
+      <p style="font-size:0.85rem">Standard: $199/mo (5 profiles) | Professional: $299/mo | Advanced: $399/mo | Premium analytics add-on: $999/mo</p>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Target</div>
+      <p style="font-size:0.9rem">Enterprise & Agencies. Per-user pricing makes it prohibitive for small teams.</p>
+    </div>
+  </div>
+
+  <!-- Buffer -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Buffer</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">Free Plan</span><span class="tag">Affordable</span></div>
+      </div>
+      <div class="card-price">Free / $5/channel</div>
+    </div>
+    <p class="card-tagline">Only remaining free tier in the market. Simple, clean, creator-focused. Per-channel pricing.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Drag-drop Calendar</span><span class="tag">AI Assistant</span><span class="tag">Queue Scheduling</span>
+        <span class="tag">Approval Tab</span><span class="tag">Content Library</span><span class="tag">Ideas Storage</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Pricing Details</div>
+      <p style="font-size:0.85rem">Free: 3 channels, 10 posts/channel | Essentials: $5/mo/channel | Team: $10/mo/channel (unlimited members)</p>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Limitations</div>
+      <ul>
+        <li>No social listening</li>
+        <li>No DM management</li>
+        <li>Limited engagement features (comment replies only)</li>
+        <li>No review management</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Statusbrew -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Statusbrew</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag accent">Challenger</span><span class="tag">G2: 4.8/5</span></div>
+      </div>
+      <div class="card-price">$120/mo (3 users)</div>
+    </div>
+    <p class="card-tagline">Claims 1:1 feature parity with Hootsuite at lower cost. Highest G2 rating. "Agile and less encumbered by legacy."</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">250+ KPIs</span><span class="tag">20+ Report Templates</span><span class="tag">18-month Backfill</span>
+        <span class="tag">Unified Inbox</span><span class="tag">Spam Filtering</span><span class="tag">Advanced Approvals</span>
+        <span class="tag">Saved Replies</span><span class="tag">Human Support (all plans)</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Differentiator</div>
+      <p style="font-size:0.9rem">Human-only support on all plans. 18-month data backfill. 50% nonprofit discount. No contracts.</p>
+    </div>
+  </div>
+
+  <!-- Agorapulse -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Agorapulse</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">Mid-market</span></div>
+      </div>
+      <div class="card-price">$79-199/mo</div>
+    </div>
+    <p class="card-tagline">Lower cost than Hootsuite on publishing. Weak unified inbox and reporting. AI replies gated to Custom tier.</p>
+    <div class="card-section">
+      <div class="card-section-label">Pricing Details</div>
+      <p style="font-size:0.85rem">Standard: $79/mo (10 profiles) | Professional: $119/mo | Advanced: $149/mo | Custom: tailored</p>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Notable Gaps</div>
+      <ul>
+        <li>Profile-level inbox (not truly unified)</li>
+        <li>AI reply suggestions only in Custom tier</li>
+        <li>CRM integrations only in Custom tier</li>
+        <li>Content library: 10 images / 2 videos in base plans</li>
+        <li>Data retention: 6 months in Standard</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SocialBee -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">SocialBee</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">Automation</span></div>
+      </div>
+      <div class="card-price">~$29-99/mo</div>
+    </div>
+    <p class="card-tagline">Affordable all-in-one with unique automation. Cross-platform sharing (Reddit, WhatsApp, Telegram, Mastodon, Quora).</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Content Calendar</span><span class="tag">AI Strategy Assistant</span><span class="tag">9+ Platforms</span>
+        <span class="tag">Content Recycling</span><span class="tag">Unlimited Team Members</span><span class="tag">Category Queues</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Limitations</div>
+      <ul>
+        <li>No social ad campaign support</li>
+        <li>No built-in link-in-bio tool</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- HubSpot -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">HubSpot</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag accent">CRM+Social</span></div>
+      </div>
+      <div class="card-price">Custom</div>
+    </div>
+    <p class="card-tagline">Strongest for social listening + inbox. Comment-to-CRM linking. Social is part of the broader Marketing Hub.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Social Listening</span><span class="tag">Keyword Monitoring</span><span class="tag">Sentiment Analysis</span>
+        <span class="tag">CRM Integration</span><span class="tag">Comment-to-CRM</span><span class="tag">Email Alerts</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Advantage</div>
+      <p style="font-size:0.9rem">Listening and inbox as core features. Hootsuite requires top-tier pricing for these.</p>
+    </div>
+  </div>
+
+  <!-- Sendible -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Sendible</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag yellow">Whitelabel</span></div>
+      </div>
+      <div class="card-price">~$4/profile</div>
+    </div>
+    <p class="card-tagline">Agency-focused. Only platform with whitelabel capability. Approval workflows from base plans. Dated UI.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Whitelabel</span><span class="tag">Approval Workflows</span><span class="tag">Inbox Management</span>
+        <span class="tag">Reporting</span><span class="tag">Per-profile Pricing</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Weakness</div>
+      <p style="font-size:0.9rem">"Early 2010s" UI design. Bootstrap CSS aesthetic. Not intuitive for power users.</p>
+    </div>
+  </div>
+
+  <!-- Cloud Campaign -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Cloud Campaign</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">Agency</span></div>
+      </div>
+      <div class="card-price">~$49+/mo</div>
+    </div>
+    <p class="card-tagline">Built for agencies. Custom-branded dashboards. Content recycling automation. Modern UI.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Workspace Management</span><span class="tag">Branded Dashboards</span><span class="tag">Content Recycling</span>
+        <span class="tag">AI Content Creation</span><span class="tag">Approval Workflows</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nuelink -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Nuelink</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">E-commerce</span></div>
+      </div>
+      <div class="card-price">~$19+/mo</div>
+    </div>
+    <p class="card-tagline">Advanced automation specialist. E-commerce integrations (Shopify, Etsy, WooCommerce). Creator/startup focused.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Shopify Integration</span><span class="tag">Etsy Integration</span><span class="tag">WooCommerce</span>
+        <span class="tag">Auto Product Sharing</span><span class="tag">Link-in-Bio</span><span class="tag">Bulk Scheduling</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RecurPost -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">RecurPost</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">Recycling</span></div>
+      </div>
+      <div class="card-price">~$25+/mo</div>
+    </div>
+    <p class="card-tagline">Automation and recycling specialist. Evergreen libraries auto re-share top posts.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Content Recycling</span><span class="tag">Evergreen Libraries</span><span class="tag">Category Queues</span>
+        <span class="tag">AI Suggestions</span><span class="tag">Bulk Scheduling</span><span class="tag">Hashtag Recommendations</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- YouScan -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">YouScan</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag accent">Listening</span></div>
+      </div>
+      <div class="card-price">$299+/mo</div>
+    </div>
+    <p class="card-tagline">AI-powered social listening specialist. Image recognition for visual brand mentions. 100M+ data sources.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Image Recognition</span><span class="tag">Sentiment Analysis</span><span class="tag">1.6T Historical Conversations</span>
+        <span class="tag">Forums/Blogs/News</span><span class="tag">Privacy Compliance</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Brandwatch -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Brandwatch</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag accent">Intelligence</span></div>
+      </div>
+      <div class="card-price">Enterprise</div>
+    </div>
+    <p class="card-tagline">Consumer intelligence platform. 30M+ creator database for influencer management. Full Twitter/Reddit firehose.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Consumer Intelligence</span><span class="tag">Influencer Discovery</span><span class="tag">Competitive Analysis</span>
+        <span class="tag">Campaign Measurement</span><span class="tag">100M+ Sources</span><span class="tag">1.6B Historical</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sked Social -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Sked Social</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">Instagram-first</span></div>
+      </div>
+      <div class="card-price">$59-199/mo</div>
+    </div>
+    <p class="card-tagline">Superior Instagram scheduling. Unlimited team members. UGC tagging. Post queues for hands-free scheduling.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Cross-platform Customization</span><span class="tag">Post Queues</span><span class="tag">Interaction History</span>
+        <span class="tag">UGC Tagging</span><span class="tag">Unlimited Team</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Social Champ -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Social Champ</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">Ultra-budget</span></div>
+      </div>
+      <div class="card-price">From $4/mo</div>
+    </div>
+    <p class="card-tagline">Ultra-budget alternative. AI-powered listening and competitor analysis. Branded report exports.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Visual Calendar</span><span class="tag">AI Listening</span><span class="tag">Competitor Analysis</span>
+        <span class="tag">Branded Exports</span><span class="tag">Brand Monitoring</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SocialBu -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">SocialBu</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">AI-first</span></div>
+      </div>
+      <div class="card-price">From $19/mo</div>
+    </div>
+    <p class="card-tagline">AI-first automation. Post idea generation and content creation. Automation rules for recurring tasks. No learning curve.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">AI Post Generation</span><span class="tag">Automation Rules</span><span class="tag">Unified Inbox</span>
+        <span class="tag">Welcome Messages</span><span class="tag">Low Cost</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zoho Social -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Zoho Social</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">SMB</span></div>
+      </div>
+      <div class="card-price">From $15/mo</div>
+    </div>
+    <p class="card-tagline">Affordable for SMBs. Uncluttered UI. Mastodon integration. Approval workflows from Premium plan.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Clean UI</span><span class="tag">Content Repetition</span><span class="tag">Mastodon</span>
+        <span class="tag">Approval Workflows</span><span class="tag">Agency Plans</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sprinklr -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Sprinklr</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag red">Enterprise</span></div>
+      </div>
+      <div class="card-price">Enterprise (highest)</div>
+    </div>
+    <p class="card-tagline">Most comprehensive feature set. Multi-channel (WeChat, Telegram, Viber). Requires account manager. Buggy/slow.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Social Ads</span><span class="tag">Listening</span><span class="tag">WeChat/Telegram/Viber</span>
+        <span class="tag">Email/Live Chat/Calling</span><span class="tag">Multi-channel</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- eClincher -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-name">eClincher</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">Collaboration</span></div>
+      </div>
+      <div class="card-price">From $65/mo</div>
+    </div>
+    <p class="card-tagline">Comprehensive alternative with superior collaboration. Better approval workflows than Hootsuite at lower tiers.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Social Inbox</span><span class="tag">Monitoring</span><span class="tag">Visual Calendar</span>
+        <span class="tag">Collaboration</span><span class="tag">Approval Workflows</span><span class="tag">Analytics</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- AI-First Newcomers -->
+<h3 style="margin-top:2rem;color:var(--orange)">AI-First Newcomers &mdash; Direct Tracpost Competitors</h3>
+<div class="competitor-grid">
+
+  <div class="card" style="border-color:var(--orange)">
+    <div class="card-header">
+      <div>
+        <div class="card-name">FeedHive</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag red">Closest Threat</span><span class="tag">AI-first</span></div>
+      </div>
+      <div class="card-price">$19-299/mo</div>
+    </div>
+    <p class="card-tagline">Real-time AI suggestions while typing. Engagement-triggered follow-up comments. 5K+ idea templates. Same target as Tracpost.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">AI Suggestions</span><span class="tag">Performance Scoring</span><span class="tag">Conditional Follow-ups</span>
+        <span class="tag">5K+ Templates</span><span class="tag">Content Recycling</span><span class="tag">AI Agent</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Gaps vs Tracpost</div>
+      <ul>
+        <li>No unified inbox</li>
+        <li>No social listening</li>
+        <li>Only 7 platforms</li>
+        <li>Still requires significant manual input</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--orange)">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Ocoya</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">AI Content Factory</span></div>
+      </div>
+      <div class="card-price">$19-199/mo</div>
+    </div>
+    <p class="card-tagline">Bundles ChatGPT + Canva + Buffer + Google Docs. 30+ integrations incl. Shopify/WooCommerce. 26 languages.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">26 Languages</span><span class="tag">Image/Video/Music Gen</span><span class="tag">30+ Integrations</span>
+        <span class="tag">Shopify</span><span class="tag">WooCommerce</span><span class="tag">Canva/Figma</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Weakness</div>
+      <p style="font-size:0.9rem">Jack-of-all-trades risk. Some features feel shallow per reviews.</p>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--orange)">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Predis.ai</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">AI Visual</span></div>
+      </div>
+      <div class="card-price">$19-249/mo</div>
+    </div>
+    <p class="card-tagline">Full post from single prompt (carousels, videos, images). AI avatars for UGC-style video ads. 2M+ businesses.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Prompt-to-Post</span><span class="tag">AI Carousels</span><span class="tag">AI Video</span>
+        <span class="tag">AI Avatars</span><span class="tag">Competitor Analysis</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Weakness</div>
+      <p style="font-size:0.9rem">Credit-based pricing is unpredictable. Weaker on scheduling/management.</p>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--orange)">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Lately.ai</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag">Atomization</span></div>
+      </div>
+      <div class="card-price">$19-239/mo</div>
+    </div>
+    <p class="card-tagline">Atomizes long-form content into dozens of social posts. Learns your voice. Launching "Kately" superintelligent agent.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">Content Atomization</span><span class="tag">Voice Learning</span><span class="tag">AI Agent "Kately"</span>
+        <span class="tag">Long-form to Social</span>
+      </div>
+    </div>
+    <div class="card-section">
+      <div class="card-section-label">Weakness</div>
+      <p style="font-size:0.9rem">$19 to $239 price jump is brutal. Niche repurposing use case.</p>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--orange)">
+    <div class="card-header">
+      <div>
+        <div class="card-name">Sight AI</div>
+        <div class="tags" style="margin-top:0.25rem"><span class="tag green">Very New</span></div>
+      </div>
+      <div class="card-price">TBD</div>
+    </div>
+    <p class="card-tagline">13+ specialized AI agents. Autopilot Mode for hands-off publishing. Very new entrant &mdash; watch this space.</p>
+    <div class="card-section">
+      <div class="card-section-label">Key Features</div>
+      <div class="tags">
+        <span class="tag">13 AI Agents</span><span class="tag">Autopilot Mode</span><span class="tag">Hands-off Publishing</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================ -->
+<h2>3. Feature Matrix &mdash; Industry Standard Comparison</h2>
+<p class="section-intro">Features that define the category. These are evaluation comparison metrics that subscribers expect. Gaps here are deal-breakers during vendor evaluation.</p>
+
+<div class="matrix-container">
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Hootsuite</th>
+      <th>Sprout Social</th>
+      <th>Buffer</th>
+      <th>Statusbrew</th>
+      <th>Agorapulse</th>
+      <th>SocialBee</th>
+      <th>Tracpost</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td colspan="8" style="background:var(--surface);color:var(--accent);font-weight:600">Publishing & Scheduling</td></tr>
+    <tr>
+      <td>Multi-platform scheduling</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Visual content calendar</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Bulk scheduling</td>
+      <td class="partial">Adv ($399+)</td><td class="check">Pro+</td><td class="cross">No</td><td class="check">Yes</td><td class="partial">Adv+</td><td class="check">Yes</td><td class="cross">Planned</td>
+    </tr>
+    <tr>
+      <td>AI caption generation</td>
+      <td class="check">Yes</td><td class="check">Adv+</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes (autopilot)</td>
+    </tr>
+    <tr>
+      <td>Optimal send times</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes (pipeline)</td>
+    </tr>
+    <tr>
+      <td>Content recycling/evergreen</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td><td class="cross">Planned</td>
+    </tr>
+    <tr>
+      <td>Approval workflows</td>
+      <td class="partial">Enterprise only</td><td class="check">Pro+</td><td class="partial">Team only</td><td class="check">Yes</td><td class="partial">Custom only</td><td class="cross">No</td><td class="cross">N/A (autopilot)</td>
+    </tr>
+
+    <tr><td colspan="8" style="background:var(--surface);color:var(--accent);font-weight:600">Engagement & Inbox</td></tr>
+    <tr>
+      <td>Unified inbox</td>
+      <td class="check">Yes</td><td class="check">Smart Inbox</td><td class="cross">No</td><td class="check">Yes</td><td class="partial">Profile-level</td><td class="cross">No</td><td class="check">Yes (3-tab)</td>
+    </tr>
+    <tr>
+      <td>Comment management</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="partial">Limited</td><td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Review management</td>
+      <td class="partial">Enterprise</td><td class="check">Standard+</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes + AI replies</td>
+    </tr>
+    <tr>
+      <td>DM management</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="partial">Planned</td>
+    </tr>
+    <tr>
+      <td>AI-suggested replies</td>
+      <td class="cross">No</td><td class="partial">Adv+</td><td class="partial">5/wk free</td><td class="cross">No</td><td class="partial">Custom only</td><td class="cross">No</td><td class="check">Yes (all reviews)</td>
+    </tr>
+    <tr>
+      <td>Saved replies / templates</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="partial">Adv+</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+
+    <tr><td colspan="8" style="background:var(--surface);color:var(--accent);font-weight:600">Analytics & Reporting</td></tr>
+    <tr>
+      <td>Post-level analytics</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Essentials+</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Competitor benchmarking</td>
+      <td class="check">5-20 competitors</td><td class="check">Pro+</td><td class="cross">No</td><td class="check">Yes</td><td class="partial">Adv+</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+    <tr>
+      <td>Custom report builder</td>
+      <td class="partial">Adv ($399+)</td><td class="partial">Pro+</td><td class="cross">No</td><td class="check">20+ templates</td><td class="partial">Adv+</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+    <tr>
+      <td>Branded report exports</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+
+    <tr><td colspan="8" style="background:var(--surface);color:var(--accent);font-weight:600">Listening & Monitoring</td></tr>
+    <tr>
+      <td>Social listening</td>
+      <td class="partial">Premium add-on</td><td class="check">Standard+</td><td class="cross">No</td><td class="check">Yes</td><td class="cross">No</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+    <tr>
+      <td>Brand mention monitoring</td>
+      <td class="partial">7-30 days</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="cross">No</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+    <tr>
+      <td>Sentiment analysis</td>
+      <td class="partial">Enterprise</td><td class="check">Adv+</td><td class="cross">No</td><td class="check">Yes</td><td class="cross">No</td><td class="cross">No</td><td class="cross">Planned</td>
+    </tr>
+
+    <tr><td colspan="8" style="background:var(--surface);color:var(--accent);font-weight:600">Platform Support</td></tr>
+    <tr>
+      <td>Instagram</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Facebook</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Twitter/X</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>LinkedIn</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>TikTok</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>YouTube</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Pinterest</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Threads</td>
+      <td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">In progress</td>
+    </tr>
+    <tr>
+      <td>Google Business Profile</td>
+      <td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td><td class="partial">Pending API</td>
+    </tr>
+
+    <tr><td colspan="8" style="background:var(--surface);color:var(--accent);font-weight:600">Unique / Differentiating</td></tr>
+    <tr>
+      <td>Full autopilot pipeline</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes (core feature)</td>
+    </tr>
+    <tr>
+      <td>AI review response generation</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes (tone-calibrated)</td>
+    </tr>
+    <tr>
+      <td>AI media triage & scoring</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes (vision AI)</td>
+    </tr>
+    <tr>
+      <td>Auto blog generation</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td>
+    </tr>
+    <tr>
+      <td>Whitelabel</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No (Sendible only)</td>
+    </tr>
+    <tr>
+      <td>E-commerce integrations</td>
+      <td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">Via RetailSpec</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================ -->
+<h2>4. Marketing Brand Voice & Target Audience</h2>
+<p class="section-intro">How each competitor positions themselves, who they target, and how they establish authority.</p>
+
+<div class="voice-card">
+  <div class="card-name">Hootsuite</div>
+  <div class="voice-grid">
+    <div class="voice-item"><div class="voice-label">Target</div><div class="voice-value">SMBs to Enterprise (broadest)</div></div>
+    <div class="voice-item"><div class="voice-label">Voice</div><div class="voice-value">Corporate, established, authoritative</div></div>
+    <div class="voice-item"><div class="voice-label">Tagline</div><div class="voice-value">"Save time and get REAL results on social media"</div></div>
+    <div class="voice-item"><div class="voice-label">Authority</div><div class="voice-value">Annual Social Trends report, certifications, university partnerships</div></div>
+  </div>
+</div>
+
+<div class="voice-card">
+  <div class="card-name">Sprout Social</div>
+  <div class="voice-grid">
+    <div class="voice-item"><div class="voice-label">Target</div><div class="voice-value">Enterprise & Agencies</div></div>
+    <div class="voice-item"><div class="voice-label">Voice</div><div class="voice-value">Premium, polished, data-driven</div></div>
+    <div class="voice-item"><div class="voice-label">Tagline</div><div class="voice-value">"Understand and reach your audience, engage your community and measure performance"</div></div>
+    <div class="voice-item"><div class="voice-label">Authority</div><div class="voice-value">Sprout Social Index research, case studies, data reports</div></div>
+  </div>
+</div>
+
+<div class="voice-card">
+  <div class="card-name">Buffer</div>
+  <div class="voice-grid">
+    <div class="voice-item"><div class="voice-label">Target</div><div class="voice-value">Creators, solopreneurs, small businesses</div></div>
+    <div class="voice-item"><div class="voice-label">Voice</div><div class="voice-value">Friendly, transparent, humble, approachable</div></div>
+    <div class="voice-item"><div class="voice-label">Tagline</div><div class="voice-value">"Grow your audience on social and beyond"</div></div>
+    <div class="voice-item"><div class="voice-label">Authority</div><div class="voice-value">Open blog (salary transparency, culture), State of Remote Work reports</div></div>
+  </div>
+</div>
+
+<div class="voice-card">
+  <div class="card-name">Statusbrew</div>
+  <div class="voice-grid">
+    <div class="voice-item"><div class="voice-label">Target</div><div class="voice-value">Agencies, all business types (Hootsuite migrators)</div></div>
+    <div class="voice-item"><div class="voice-label">Voice</div><div class="voice-value">Challenger, modern, feature-forward</div></div>
+    <div class="voice-item"><div class="voice-label">Tagline</div><div class="voice-value">"Agile and less encumbered by legacy issues"</div></div>
+    <div class="voice-item"><div class="voice-label">Authority</div><div class="voice-value">G2 rating (4.8/5), "Hootsuite alternatives" content strategy, comparison pages</div></div>
+  </div>
+</div>
+
+<div class="voice-card">
+  <div class="card-name">Agorapulse</div>
+  <div class="voice-grid">
+    <div class="voice-item"><div class="voice-label">Target</div><div class="voice-value">SMBs and social media managers</div></div>
+    <div class="voice-item"><div class="voice-label">Voice</div><div class="voice-value">Practical, straightforward, value-focused</div></div>
+    <div class="voice-item"><div class="voice-label">Tagline</div><div class="voice-value">"Take control of your social media"</div></div>
+    <div class="voice-item"><div class="voice-label">Authority</div><div class="voice-value">Social Media Manager community, webinars, ROI calculator</div></div>
+  </div>
+</div>
+
+<div class="voice-card">
+  <div class="card-name">SocialBee</div>
+  <div class="voice-grid">
+    <div class="voice-item"><div class="voice-label">Target</div><div class="voice-value">Small businesses, entrepreneurs, coaches</div></div>
+    <div class="voice-item"><div class="voice-label">Voice</div><div class="voice-value">Playful, empowering, bee-themed</div></div>
+    <div class="voice-item"><div class="voice-label">Tagline</div><div class="voice-value">"Your AI-powered social media management tool"</div></div>
+    <div class="voice-item"><div class="voice-label">Authority</div><div class="voice-value">Templates, content categories framework, automation guides</div></div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<h2>5. Strategic Insights</h2>
+
+<div class="insight-box green">
+  <h4>Tracpost's Unique Position</h4>
+  <p>No competitor offers a <strong>full autopilot pipeline</strong> (media upload &rarr; AI triage &rarr; slot generation &rarr; caption generation &rarr; auto-publish). Every other tool requires manual scheduling. Tracpost is the only "set it and forget it" platform.</p>
+</div>
+
+<div class="insight-box green">
+  <h4>AI Review Responses &mdash; Uncontested</h4>
+  <p>No competitor in the SMB social management space offers <strong>AI-generated review responses with tone calibration by star rating</strong>. Sprout Social has AI replies but only in Advanced ($399/mo). Agorapulse gates AI to Custom tier. Tracpost includes it for all subscribers.</p>
+</div>
+
+<div class="insight-box yellow">
+  <h4>Feature Gaps to Address</h4>
+  <ul>
+    <li><strong>Social listening / brand monitoring</strong> &mdash; Expected by mid-market buyers. Currently missing.</li>
+    <li><strong>Competitor benchmarking</strong> &mdash; Standard in Hootsuite, Sprout, Statusbrew.</li>
+    <li><strong>Custom report builder / branded exports</strong> &mdash; Required for agency subscribers.</li>
+    <li><strong>Bulk scheduling</strong> &mdash; Expected feature, not yet built.</li>
+    <li><strong>Saved replies / templates</strong> &mdash; Standard inbox feature.</li>
+    <li><strong>Content recycling / evergreen</strong> &mdash; SocialBee and RecurPost differentiate here.</li>
+  </ul>
+</div>
+
+<div class="insight-box yellow">
+  <h4>Pricing Opportunity</h4>
+  <p>The market has a <strong>gap between Budget ($4-19/mo) and Mid-market ($59-149/mo)</strong>. Tracpost can position at <strong>$29-49/mo</strong> with AI features that competitors charge $199-399/mo for. This undercuts the mid-market while offering more than budget tools.</p>
+</div>
+
+<div class="insight-box">
+  <h4>Category Must-Haves (Table Stakes)</h4>
+  <ol>
+    <li>Multi-channel scheduling and publishing</li>
+    <li>Visual content calendar</li>
+    <li>Post-level analytics</li>
+    <li>Unified inbox / engagement management</li>
+    <li>Team collaboration (even basic)</li>
+    <li>Mobile access</li>
+    <li>8+ platform support</li>
+  </ol>
+  <p>Tracpost has 1, 2, 3, 4, and 7. Team collaboration (5) and mobile (6) are planned.</p>
+</div>
+
+<div class="insight-box red">
+  <h4>Competitive Threats</h4>
+  <ul>
+    <li><strong>SocialBu</strong> &mdash; Most similar positioning (AI-first, low cost, automation). Direct competitor at $19/mo.</li>
+    <li><strong>Buffer</strong> &mdash; Free plan with AI assistant. Hard to compete on price at the entry level.</li>
+    <li><strong>Nuelink</strong> &mdash; E-commerce integrations (Shopify, Etsy) overlap with RetailSpec's territory.</li>
+  </ul>
+</div>
+
+<!-- ============================================ -->
+<h2>6. Content & Authority Strategy Patterns</h2>
+<p class="section-intro">How competitors establish authority and attract subscribers through content.</p>
+
+<div class="matrix-container">
+<table>
+  <thead>
+    <tr>
+      <th>Strategy</th>
+      <th>Used By</th>
+      <th>Effectiveness</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>"X Alternatives" SEO content</td>
+      <td>Statusbrew, SocialBee, Social Champ, most challengers</td>
+      <td class="check">High &mdash; captures switching intent</td>
+    </tr>
+    <tr>
+      <td>Annual industry reports</td>
+      <td>Hootsuite (Social Trends), Sprout Social (Index), Buffer (State of Remote)</td>
+      <td class="check">High &mdash; press coverage, backlinks, authority</td>
+    </tr>
+    <tr>
+      <td>Free tools / calculators</td>
+      <td>Hootsuite (free plan removed), Buffer (free plan), Agorapulse (ROI calculator)</td>
+      <td class="check">High &mdash; top-of-funnel acquisition</td>
+    </tr>
+    <tr>
+      <td>Templates / swipe files</td>
+      <td>SocialBee, Buffer, Hootsuite</td>
+      <td class="partial">Medium &mdash; lead magnets</td>
+    </tr>
+    <tr>
+      <td>Certifications / courses</td>
+      <td>Hootsuite (Hootsuite Academy), Sprout Social</td>
+      <td class="partial">Medium &mdash; locks in enterprise</td>
+    </tr>
+    <tr>
+      <td>G2/Capterra review farming</td>
+      <td>Statusbrew (4.8), Sprout (4.4), Hootsuite (4.2)</td>
+      <td class="check">High &mdash; comparison shoppers check G2 first</td>
+    </tr>
+    <tr>
+      <td>Comparison pages (vs. X)</td>
+      <td>All challengers</td>
+      <td class="check">High &mdash; captures brand-aware switchers</td>
+    </tr>
+    <tr>
+      <td>Community building</td>
+      <td>Agorapulse (Social Media Manager community), Buffer (open culture)</td>
+      <td class="partial">Medium &mdash; retention and advocacy</td>
+    </tr>
+    <tr>
+      <td>Webinars / live events</td>
+      <td>Sprout Social, Hootsuite, Agorapulse</td>
+      <td class="partial">Medium &mdash; enterprise sales pipeline</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================ -->
+<div class="insight-box">
+  <h4>Market Size</h4>
+  <p>Social media management market: <strong>$40.24B (2026)</strong>, growing at 25.35% CAGR toward <strong>$160.64B by 2032</strong>. 78% of marketers expected to automate &gt;25% of tasks with AI by 2026.</p>
+  <p>G2 Spring 2026 leaders: Sprout Social (198 leader badges, #1 in 59 reports), Hootsuite, Buffer, Agorapulse.</p>
+</div>
+
+<div class="tracpost-box">
+  <h2 style="border:none;margin-top:0;padding:0;color:var(--accent)">Tracpost Positioning Summary</h2>
+  <p style="margin-top:1rem"><strong>Category:</strong> AI-first social content automation for small businesses</p>
+  <p><strong>Pricing sweet spot:</strong> $29-49/mo &mdash; undercuts mid-market, outfeatures budget</p>
+  <p><strong>Core differentiators:</strong></p>
+  <ul>
+    <li>Full autopilot pipeline (no other tool does this)</li>
+    <li>AI review responses with tone calibration (uncontested in SMB segment)</li>
+    <li>AI media triage and quality scoring (unique)</li>
+    <li>Auto blog generation from social content (unique)</li>
+    <li>Unified inbox with comments + reviews + AI (most gate AI replies to premium)</li>
+    <li>8 platform support including Threads (competitive parity)</li>
+  </ul>
+  <p><strong>Gaps to close for market readiness:</strong></p>
+  <ul>
+    <li>Media upload widget (in progress)</li>
+    <li>Mobile app (Expo, planned)</li>
+    <li>Social listening / brand monitoring</li>
+    <li>Competitor benchmarking</li>
+    <li>Branded report exports</li>
+    <li>Bulk scheduling</li>
+  </ul>
+  <p><strong>Brand voice direction:</strong> Confident but not corporate. Automation-forward. "Your social media runs itself." Not "manage" &mdash; "automate." Not "schedule" &mdash; "autopilot."</p>
+
+  <h4 style="color:var(--accent);margin-top:1.5rem">Messaging Contrasts</h4>
+  <table style="margin-top:0.5rem">
+    <tr><th>Competitor</th><th>Their Message</th><th>Tracpost Counter</th></tr>
+    <tr><td>Buffer</td><td>"We make scheduling easy"</td><td>"We make scheduling unnecessary"</td></tr>
+    <tr><td>SocialBee</td><td>"Organize your content strategy"</td><td>"We create your content strategy"</td></tr>
+    <tr><td>FeedHive</td><td>"AI helps you create"</td><td>"AI creates for you"</td></tr>
+    <tr><td>Later</td><td>"Plan and schedule"</td><td>"We plan and schedule for you"</td></tr>
+    <tr><td>Hootsuite</td><td>"Manage your social media"</td><td>"Your social media manages itself"</td></tr>
+  </table>
+
+  <h4 style="color:var(--accent);margin-top:1.5rem">Strategic Openings</h4>
+  <ul>
+    <li><strong>True zero-input autopilot</strong> &mdash; Every competitor (even AI-first) requires meaningful human involvement. Tracpost's "connect your business, AI handles everything" has no direct match.</li>
+    <li><strong>SEO + Social convergence</strong> &mdash; No competitor connects SEO strategy to social content. Tracpost's RetailSpec heritage is unique.</li>
+    <li><strong>E-commerce native social</strong> &mdash; Ocoya has Shopify integration but doesn't deeply understand product catalogs for auto-generating product social content.</li>
+    <li><strong>Local business focus</strong> &mdash; GBP emphasis + review response + local event promotion. Nobody owns this under $30/mo.</li>
+    <li><strong>Content recycling + AI generation</strong> &mdash; SocialBee does recycling. AI tools do generation. Nobody combines both with variation.</li>
+  </ul>
+</div>
+
+</body>
+</html>
