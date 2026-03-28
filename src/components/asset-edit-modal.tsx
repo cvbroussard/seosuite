@@ -3,6 +3,13 @@
 import { useState, useRef, useCallback } from "react";
 import { TagPicker, type PillarGroup } from "./tag-picker";
 
+interface Vendor {
+  id: string;
+  name: string;
+  slug: string;
+  url: string | null;
+}
+
 interface AssetEditModalProps {
   assetId: string;
   siteId: string;
@@ -13,6 +20,8 @@ interface AssetEditModalProps {
   initialTags: string[];
   pillarConfig: PillarGroup[];
   availablePillars?: string[];
+  vendors?: Vendor[];
+  initialVendorIds?: string[];
   onClose: () => void;
   onSaved: (note: string, pillar: string, tags: string[]) => void;
 }
@@ -26,12 +35,15 @@ export function AssetEditModal({
   initialPillar,
   initialTags,
   pillarConfig,
+  vendors = [],
+  initialVendorIds = [],
   onClose,
   onSaved,
 }: AssetEditModalProps) {
   const [note, setNote] = useState(initialNote);
   const [pillar, setPillar] = useState(initialPillar);
   const [tags, setTags] = useState<string[]>(initialTags || []);
+  const [vendorIds, setVendorIds] = useState<string[]>(initialVendorIds);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
@@ -73,6 +85,7 @@ export function AssetEditModal({
       if (note !== initialNote) body.context_note = note;
       if (pillar !== initialPillar) body.pillar = pillar;
       if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
+      if (JSON.stringify(vendorIds.sort()) !== JSON.stringify(initialVendorIds.sort())) body.vendor_ids = vendorIds;
 
       if (Object.keys(body).length === 0) {
         onClose();
@@ -188,6 +201,38 @@ export function AssetEditModal({
               onPillarChange={setPillar}
               onTagsChange={setTags}
             />
+          </div>
+        )}
+
+        {/* Row 3: Vendors */}
+        {vendors.length > 0 && (
+          <div className="border-t border-border px-6 py-4">
+            <label className="mb-2 block text-xs text-muted">Vendors</label>
+            <div className="flex flex-wrap gap-1.5">
+              {vendors.map((v) => {
+                const selected = vendorIds.includes(v.id);
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() =>
+                      setVendorIds((prev) =>
+                        selected ? prev.filter((id) => id !== v.id) : [...prev, v.id]
+                      )
+                    }
+                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                      selected
+                        ? "bg-accent/20 text-accent"
+                        : "bg-surface-hover text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {v.name}
+                    {v.url && selected && (
+                      <span className="ml-1 text-accent/50">↗</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

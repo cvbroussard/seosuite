@@ -29,16 +29,27 @@ const statusColors: Record<string, string> = {
   rejected: "bg-danger/70 text-white",
 };
 
+interface Vendor {
+  id: string;
+  name: string;
+  slug: string;
+  url: string | null;
+}
+
 export function MediaGrid({
   initialAssets,
   availablePillars,
   pillarConfig,
   siteId,
+  vendors = [],
+  assetVendorMap = {},
 }: {
   initialAssets: Asset[];
   availablePillars: string[];
   pillarConfig: PillarGroup[];
   siteId: string;
+  vendors?: Vendor[];
+  assetVendorMap?: Record<string, string[]>;
 }) {
   const [assets, setAssets] = useState(initialAssets);
   const [editing, setEditing] = useState<Asset | null>(null);
@@ -128,6 +139,8 @@ export function MediaGrid({
           initialPillar={editing.content_pillar || ""}
           initialTags={editing.content_tags || editing.content_pillars || []}
           pillarConfig={pillarConfig}
+          vendors={vendors}
+          initialVendorIds={assetVendorMap[editing.id] || []}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />

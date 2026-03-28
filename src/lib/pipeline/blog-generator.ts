@@ -150,18 +150,16 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   // Research entities mentioned in the context note
   const research = await researchContextNote((asset.context_note as string) || "");
 
-  // Fetch vendor URLs from pillar config for tags on this asset
-  const [siteConfig] = await sql`
-    SELECT pillar_config FROM sites WHERE id = ${asset.site_id}
+  // Fetch vendor URLs linked to this asset
+  const assetVendors = await sql`
+    SELECT v.name, v.url
+    FROM asset_vendors av
+    JOIN vendors v ON v.id = av.vendor_id
+    WHERE av.asset_id = ${assetId} AND v.url IS NOT NULL
   `;
-  const pillarConfig = (siteConfig?.pillar_config || []) as Array<{
-    tags: Array<{ id: string; label: string; url?: string }>;
-  }>;
-  const allTags = pillarConfig.flatMap((p) => p.tags);
-  const assetTags = (asset as Record<string, unknown>).content_tags as string[] | undefined;
-  const vendorLinks = allTags
-    .filter((t) => t.url && assetTags?.includes(t.id))
-    .map((t) => `${t.label}: ${t.url}`);
+  const vendorLinks = assetVendors.map(
+    (v: Record<string, unknown>) => `${v.name}: ${v.url}`
+  );
 
   // Classify content type based on context
   const existingTypeRows = await sql`

@@ -19,7 +19,7 @@ export default async function MediaPage() {
 
   const siteId = session.activeSiteId;
 
-  const [assets, siteData] = await Promise.all([
+  const [assets, siteData, vendors, assetVendorRows] = await Promise.all([
     sql`
       SELECT id, storage_url, media_type, context_note, triage_status,
              quality_score, content_pillar, content_pillars, content_tags, platform_fit, flag_reason,
@@ -30,7 +30,22 @@ export default async function MediaPage() {
       LIMIT 50
     `,
     sql`SELECT content_pillars, pillar_config FROM sites WHERE id = ${siteId}`,
+    sql`SELECT id, name, slug, url FROM vendors WHERE subscriber_id = ${session.subscriberId} ORDER BY name ASC`,
+    sql`
+      SELECT av.asset_id, av.vendor_id
+      FROM asset_vendors av
+      JOIN media_assets ma ON ma.id = av.asset_id
+      WHERE ma.site_id = ${siteId}
+    `,
   ]);
+
+  // Build asset→vendor_ids map
+  const assetVendorMap: Record<string, string[]> = {};
+  for (const row of assetVendorRows) {
+    const aid = row.asset_id as string;
+    if (!assetVendorMap[aid]) assetVendorMap[aid] = [];
+    assetVendorMap[aid].push(row.vendor_id as string);
+  }
 
   const pillars = (siteData[0]?.content_pillars || []) as string[];
   const pillarConfig = (siteData[0]?.pillar_config || []) as Array<{
@@ -50,7 +65,14 @@ export default async function MediaPage() {
       </div>
 
       {assets.length > 0 ? (
-        <MediaGrid initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]} availablePillars={pillars} pillarConfig={pillarConfig} siteId={siteId} />
+        <MediaGrid
+          initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]}
+          availablePillars={pillars}
+          pillarConfig={pillarConfig}
+          siteId={siteId}
+          vendors={vendors as Array<{ id: string; name: string; slug: string; url: string | null }>}
+          assetVendorMap={assetVendorMap}
+        />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-8 py-16 text-center">
           <span className="mb-3 text-3xl">▣</span>

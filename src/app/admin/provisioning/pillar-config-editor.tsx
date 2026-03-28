@@ -5,7 +5,6 @@ import { useState } from "react";
 interface PillarTag {
   id: string;
   label: string;
-  url?: string;
 }
 
 interface Pillar {
@@ -79,16 +78,6 @@ export function AdminPillarEditor({
       prev.map((p) =>
         p.id === pillarId
           ? { ...p, tags: p.tags.map((t, i) => (i === tagIndex ? { id: id || t.id, label } : t)) }
-          : p
-      )
-    );
-  }
-
-  function updateTagUrl(pillarId: string, tagIndex: number, url: string) {
-    setConfig((prev) =>
-      prev.map((p) =>
-        p.id === pillarId
-          ? { ...p, tags: p.tags.map((t, i) => (i === tagIndex ? { ...t, url } : t)) }
           : p
       )
     );
@@ -186,27 +175,19 @@ export function AdminPillarEditor({
                       <label className="mb-1 block text-[10px] text-muted">Tags (4-6 recommended)</label>
                       <div className="flex flex-wrap gap-1.5">
                         {pillar.tags.map((tag, i) => (
-                          <div key={i} className="rounded bg-surface-hover px-1.5 py-0.5">
-                            <div className="flex items-center gap-0.5">
-                              <input
-                                value={tag.label}
-                                onChange={(e) => updateTag(pillar.id, i, e.target.value)}
-                                className="w-24 bg-transparent text-[10px] outline-none"
-                                placeholder="Tag name"
-                              />
-                              <button
-                                onClick={() => removeTag(pillar.id, i)}
-                                className="text-[10px] text-muted hover:text-danger"
-                              >
-                                ✕
-                              </button>
-                            </div>
+                          <div key={i} className="flex items-center gap-0.5 rounded bg-surface-hover px-1.5 py-0.5">
                             <input
-                              value={tag.url || ""}
-                              onChange={(e) => updateTagUrl(pillar.id, i, e.target.value)}
-                              className="mt-0.5 w-full bg-transparent text-[9px] text-muted outline-none"
-                              placeholder="https://vendor.com"
+                              value={tag.label}
+                              onChange={(e) => updateTag(pillar.id, i, e.target.value)}
+                              className="w-24 bg-transparent text-[10px] outline-none"
+                              placeholder="Tag name"
                             />
+                            <button
+                              onClick={() => removeTag(pillar.id, i)}
+                              className="text-[10px] text-muted hover:text-danger"
+                            >
+                              ✕
+                            </button>
                           </div>
                         ))}
                         <button

@@ -18,9 +18,9 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { context_note, pillar, content_tags } = body;
+    const { context_note, pillar, content_tags, vendor_ids } = body;
 
-    if (context_note === undefined && pillar === undefined && content_tags === undefined) {
+    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined) {
       return NextResponse.json(
         { error: "Nothing to update" },
         { status: 400 }
@@ -58,6 +58,13 @@ export async function PATCH(
     }
     if (Array.isArray(content_tags)) {
       await sql`UPDATE media_assets SET content_tags = ${content_tags} WHERE id = ${id}`;
+    }
+    if (Array.isArray(vendor_ids)) {
+      // Replace all vendor associations for this asset
+      await sql`DELETE FROM asset_vendors WHERE asset_id = ${id}`;
+      for (const vendorId of vendor_ids) {
+        await sql`INSERT INTO asset_vendors (asset_id, vendor_id) VALUES (${id}, ${vendorId}) ON CONFLICT DO NOTHING`;
+      }
     }
 
     // Log the edit
