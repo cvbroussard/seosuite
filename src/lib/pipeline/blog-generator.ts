@@ -520,6 +520,7 @@ ${existingTitles && existingTitles.length > 0
 - Use the audience's language naturally.
 - 3-5 headings as ## (at least one as a question).
 - Paragraphs over bullet lists.
+- NEVER include specific prices, dollar amounts, cost estimates, or price ranges. No "$80,000", no "starting at $X", no "typically costs". Let the reader inquire.
 - Link to vendor/partner websites where provided. Also include 1 outbound link to an authoritative, non-competitor source.
 
 ## Response Format
@@ -594,6 +595,7 @@ ${existingTitles && existingTitles.length > 0
 - Use the audience's language naturally — don't force keywords.
 - 3-5 headings as ## (at least one as a question).
 - Paragraphs, not bullet lists. Dense and complete per paragraph.
+- NEVER include specific prices, dollar amounts, cost estimates, or price ranges. Let the reader inquire.
 - End with a brief FAQ (3-4 Q&As) and 3-4 key takeaways.
 - Include 1 outbound link to an authoritative, non-competitor source.
 - Internal links: if relevant, link to other articles on the same blog.
@@ -667,6 +669,7 @@ ${existingTitles && existingTitles.length > 0
 - Use the audience's language naturally — don't force keywords.
 - 3-5 headings as ## (at least one as a question).
 - Paragraphs, not bullet lists. Dense and complete per paragraph.
+- NEVER include specific prices, dollar amounts, cost estimates, or price ranges. Let the reader inquire.
 - End with a brief FAQ (3-4 Q&As) and 3-4 key takeaways.
 - Include 1 outbound link to an authoritative, non-competitor source.
 
