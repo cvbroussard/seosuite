@@ -56,6 +56,7 @@ export function BlogPostList({
   const [repromptUrl, setRepromptUrl] = useState<string | null>(null);
   const [repromptNote, setRepromptNote] = useState("");
   const [reprompting, setReprompting] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLDivElement | null>(null);
   const proseRef = useRef<HTMLDivElement>(null);
 
   function updateParams(updates: Record<string, string>) {
@@ -131,16 +132,13 @@ export function BlogPostList({
     Array.isArray(post.metadata?.editorial_images) && (post.metadata.editorial_images as unknown[]).length > 0;
 
   // Attach click handlers to editorial images in the prose container
-  const repromptFormRef = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
     if (!proseRef.current || !previewing) return;
 
-    // Clean up any previously injected form
-    if (repromptFormRef.current) {
-      repromptFormRef.current.remove();
-      repromptFormRef.current = null;
-    }
+    // Clean up any previously injected form container
+    const existing = proseRef.current.querySelector("#reprompt-inline-form");
+    if (existing) existing.remove();
+    setPortalTarget(null);
 
     const imgs = proseRef.current.querySelectorAll("img");
     imgs.forEach((img) => {
@@ -154,13 +152,14 @@ export function BlogPostList({
           setRepromptNote("");
         };
 
-        // Inject form right after the selected image
+        // Inject portal container right after the selected image
         if (repromptUrl === img.src) {
-          const form = document.createElement("div");
-          form.id = "reprompt-inline-form";
-          form.style.cssText = "margin: 12px 0; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface-hover);";
-          repromptFormRef.current = form;
-          img.insertAdjacentElement("afterend", form);
+          const container = document.createElement("div");
+          container.id = "reprompt-inline-form";
+          container.style.cssText = "margin: 12px 0; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface-hover);";
+          img.insertAdjacentElement("afterend", container);
+          // Use state setter to trigger re-render so portal picks up the target
+          setPortalTarget(container);
         }
       }
     });
@@ -394,7 +393,7 @@ export function BlogPostList({
               )}
 
               {/* Image re-prompt form — portaled inline below the clicked image */}
-              {repromptUrl && hasEditorialImages(previewing) && repromptFormRef.current && createPortal(
+              {repromptUrl && hasEditorialImages(previewing) && portalTarget && createPortal(
                 <div>
                   <p className="mb-1 text-xs font-medium">Adjust this image</p>
                   <p className="mb-2 text-[10px] text-muted">
@@ -424,7 +423,7 @@ export function BlogPostList({
                     </button>
                   </div>
                 </div>,
-                repromptFormRef.current
+                portalTarget
               )}
             </div>
 
