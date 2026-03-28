@@ -32,28 +32,26 @@ export const blogProseStyles = `
   .preview-prose {
     font-size: 16px;
     line-height: 1.7;
-    color: var(--foreground, #e5e5e5);
   }
   .preview-prose h1, .preview-prose h2, .preview-prose h3 {
     font-weight: 600;
     margin-top: 1.5em;
     margin-bottom: 0.5em;
-    color: var(--foreground, #e5e5e5);
   }
   .preview-prose h2 { font-size: 1.3em; }
   .preview-prose h3 { font-size: 1.1em; }
   .preview-prose p { margin-bottom: 1.25em; }
-  .preview-prose a { color: var(--accent, #3b82f6); text-decoration: none; }
+  .preview-prose a { color: var(--accent); text-decoration: none; }
   .preview-prose a:hover { text-decoration: underline; }
   .preview-prose strong { font-weight: 600; }
   .preview-prose ul, .preview-prose ol { margin-bottom: 1.25em; padding-left: 1.5em; }
   .preview-prose li { margin-bottom: 0.4em; }
   .preview-prose img { width: 100%; border-radius: 8px; margin: 1.5em 0; }
   .preview-prose blockquote {
-    border-left: 3px solid var(--border, #333);
+    border-left: 3px solid var(--border);
     padding-left: 1em;
     margin: 1.5em 0;
-    color: var(--muted, #888);
+    color: var(--muted);
     font-style: italic;
   }
 `;
