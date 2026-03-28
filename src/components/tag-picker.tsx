@@ -3,6 +3,7 @@
 export interface PillarTag {
   id: string;
   label: string;
+  url?: string;
 }
 
 export interface PillarGroup {

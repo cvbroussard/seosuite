@@ -79,7 +79,7 @@ const anthropic = new Anthropic();
 export async function generateBlogPost(assetId: string): Promise<string | null> {
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.context_note,
-           ma.content_pillar, ma.ai_analysis, ma.media_type,
+           ma.content_pillar, ma.content_tags, ma.ai_analysis, ma.media_type,
            s.name AS site_name, s.url AS site_url, s.brand_voice,
            s.brand_playbook,
            bs.blog_enabled, bs.blog_title
@@ -150,6 +150,19 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   // Research entities mentioned in the context note
   const research = await researchContextNote((asset.context_note as string) || "");
 
+  // Fetch vendor URLs from pillar config for tags on this asset
+  const [siteConfig] = await sql`
+    SELECT pillar_config FROM sites WHERE id = ${asset.site_id}
+  `;
+  const pillarConfig = (siteConfig?.pillar_config || []) as Array<{
+    tags: Array<{ id: string; label: string; url?: string }>;
+  }>;
+  const allTags = pillarConfig.flatMap((p) => p.tags);
+  const assetTags = (asset as Record<string, unknown>).content_tags as string[] | undefined;
+  const vendorLinks = allTags
+    .filter((t) => t.url && assetTags?.includes(t.id))
+    .map((t) => `${t.label}: ${t.url}`);
+
   // Classify content type based on context
   const existingTypeRows = await sql`
     SELECT DISTINCT content_type
@@ -166,7 +179,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   const typeConfig = CONTENT_TYPES[contentType];
 
   const prompt = playbook
-    ? buildTypedBlogPrompt(contentType, asset, playbook, aiAnalysis, hookText, imageUrls, existingTitles, research)
+    ? buildTypedBlogPrompt(contentType, asset, playbook, aiAnalysis, hookText, imageUrls, existingTitles, research, vendorLinks)
     : buildBasicBlogPrompt(asset, brandVoice, aiAnalysis, imageUrls);
 
   const response = await anthropic.messages.create({
@@ -353,7 +366,8 @@ function buildTypedBlogPrompt(
   hookText?: string,
   inlineImages?: Array<{ url: string; context: string }>,
   existingTitles?: string[],
-  research?: string
+  research?: string,
+  vendorLinks?: string[]
 ): string {
   const { audienceResearch, brandPositioning, offerCore } = playbook;
   const angle = brandPositioning.selectedAngles[0];
@@ -440,6 +454,9 @@ If the creator's note references specific brands, vendors, products, materials, 
 - Position the business's choice to work with them as intentional and quality-driven.
 - Never fabricate facts about real companies or products.
 ${research ? `\n## Background Research (from Wikipedia)\n${research}` : ""}
+${vendorLinks && vendorLinks.length > 0
+  ? `\n## Vendor/Partner Links (link to these in the article where naturally relevant)\n${vendorLinks.join("\n")}`
+  : ""}
 
 ## Brand Context
 Business: ${asset.site_name} (${asset.site_url})
@@ -469,7 +486,7 @@ ${existingTitles && existingTitles.length > 0
 - Use the audience's language naturally.
 - 3-5 headings as ## (at least one as a question).
 - Paragraphs over bullet lists.
-- 1 outbound link to an authoritative, non-competitor source.
+- Link to vendor/partner websites where provided. Also include 1 outbound link to an authoritative, non-competitor source.
 
 ## Response Format
 Respond with ONLY valid JSON (no markdown fencing):
