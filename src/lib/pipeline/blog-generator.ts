@@ -19,26 +19,26 @@ interface ContentTypeConfig {
 const CONTENT_TYPES: Record<BlogContentType, ContentTypeConfig> = {
   authority_overview: {
     label: "Authority Overview",
-    wordRange: "1000-1500",
-    maxTokens: 8192,
+    wordRange: "1500-2000",
+    maxTokens: 12288,
     description: "Wide coverage of capabilities told through client perspective. The 'why us' article.",
   },
   deep_dive: {
     label: "Deep Dive",
-    wordRange: "800-1200",
-    maxTokens: 6144,
+    wordRange: "1000-1500",
+    maxTokens: 8192,
     description: "Single topic expertise. Technical authority on one subject.",
   },
   project_story: {
     label: "Project Story",
-    wordRange: "600-800",
-    maxTokens: 4096,
+    wordRange: "800-1200",
+    maxTokens: 6144,
     description: "Case study / before-after narrative. Specific client outcome.",
   },
   vendor_spotlight: {
     label: "Vendor/Material Spotlight",
-    wordRange: "600-800",
-    maxTokens: 4096,
+    wordRange: "1000-1500",
+    maxTokens: 8192,
     description: "Research-driven feature on a material, vendor, or technique.",
   },
 };
