@@ -20,25 +20,25 @@ const CONTENT_TYPES: Record<BlogContentType, ContentTypeConfig> = {
   authority_overview: {
     label: "Authority Overview",
     wordRange: "1500-2000",
-    maxTokens: 12288,
+    maxTokens: 16384,
     description: "Wide coverage of capabilities told through client perspective. The 'why us' article.",
   },
   deep_dive: {
     label: "Deep Dive",
     wordRange: "1000-1500",
-    maxTokens: 8192,
+    maxTokens: 12288,
     description: "Single topic expertise. Technical authority on one subject.",
   },
   project_story: {
     label: "Project Story",
     wordRange: "800-1200",
-    maxTokens: 6144,
+    maxTokens: 8192,
     description: "Case study / before-after narrative. Specific client outcome.",
   },
   vendor_spotlight: {
     label: "Vendor/Material Spotlight",
     wordRange: "1000-1500",
-    maxTokens: 8192,
+    maxTokens: 12288,
     description: "Research-driven feature on a material, vendor, or technique.",
   },
 };
@@ -275,6 +275,19 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
       return bestLen > 40 ? best : found; // Only fix if strong match
     }
   );
+
+  // Fix malformed markdown in the body
+  // 1. Broken image syntax: ![url) → ![image](url)
+  parsed.body = parsed.body.replace(
+    /!\[(https?:\/\/[^\]]+)\)/g,
+    (_, url) => `![editorial image](${url})`
+  );
+  // 2. Image with no alt: ![](url) is fine but ![ ](url) → ![image](url)
+  parsed.body = parsed.body.replace(/!\[\s*\]\(/g, "![image](");
+  // 3. Truncated links at end of body: [text without closing
+  parsed.body = parsed.body.replace(/\[[^\]]*$/, "");
+  // 4. Unclosed markdown link: [text](url without closing paren
+  parsed.body = parsed.body.replace(/\[[^\]]*\]\([^)]*$/, "");
 
   // Content safety scan — flag issues before storing
   const guard = await scanContent(
