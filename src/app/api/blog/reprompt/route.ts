@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { post_id, image_url, adjustment, mode = "new", reference_url } = body;
+  const { post_id, image_url, adjustment = "", mode = "new", reference_url } = body;
 
-  if (!post_id || !image_url || !adjustment) {
+  if (!post_id || !image_url) {
     return NextResponse.json(
-      { error: "post_id, image_url, and adjustment are required" },
+      { error: "post_id and image_url are required" },
       { status: 400 }
     );
   }

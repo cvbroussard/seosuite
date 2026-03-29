@@ -217,7 +217,8 @@ export function BlogPostList({
   }
 
   async function handleReprompt() {
-    if (!previewing || !repromptUrl || !repromptNote.trim()) return;
+    if (!previewing || !repromptUrl) return;
+    if (!repromptNote.trim() && !referenceFile && repromptMode !== "new") return;
     setReprompting(true);
     try {
       // Upload reference image if provided
@@ -552,7 +553,7 @@ export function BlogPostList({
                             ) : (
                               <button
                                 onClick={handleReprompt}
-                                disabled={reprompting || !repromptNote.trim()}
+                                disabled={reprompting || (!repromptNote.trim() && repromptMode !== "new")}
                                 className="bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                               >
                                 {reprompting ? (repromptMode === "edit" ? "Editing..." : "Generating...") : (repromptMode === "edit" ? "Edit" : "Regenerate")}
