@@ -106,7 +106,7 @@ export function MediaGrid({
               ) : (
                 <p className="truncate text-xs text-muted">No caption</p>
               )}
-              <div className="mt-1 flex items-center gap-2">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] text-muted">
                   {new Date(a.created_at).toLocaleDateString()}
                 </span>
