@@ -4,9 +4,11 @@
  * plus professional post-production directives.
  */
 
-import { editEditorialImage } from "./gemini";
+import { editEditorialImage, generateEditorialImage } from "./gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { sql } from "@/lib/db";
+
+const QUALITY_CUTOFF = 0.6;
 
 const POST_PRODUCTION_PROMPT = `Enhance this photograph to professional publication quality. Apply these post-production adjustments:
 
@@ -37,15 +39,20 @@ COMPOSITION:
 OUTPUT STYLE:`;
 
 /**
- * Enhance a media asset photo to production quality.
- * Uses the site's image_style as the target aesthetic.
- * Stores the enhanced version and updates the asset record.
+ * Process a media asset photo based on quality score.
+ *
+ * Above cutoff (0.6): ENHANCE — polish the existing photo with post-production.
+ * Below cutoff (0.6): REGENERATE — use the photo as a reference to generate
+ *   a production-quality "inspired by" version via AI.
+ *
+ * Either way, the subscriber gets a publishable hero image.
  */
 export async function enhanceAssetPhoto(
   assetId: string
 ): Promise<string | null> {
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type,
+           ma.quality_score, ma.context_note,
            s.image_style
     FROM media_assets ma
     JOIN sites s ON s.id = ma.site_id
@@ -58,27 +65,70 @@ export async function enhanceAssetPhoto(
   const sourceUrl = asset.storage_url as string;
   if (!sourceUrl) return null;
 
-  // Build enhancement prompt: post-production + site style
+  const qualityScore = (asset.quality_score as number) || 0;
   const siteStyle = (asset.image_style as string) || "Clean, editorial style. Natural lighting.";
-  const fullPrompt = `${POST_PRODUCTION_PROMPT} ${siteStyle}`;
+  const contextNote = (asset.context_note as string) || "";
 
-  const result = await editEditorialImage(sourceUrl, fullPrompt);
+  let result;
+  let mode: "enhanced" | "regenerated";
+
+  if (qualityScore >= QUALITY_CUTOFF) {
+    // ENHANCE — polish the existing photo
+    mode = "enhanced";
+    const fullPrompt = `${POST_PRODUCTION_PROMPT} ${siteStyle}`;
+    result = await editEditorialImage(sourceUrl, fullPrompt);
+  } else {
+    // REGENERATE — use photo as reference, generate production version
+    mode = "regenerated";
+    result = await regenerateFromReference(sourceUrl, contextNote, siteStyle);
+  }
+
   if (!result) return null;
 
-  // Upload enhanced version to R2
+  // Upload to R2
   const ext = result.mimeType.includes("png") ? "png" : "jpg";
-  const key = `sites/${asset.site_id}/enhanced/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const enhancedUrl = await uploadBufferToR2(key, result.data, result.mimeType);
+  const key = `sites/${asset.site_id}/${mode}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const newUrl = await uploadBufferToR2(key, result.data, result.mimeType);
 
-  // Store enhanced URL on the asset — keep original as source
+  // Store new URL on the asset — keep original in metadata
   await sql`
     UPDATE media_assets
     SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-      enhanced_url: enhancedUrl,
+      [`${mode}_url`]: newUrl,
       original_url: sourceUrl,
+      hero_mode: mode,
+      quality_score_at_processing: qualityScore,
     })}::jsonb
     WHERE id = ${assetId}
   `;
 
-  return enhancedUrl;
+  return newUrl;
+}
+
+/**
+ * Generate a production-quality image inspired by a low-quality reference photo.
+ * Sends the reference photo + context note to Gemini as a scene description,
+ * producing a new image that captures the same subject matter at catalog quality.
+ */
+async function regenerateFromReference(
+  referenceUrl: string,
+  contextNote: string,
+  siteStyle: string
+): Promise<{ data: Buffer; mimeType: string } | null> {
+  // First, try edit mode with heavy enhancement — sometimes this is enough
+  const editResult = await editEditorialImage(
+    referenceUrl,
+    `Dramatically improve this photograph to professional publication quality. Fix all exposure, lighting, color, and clarity issues. Remove any construction debris, tools, or staging items that aren't part of the finished space. ${siteStyle}`
+  );
+  if (editResult) return editResult;
+
+  // If edit fails (image too degraded), generate a new image inspired by the context
+  if (contextNote) {
+    return generateEditorialImage(
+      `Professional photograph of: ${contextNote}. ${siteStyle}`,
+      "16:9"
+    );
+  }
+
+  return null;
 }
