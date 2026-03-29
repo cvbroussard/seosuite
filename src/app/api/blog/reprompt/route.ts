@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
     if (reference_url && mode === "edit") {
       // Reference-based edit: current image + reference + instruction
       image = await editWithReference(image_url, reference_url, adjustment);
+    } else if (reference_url && mode === "new") {
+      // New mode with reference: use reference as inspiration for a new image
+      image = await editWithReference(reference_url, image_url, `Using the first image as the primary reference, create a new version: ${adjustment}`);
     } else if (mode === "edit") {
       // Standard edit: text instruction on single image
       image = await editEditorialImage(image_url, adjustment);
@@ -77,7 +80,7 @@ export async function POST(req: NextRequest) {
       const adjustedPrompt = `${imageEntry.prompt}. IMPORTANT CORRECTION: ${adjustment}`;
       image = await generateEditorialImage(adjustedPrompt);
     } else {
-      // New mode on subscriber photo — generate from adjustment text + site style
+      // New mode on subscriber photo — generate from adjustment text
       image = await generateEditorialImage(adjustment);
     }
   } catch (genErr) {
