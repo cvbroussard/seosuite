@@ -7,6 +7,7 @@
 import { editEditorialImage, generateEditorialImage } from "./gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { sql } from "@/lib/db";
+import { seoFilename } from "@/lib/seo-filename";
 
 const QUALITY_CUTOFF = 0.7;
 
@@ -89,7 +90,8 @@ export async function enhanceAssetPhoto(
 
   // Upload to R2
   const ext = result.mimeType.includes("png") ? "png" : "jpg";
-  const key = `sites/${asset.site_id}/${mode}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const fname = seoFilename(contextNote || "enhanced-photo", ext);
+  const key = `sites/${asset.site_id}/${mode}/${fname}`;
   const newUrl = await uploadBufferToR2(key, result.data, result.mimeType);
 
   // Store new URL on the asset — keep original in metadata

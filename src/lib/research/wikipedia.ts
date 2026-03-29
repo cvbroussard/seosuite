@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { generateEditorialImage } from "@/lib/image-gen/gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { sql } from "@/lib/db";
+import { seoFilename } from "@/lib/seo-filename";
 
 const anthropic = new Anthropic();
 
@@ -501,7 +502,8 @@ Content note: "${contextNote}"
           const image = await generateEditorialImage(imgPrompt.prompt);
           if (image) {
             const ext = image.mimeType.includes("png") ? "png" : "jpg";
-            const key = `sites/${siteId}/editorial/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+            const fname = seoFilename(imgPrompt.alt, ext);
+            const key = `sites/${siteId}/editorial/${fname}`;
             const url = await uploadBufferToR2(key, image.data, image.mimeType);
 
             const meta: EditorialImageMeta = {

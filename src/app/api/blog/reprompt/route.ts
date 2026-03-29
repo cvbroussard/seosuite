@@ -3,6 +3,7 @@ import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { generateEditorialImage, editEditorialImage } from "@/lib/image-gen/gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
+import { seoFilename } from "@/lib/seo-filename";
 
 /**
  * POST /api/blog/reprompt — Re-generate an editorial image with adjustments.
@@ -83,7 +84,8 @@ export async function POST(req: NextRequest) {
 
   // Upload to R2
   const ext = image.mimeType.includes("png") ? "png" : "jpg";
-  const key = `sites/${post.site_id}/editorial/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const fname = seoFilename(imageEntry.alt || adjustment, ext);
+  const key = `sites/${post.site_id}/editorial/${fname}`;
   const newUrl = await uploadBufferToR2(key, image.data, image.mimeType);
 
   // Replace URL in post body

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runPipeline } from "@/lib/pipeline/orchestrator";
 import { fetchAndConvert } from "@/lib/image-utils";
 import { uploadBufferToR2 } from "@/lib/r2";
+import { seoFilename } from "@/lib/seo-filename";
 
 /**
  * POST /api/assets — Register a new media asset.
@@ -53,9 +54,9 @@ export async function POST(req: NextRequest) {
     )) {
       try {
         const { data, mimeType } = await fetchAndConvert(storage_url);
-        const key = storage_url
-          .replace("https://assets.tracpost.com/", "")
-          .replace(/\.heic$|\.heif$/, ".jpg");
+        const date = new Date().toISOString().slice(0, 10);
+        const fname = seoFilename(context_note || filename || "upload", "jpg");
+        const key = `sites/${site_id}/${date}/${fname}`;
         finalUrl = await uploadBufferToR2(key, data, mimeType);
       } catch (err) {
         console.warn("HEIC conversion failed, using original:", err instanceof Error ? err.message : err);
