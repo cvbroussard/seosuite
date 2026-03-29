@@ -143,7 +143,9 @@ export default function CapturePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             site_id: siteId,
-            content_type: item.file.type,
+            content_type: item.file.type
+              || (item.file.name.toLowerCase().endsWith(".heic") ? "image/heic" : "")
+              || (item.file.name.toLowerCase().endsWith(".heif") ? "image/heic" : ""),
             filename: item.file.name,
           }),
         });
