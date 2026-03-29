@@ -11,7 +11,7 @@ import { seoFilename } from "@/lib/seo-filename";
 
 const QUALITY_CUTOFF = 0.7;
 
-const POST_PRODUCTION_PROMPT = `Enhance this photograph to professional publication quality. Apply these post-production adjustments:
+const POST_PRODUCTION_PROMPT = `Apply ONLY technical photo corrections to this image. This is post-production, NOT creative editing.
 
 EXPOSURE & TONE:
 - Balanced dynamic range — recover blown highlights, lift crushed shadows
@@ -22,22 +22,20 @@ EXPOSURE & TONE:
 COLOR:
 - Neutral warm white balance — remove any color casts
 - Rich, natural color saturation without oversaturation
-- Consistent skin tones if people are present
 - Clean whites, true blacks
 
 CLARITY & DETAIL:
 - Micro-contrast enhancement for material textures (wood grain, metal, tile, stone)
 - Subtle sharpening — crisp but not crunchy
 - Noise reduction if visible, especially in shadow areas
-- Clean lens correction — remove any barrel distortion or chromatic aberration
 
-COMPOSITION:
-- Keep the scene, layout, and all elements exactly as they are
-- Do NOT add, remove, or rearrange any objects
-- Do NOT change the camera angle or perspective
-- Only enhance what the camera captured
-
-OUTPUT STYLE:`;
+STRICT RULES — DO NOT VIOLATE:
+- Do NOT add any objects (no dishes, no decor, no staging, no props)
+- Do NOT remove any objects (construction materials, tools, debris stay)
+- Do NOT advance the construction state — if something is unfinished, leave it unfinished
+- Do NOT change the scene composition, perspective, or framing
+- Do NOT reimagine or restage the photo
+- ONLY adjust lighting, color, exposure, and sharpness`;
 
 /**
  * Process a media asset photo based on quality score.
@@ -76,10 +74,9 @@ export async function enhanceAssetPhoto(
   let mode: "enhanced" | "regenerated";
 
   if (processingMode === "enhance" || qualityScore >= QUALITY_CUTOFF) {
-    // ENHANCE — polish the existing photo, preserve authenticity
+    // ENHANCE — technical post-production only, NO style overlay
     mode = "enhanced";
-    const fullPrompt = `${POST_PRODUCTION_PROMPT} ${siteStyle}`;
-    result = await editEditorialImage(sourceUrl, fullPrompt);
+    result = await editEditorialImage(sourceUrl, POST_PRODUCTION_PROMPT);
   } else {
     // REGENERATE — use photo as reference, generate production version
     mode = "regenerated";
