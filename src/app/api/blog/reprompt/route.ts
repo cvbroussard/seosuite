@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { generateEditorialImage, editEditorialImage } from "@/lib/image-gen/gemini";
+import { generateEditorialImage, editEditorialImage, editWithReference } from "@/lib/image-gen/gemini";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { seoFilename } from "@/lib/seo-filename";
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { post_id, image_url, adjustment, mode = "new" } = body;
+  const { post_id, image_url, adjustment, mode = "new", reference_url } = body;
 
   if (!post_id || !image_url || !adjustment) {
     return NextResponse.json(
@@ -57,8 +57,11 @@ export async function POST(req: NextRequest) {
   // Generate or edit image based on mode
   let image;
   try {
-    if (mode === "edit") {
-      // Edit works on any image — editorial or subscriber photo
+    if (reference_url && mode === "edit") {
+      // Reference-based edit: current image + reference + instruction
+      image = await editWithReference(image_url, reference_url, adjustment);
+    } else if (mode === "edit") {
+      // Standard edit: text instruction on single image
       image = await editEditorialImage(image_url, adjustment);
     } else if (isEditorial && imageEntry) {
       // New mode with original prompt — editorial only

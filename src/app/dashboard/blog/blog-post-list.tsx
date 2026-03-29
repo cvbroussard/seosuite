@@ -56,6 +56,8 @@ export function BlogPostList({
   const [repromptNote, setRepromptNote] = useState("");
   const [repromptMode, setRepromptMode] = useState<"edit" | "new">("edit");
   const [reprompting, setReprompting] = useState(false);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referencePreview, setReferencePreview] = useState<string | null>(null);
 
   function updateParams(updates: Record<string, string>) {
     const params = new URLSearchParams();
@@ -138,10 +140,56 @@ export function BlogPostList({
     );
   }
 
+  function handleReferenceFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReferenceFile(file);
+    setReferencePreview(URL.createObjectURL(file));
+  }
+
+  async function uploadReference(file: File, siteId: string): Promise<string | null> {
+    try {
+      // Get presign URL
+      const contentType = file.type || (file.name.toLowerCase().endsWith(".heic") ? "image/heic" : "image/jpeg");
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: siteId, content_type: contentType, filename: file.name }),
+      });
+      if (!presignRes.ok) return null;
+      const { upload_url, public_url } = await presignRes.json();
+
+      // Upload to R2
+      await fetch(upload_url, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+
+      // Register as media asset
+      await fetch("/api/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: siteId, storage_url: public_url, media_type: "image" }),
+      });
+
+      return public_url;
+    } catch {
+      return null;
+    }
+  }
+
   async function handleReprompt() {
     if (!previewing || !repromptUrl || !repromptNote.trim()) return;
     setReprompting(true);
     try {
+      // Upload reference image if provided
+      let referenceUrl: string | undefined;
+      if (referenceFile) {
+        // Get siteId from a published post's image URL or from the posts data
+        const siteMatch = repromptUrl.match(/sites\/([^/]+)/);
+        const siteId = siteMatch?.[1] || "";
+        if (siteId) {
+          referenceUrl = (await uploadReference(referenceFile, siteId)) || undefined;
+        }
+      }
+
       const res = await fetch("/api/blog/reprompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,6 +198,7 @@ export function BlogPostList({
           image_url: repromptUrl,
           adjustment: repromptNote.trim(),
           mode: repromptMode,
+          reference_url: referenceUrl,
         }),
       });
       if (res.ok) {
@@ -163,6 +212,8 @@ export function BlogPostList({
         }
         setRepromptUrl(null);
         setRepromptNote("");
+        setReferenceFile(null);
+        setReferencePreview(null);
         router.refresh();
       } else {
         const err = await res.json();
@@ -404,17 +455,41 @@ export function BlogPostList({
                               ? "Make one change at a time: remove something, change a color, adjust a detail. For bigger changes, switch to New."
                               : "Describe the scene you want. This replaces the image entirely. Factual corrections here (e.g., spray paint not brush) will apply to future articles."}
                           </p>
+                          {/* Reference image preview */}
+                          {referencePreview && (
+                            <div className="mb-2 flex items-center gap-2">
+                              <img src={referencePreview} alt="Reference" className="h-12 w-12 rounded object-cover" />
+                              <span className="text-[10px] text-muted">Reference image</span>
+                              <button
+                                onClick={() => { setReferenceFile(null); setReferencePreview(null); }}
+                                className="text-[10px] text-muted hover:text-danger"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <input
                               value={repromptNote}
                               onChange={(e) => setRepromptNote(e.target.value)}
                               onKeyDown={(e) => e.key === "Enter" && handleReprompt()}
                               className="flex-1 text-sm"
-                              placeholder={repromptMode === "edit"
+                              placeholder={referenceFile
+                                ? "e.g., make it look like the reference image"
+                                : repromptMode === "edit"
                                 ? "e.g., change sign to Mitchel & Mitchel, remove person on left"
                                 : "e.g., spray paint line not brush, woman making tile"}
                               autoFocus
                             />
+                            <label className="flex cursor-pointer items-center rounded bg-surface-hover px-2 py-1.5 text-[10px] text-muted hover:text-foreground">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleReferenceFile}
+                              />
+                              {referenceFile ? "Change" : "Ref"}
+                            </label>
                             <button
                               onClick={handleReprompt}
                               disabled={reprompting || !repromptNote.trim()}
@@ -423,7 +498,7 @@ export function BlogPostList({
                               {reprompting ? (repromptMode === "edit" ? "Editing..." : "Generating...") : (repromptMode === "edit" ? "Edit" : "Regenerate")}
                             </button>
                             <button
-                              onClick={() => { setRepromptUrl(null); setRepromptNote(""); }}
+                              onClick={() => { setRepromptUrl(null); setRepromptNote(""); setReferenceFile(null); setReferencePreview(null); }}
                               className="px-2 py-1.5 text-xs text-muted hover:text-foreground"
                             >
                               Cancel
