@@ -81,6 +81,14 @@ const PLATFORM_CONFIG: Record<string, {
     delayMinutes: 120,
     format: "tiktok",
   },
+  youtube: {
+    maxLength: 5000,
+    hashtagRange: [3, 5],
+    style: "Descriptive community post sharing the article insight. Professional but approachable. Include the link.",
+    supportsLinks: true,
+    delayMinutes: 45,
+    format: "youtube",
+  },
 };
 
 /**
@@ -144,8 +152,20 @@ export async function promoteBlogPost(blogPostId: string): Promise<PromotionResu
   const playbook = post.brand_playbook as BrandPlaybook | null;
   const promotionMeta: Record<string, unknown> = { posts: [] };
 
+  // Map DB platform names to PLATFORM_CONFIG keys
+  const platformMap: Record<string, string> = {
+    facebook: "fb_feed",
+    instagram: "instagram",
+    twitter: "twitter",
+    linkedin: "linkedin",
+    pinterest: "pinterest",
+    tiktok: "tiktok",
+    youtube: "youtube",
+  };
+
   for (const account of accounts) {
-    const platform = account.platform as string;
+    const dbPlatform = account.platform as string;
+    const platform = platformMap[dbPlatform] || dbPlatform;
     const config = PLATFORM_CONFIG[platform];
     if (!config) continue;
 
@@ -179,7 +199,7 @@ export async function promoteBlogPost(blogPostId: string): Promise<PromotionResu
         ) VALUES (
           ${account.id},
           ${fullCaption},
-          ${JSON.stringify(post.og_image_url ? [post.og_image_url] : [])}::jsonb,
+          ${post.og_image_url ? [post.og_image_url as string] : []},
           ${config.supportsLinks ? blogUrl : null},
           ${(post.content_pillar as string) || null},
           'scheduled',
