@@ -64,7 +64,7 @@ export default async function ProvisioningPage() {
         <p className="py-12 text-center text-muted">No subscribers to provision</p>
       ) : (
         <div>
-          {subscribers.map((sub) => {
+          {(await Promise.all(subscribers.map(async (sub) => {
             const connected = (sub.connected_platforms as string[] | null) || [];
             const missing = ALL_PLATFORMS.filter((p) => !connected.includes(p));
             const meta = (sub.metadata || {}) as Record<string, unknown>;
@@ -199,7 +199,7 @@ export default async function ProvisioningPage() {
                 )}
               </div>
             );
-          })}
+          })))}
         </div>
       )}
     </div>
