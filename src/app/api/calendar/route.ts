@@ -29,11 +29,13 @@ export async function GET(req: NextRequest) {
   const posts = await sql`
     SELECT sp.id, sp.caption, sp.hashtags, sp.status, sp.scheduled_at,
            sp.published_at, sp.content_pillar, sp.platform_post_url,
+           sp.link_url, sp.trigger_type,
            sp.veto_reason, sp.error_message,
            sa.account_name, sa.platform
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
-    WHERE sa.site_id = ${siteId}
+    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+    WHERE ssl.site_id = ${siteId}
     ORDER BY COALESCE(sp.scheduled_at, sp.created_at) DESC
     LIMIT 100
   `;

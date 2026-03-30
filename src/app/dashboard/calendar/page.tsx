@@ -12,6 +12,8 @@ interface Post {
   account_name: string;
   platform: string;
   platform_post_url: string | null;
+  link_url: string | null;
+  trigger_type: string | null;
 }
 
 export default function CalendarPage() {
@@ -19,6 +21,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [vetoingId, setVetoingId] = useState<string | null>(null);
   const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -76,29 +79,57 @@ export default function CalendarPage() {
             <h2 className="mb-3 text-sm font-medium">Scheduled ({scheduled.length})</h2>
             {scheduled.length > 0 ? (
               <div className="space-y-3">
-                {scheduled.map((post) => (
-                  <div key={post.id} className="rounded-lg border border-border bg-surface p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm">{post.caption || "Awaiting caption"}</p>
-                        <p className="mt-1 text-xs text-muted">
-                          {post.account_name} ({post.platform})
-                          {post.content_pillar && ` — ${post.content_pillar}`}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : "—"}
-                        </p>
+                {scheduled.map((post) => {
+                  const isExpanded = expanded === post.id;
+                  return (
+                    <div key={post.id} className="rounded-lg border border-border bg-surface">
+                      <div className="flex items-start justify-between p-4">
+                        <button
+                          onClick={() => setExpanded(isExpanded ? null : post.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                              {post.platform}
+                            </span>
+                            {post.trigger_type === "blog_publish" && (
+                              <span className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
+                                blog promo
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted">
+                              {post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : "—"}
+                            </span>
+                          </div>
+                          <p className={`mt-1 text-sm ${isExpanded ? "" : "truncate"}`}>
+                            {post.caption || "Awaiting caption"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted">
+                            {post.account_name}
+                            {post.content_pillar && ` — ${post.content_pillar}`}
+                          </p>
+                        </button>
+                        <button
+                          onClick={() => vetoPost(post.id)}
+                          disabled={vetoingId === post.id}
+                          className="ml-4 shrink-0 rounded border border-danger/30 px-3 py-1.5 text-xs text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
+                        >
+                          {vetoingId === post.id ? "..." : "Veto"}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => vetoPost(post.id)}
-                        disabled={vetoingId === post.id}
-                        className="ml-4 shrink-0 rounded border border-danger/30 px-3 py-1.5 text-xs text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
-                      >
-                        {vetoingId === post.id ? "..." : "Veto"}
-                      </button>
+                      {isExpanded && (
+                        <div className="border-t border-border px-4 py-3">
+                          <div className="whitespace-pre-wrap text-sm">{post.caption}</div>
+                          {post.link_url && (
+                            <a href={post.link_url} target="_blank" rel="noopener noreferrer" className="mt-2 block text-xs text-accent hover:underline">
+                              {post.link_url}
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="py-8 text-center text-sm text-muted">No scheduled posts</p>
