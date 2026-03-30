@@ -22,8 +22,11 @@ import type { BrandPlaybook } from "./types";
 
 const anthropic = new Anthropic();
 
+type SceneType = "humans" | "environment" | "product" | "method" | "region";
+
 interface RewardPrompt {
   category: "moment" | "lifestyle" | "social_proof";
+  scene: SceneType;
   prompt: string;
   visual: string;
 }
@@ -68,64 +71,70 @@ export async function generateRewardPrompts(
 
   const allPrompts: RewardPrompt[] = [];
 
-  // Generate in 3 batches — one per category
-  for (const category of ["moment", "lifestyle", "social_proof"] as const) {
-    const categoryInstructions: Record<string, string> = {
-      moment: `THE MOMENT — the instant the customer's problem is solved or their desire is fulfilled.
-Examples: first dinner party in the new kitchen, dog walking calmly for the first time, business opening day, unwrapping the perfect gift.
-These are peak emotional payoff scenes. The customer realizes it was worth it.`,
+  const categories = ["moment", "lifestyle", "social_proof"] as const;
+  const sceneTypes: SceneType[] = ["humans", "environment", "product", "method", "region"];
 
-      lifestyle: `THE LIFESTYLE — the ongoing daily life that follows.
-Examples: morning coffee ritual in the new space, confident walks with a trained dog, repeat customers at the new restaurant, living room transformed by a statement piece.
-These are "new normal" scenes. The customer's daily experience has permanently improved.`,
+  const categoryInstructions: Record<string, string> = {
+    moment: "THE MOMENT — the instant the customer's problem is solved or desire fulfilled. Peak emotional payoff.",
+    lifestyle: "THE LIFESTYLE — the ongoing daily life that follows. The 'new normal' that's permanently better.",
+    social_proof: "THE SOCIAL PROOF — others noticing, reacting, admiring. External validation of the investment.",
+  };
 
-      social_proof: `THE SOCIAL PROOF — others noticing, reacting, admiring.
-Examples: dinner guests asking about the countertop, neighbors commenting on the renovation, Instagram-worthy moments, friends wanting the same thing.
-These are validation scenes. The customer's investment earns external recognition.`,
-    };
+  const sceneInstructions: Record<SceneType, string> = {
+    humans: "HUMANS/ANIMALS — people (or pets) using, enjoying, or reacting. Show emotion, interaction, real life. Specify age range, attire, activity.",
+    environment: "ENVIRONMENT ONLY — the space itself, no people. Mood, atmosphere, light, time of day. The space tells the story.",
+    product: "PRODUCT-FOCUSED — close-up on a specific material, fixture, detail, or feature. Texture, craftsmanship, quality visible.",
+    method: "METHOD-FOCUSED — the process, technique, or craftsmanship. How it's made, installed, or executed. Expertise visible.",
+    region: "REGION-FOCUSED — local context, neighborhood, community, geography. The work in its local setting. City identity, climate, architecture.",
+  };
 
-    try {
-      const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4096,
-        messages: [{
-          role: "user",
-          content: `Generate 33 reward scene prompts for a ${businessType} called "${siteName}".
+  // Generate in batches: 3 categories × 5 scene types = 15 batches, ~7 prompts each ≈ 105 total
+  for (const category of categories) {
+    for (const scene of sceneTypes) {
+      try {
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 2048,
+          messages: [{
+            role: "user",
+            content: `Generate 7 reward scene prompts for a ${businessType} called "${siteName}".
 
 Brand angle: ${angle?.name || "professional service"} — ${angle?.tagline || ""}
 Emotional core: ${offerCore}
 Customer desires: ${desirePhrases.join("; ")}
-Customer pain points: ${painPhrases.join("; ")}
 Topics/features: ${topics.join(", ")}
 
 Category: ${categoryInstructions[category]}
+Scene type: ${sceneInstructions[scene]}
 
 For each prompt generate:
-- "prompt": A 1-2 sentence scene description that could be used as a blog article angle, social post theme, or image/video generation prompt. Written from the customer's perspective — what they experience, not what the business does.
-- "visual": A brief image/video description for AI generation (what the camera sees).
+- "prompt": 1-2 sentence scene from the customer's perspective. What they experience, not what the business does.
+- "visual": Brief image/video description for AI generation (what the camera sees).
 
-Make them specific to THIS industry and THIS brand. Use the customer's language, not marketing jargon. Vary the scenarios — different times of day, different people, different aspects of the service/product.
+Be specific to THIS industry. Use customer language, not marketing jargon. Vary scenarios.
 
 Return ONLY a JSON array, no markdown:
 [{"prompt": "...", "visual": "..."}, ...]`,
-        }],
-      });
+          }],
+        });
 
-      const text = response.content[0].type === "text" ? response.content[0].text : "";
-      const cleaned = text.replace(/```json?\s*/g, "").replace(/```/g, "").trim();
-      const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as Array<{ prompt: string; visual: string }>;
-        for (const item of parsed) {
-          allPrompts.push({
-            category,
-            prompt: item.prompt,
-            visual: item.visual,
-          });
+        const text = response.content[0].type === "text" ? response.content[0].text : "";
+        const cleaned = text.replace(/```json?\s*/g, "").replace(/```/g, "").trim();
+        const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]) as Array<{ prompt: string; visual: string }>;
+          for (const item of parsed) {
+            allPrompts.push({
+              category,
+              scene,
+              prompt: item.prompt,
+              visual: item.visual,
+            });
+          }
         }
+      } catch (err) {
+        console.error(`Reward prompt generation failed for ${category}/${scene}:`, err instanceof Error ? err.message : err);
       }
-    } catch (err) {
-      console.error(`Reward prompt generation failed for ${category}:`, err instanceof Error ? err.message : err);
     }
   }
 
@@ -154,23 +163,29 @@ export async function getRewardPrompts(siteId: string): Promise<RewardPrompt[]> 
 }
 
 /**
- * Pick a random reward prompt that hasn't been used recently.
- * Tracks usage in site metadata to avoid repetition.
+ * Pick a random reward prompt, optionally filtered by category and/or scene type.
  */
 export async function pickRewardPrompt(
   siteId: string,
-  category?: "moment" | "lifestyle" | "social_proof"
+  filters?: {
+    category?: "moment" | "lifestyle" | "social_proof";
+    scene?: SceneType;
+  }
 ): Promise<RewardPrompt | null> {
   const prompts = await getRewardPrompts(siteId);
   if (prompts.length === 0) return null;
 
-  // Filter by category if specified
-  const pool = category
-    ? prompts.filter((p) => p.category === category)
-    : prompts;
+  let pool = prompts;
+  if (filters?.category) {
+    pool = pool.filter((p) => p.category === filters.category);
+  }
+  if (filters?.scene) {
+    pool = pool.filter((p) => p.scene === filters.scene);
+  }
 
   if (pool.length === 0) return null;
 
-  // Pick random from pool
   return pool[Math.floor(Math.random() * pool.length)];
 }
+
+export type { RewardPrompt, SceneType };
