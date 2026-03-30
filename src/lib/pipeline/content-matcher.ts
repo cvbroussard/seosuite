@@ -130,16 +130,18 @@ async function findMatchingAsset(
   siteId: string,
   prompt: RewardPrompt
 ): Promise<ContentPairing["asset"] | null> {
-  // Get candidate assets — triaged, decent quality, not over-used
+  // Get candidate assets — triaged, decent quality, not over-used, no existing post
   const candidates = await sql`
     SELECT ma.id, ma.storage_url, ma.context_note, ma.quality_score,
            ma.content_pillar, ma.content_tags, ma.ai_analysis,
            COALESCE((ma.metadata->>'used_count')::int, 0) AS used_count,
            ma.metadata->>'last_used_at' AS last_used_at
     FROM media_assets ma
+    LEFT JOIN blog_posts bp ON bp.source_asset_id = ma.id
     WHERE ma.site_id = ${siteId}
       AND ma.triage_status IN ('triaged', 'scheduled')
       AND ma.quality_score >= 0.5
+      AND bp.id IS NULL
     ORDER BY
       COALESCE((ma.metadata->>'used_count')::int, 0) ASC,
       ma.quality_score DESC
