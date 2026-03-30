@@ -50,7 +50,7 @@ export async function enhanceAssetPhoto(
 ): Promise<string | null> {
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type,
-           ma.quality_score, ma.context_note,
+           ma.quality_score, ma.context_note, ma.metadata, ma.ai_analysis,
            s.image_style, s.image_processing_mode
     FROM media_assets ma
     JOIN sites s ON s.id = ma.site_id
@@ -63,12 +63,22 @@ export async function enhanceAssetPhoto(
   const processingMode = (asset.image_processing_mode as string) || "auto";
   if (processingMode === "off") return null;
 
+  // Return existing enhanced URL if already processed
+  const assetMeta = (asset.metadata || {}) as Record<string, unknown>;
+  const existingEnhanced = assetMeta.enhanced_url || assetMeta.regenerated_url;
+  if (existingEnhanced) return existingEnhanced as string;
+
   const sourceUrl = asset.storage_url as string;
   if (!sourceUrl) return null;
 
   const qualityScore = (asset.quality_score as number) || 0;
   const siteStyle = (asset.image_style as string) || "Clean, editorial style. Natural lighting.";
-  const contextNote = (asset.context_note as string) || "";
+  // Use context note, or auto-generated context, or vision description for filename
+  const aiAnalysis = (asset.ai_analysis || {}) as Record<string, unknown>;
+  const contextNote = (asset.context_note as string)
+    || (aiAnalysis.context_note as string)
+    || (aiAnalysis.description as string)
+    || "";
 
   let result;
   let mode: "enhanced" | "regenerated";

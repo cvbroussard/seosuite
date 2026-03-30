@@ -1119,12 +1119,15 @@ ${existingTitles.length > 0
   // Fix malformed markdown
   parsed.body = parsed.body.replace(/!\[(https?:\/\/[^\]]+)\)/g, (_, url) => `![editorial image](${url})`);
   parsed.body = parsed.body.replace(/!\[\s*\]\(/g, "![image](");
+  // Remove stray closing parens after image markdown: ![alt](url)\n) → ![alt](url)
+  parsed.body = parsed.body.replace(/(\!\[[^\]]*\]\([^)]+\))\s*\)/g, "$1");
   parsed.body = parsed.body.replace(/\[[^\]]*$/, "");
   parsed.body = parsed.body.replace(/\[[^\]]*\]\([^)]*$/, "");
   // Wrap bare R2 image URLs that aren't already in markdown image syntax
+  // Only match URLs at the start of a line or after whitespace — not inside ](url) or src="url"
   parsed.body = parsed.body.replace(
-    /(?<!![\[\(])(https:\/\/assets\.tracpost\.com\/[^\s")\]]+\.(jpg|jpeg|png|webp))/g,
-    (url) => `\n\n![image](${url})\n\n`
+    /(?:^|\n)\s*(https:\/\/assets\.tracpost\.com\/[^\s")\]]+\.(?:jpg|jpeg|png|webp))\s*(?:\n|$)/gm,
+    (_, url) => `\n\n![image](${url})\n\n`
   );
 
   // Content guard
