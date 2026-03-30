@@ -947,3 +947,207 @@ function buildTopicArticleSchema(
     wordCount: post.body.split(/\s+/).length,
   };
 }
+
+// ── Reward Prompt-Driven Generation ──────────────────────────────
+
+import type { ContentPairing } from "./content-matcher";
+
+/**
+ * Generate a single blog post from a reward prompt + asset pairing.
+ *
+ * The reward prompt provides the editorial angle (what story to tell).
+ * The asset provides the visual evidence (what the subscriber built).
+ * The result is an article framed around the customer's reward,
+ * not just a description of the product.
+ */
+export async function generateFromPairing(
+  pairing: ContentPairing
+): Promise<string | null> {
+  const { rewardPrompt, asset } = pairing;
+
+  const [siteData] = await sql`
+    SELECT s.id AS site_id, s.name AS site_name, s.url AS site_url,
+           s.brand_voice, s.brand_playbook, s.image_style,
+           bs.blog_enabled, bs.blog_title
+    FROM sites s
+    LEFT JOIN blog_settings bs ON bs.site_id = s.id
+    WHERE s.id = (SELECT site_id FROM media_assets WHERE id = ${asset.id})
+  `;
+
+  if (!siteData?.blog_enabled) return null;
+
+  const [existingPost] = await sql`
+    SELECT id FROM blog_posts WHERE source_asset_id = ${asset.id}
+  `;
+  if (existingPost) return existingPost.id;
+
+  const playbook = siteData.brand_playbook as BrandPlaybook | null;
+  if (!playbook) return null;
+
+  // Hook from bank
+  let hookText: string | undefined;
+  const [hook] = await sql`
+    SELECT text FROM hook_bank
+    WHERE site_id = ${siteData.site_id}
+    ORDER BY CASE rating WHEN 'loved' THEN 0 ELSE 1 END, used_count ASC, RANDOM()
+    LIMIT 1
+  `;
+  if (hook) {
+    hookText = hook.text as string;
+    await sql`UPDATE hook_bank SET used_count = used_count + 1, last_used_at = NOW() WHERE site_id = ${siteData.site_id} AND text = ${hook.text}`;
+  }
+
+  // Inline images from other assets
+  const inlineImages = await sql`
+    SELECT storage_url, context_note
+    FROM media_assets
+    WHERE site_id = ${siteData.site_id}
+      AND id != ${asset.id}
+      AND triage_status IN ('triaged', 'scheduled')
+      AND quality_score > 0.5
+      AND storage_url IS NOT NULL
+    ORDER BY quality_score DESC
+    LIMIT 3
+  `;
+  const imageUrls = inlineImages.map((img: Record<string, unknown>) => ({
+    url: img.storage_url as string,
+    context: (img.context_note as string) || "",
+  }));
+
+  // Existing titles for dedup
+  const existingPosts = await sql`
+    SELECT title FROM blog_posts WHERE site_id = ${siteData.site_id} ORDER BY created_at DESC LIMIT 20
+  `;
+  const existingTitles = existingPosts.map((p: Record<string, unknown>) => p.title as string);
+
+  // Research
+  const researchResult = await researchContextNote(
+    asset.contextNote || asset.description || "",
+    [],
+    siteData.site_id as string
+  );
+  const research = researchResult.text;
+
+  // Vendor links (capped at 3)
+  const vendorLinks: string[] = [];
+  for (const v of asset.vendors) {
+    if (v.url && vendorLinks.length < 3) vendorLinks.push(`${v.name}: ${v.url}`);
+  }
+
+  // Map reward category to content type
+  const typeMap: Record<string, BlogContentType> = {
+    moment: "project_story",
+    lifestyle: "deep_dive",
+    social_proof: "authority_overview",
+  };
+  const contentType = typeMap[rewardPrompt.category] || "deep_dive";
+  const typeConfig = CONTENT_TYPES[contentType];
+
+  const { audienceResearch, brandPositioning, offerCore } = playbook;
+  const angle = brandPositioning.selectedAngles[0];
+  const lang = audienceResearch.languageMap;
+
+  const prompt = `Write an article for a local service business blog. Length: ${typeConfig.wordRange} words. No filler.
+
+## Editorial Angle (this frames the entire article)
+Reward scene: "${rewardPrompt.prompt}"
+Category: ${rewardPrompt.category} | Scene: ${rewardPrompt.scene}
+
+This article is about the OUTCOME — the moment, lifestyle, or recognition the customer experiences BECAUSE of this work. The product is the enabler, not the subject. Open with the reward scene. Make the reader feel it. Then connect to the craft and decisions that made it possible.
+
+## Content Source
+Content pillar: ${asset.contentPillar || "general"}
+${asset.contextNote ? `Creator's note: "${asset.contextNote}"` : ""}
+Visual context: ${asset.description}
+${hookText ? `Opening hook: "${hookText}"` : ""}
+
+## Research
+${research ? `Background:\n${research}` : "No research available."}
+${vendorLinks.length > 0 ? `\nVendor links:\n${vendorLinks.join("\n")}` : ""}
+
+## Brand
+Business: ${siteData.site_name} (${siteData.site_url})
+Angle: "${angle?.name || "general"}" — ${angle?.tagline || ""}
+Tone: ${angle?.tone || "professional, engaging"}
+Core: ${offerCore.offerStatement.emotionalCore}
+Pain: ${lang.painPhrases.slice(0, 3).join("; ")}
+Desire: ${lang.desirePhrases.slice(0, 3).join("; ")}
+
+## Images
+${imageUrls.length > 0
+  ? imageUrls.map((img, i) => `{{IMAGE_${i + 1}}}${img.context ? ` — ${img.context}` : ""}`).join("\n")
+  : "No inline images."}
+
+${existingTitles.length > 0
+  ? `## DO NOT REUSE\n${existingTitles.map(t => `- ${t}`).join("\n")}\n`
+  : ""}
+
+## Rules
+- Title: 40-60 chars. Lead with the reward/outcome, not the product.
+- Open with the reward scene — make the reader feel it first.
+- 9th-grade reading level. Conversational.
+- 3-5 headings as ## (one as a question).
+- Paragraphs over bullets.
+- NEVER include prices or dollar amounts.
+- Link to vendor websites where provided + 1 authoritative outbound link.
+- Use image placeholders exactly as shown: {{IMAGE_1}}, {{IMAGE_2}}, etc.
+
+## Response (ONLY valid JSON, no markdown):
+{"title":"...","body":"...","excerpt":"...","meta_title":"...","meta_description":"...","tags":["..."]}`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: typeConfig.maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const parsed = parseBlogResponse(text);
+
+  // Replace placeholders
+  for (let i = 0; i < imageUrls.length; i++) {
+    const n = i + 1;
+    const pattern = new RegExp(`\\{\\{IMAGE_${n}\\}\\}|\\{IMAGE_${n}\\}|IMAGE_${n}`, "g");
+    parsed.body = parsed.body.replace(pattern, imageUrls[i].url);
+  }
+
+  // Fix malformed markdown
+  parsed.body = parsed.body.replace(/!\[(https?:\/\/[^\]]+)\)/g, (_, url) => `![editorial image](${url})`);
+  parsed.body = parsed.body.replace(/!\[\s*\]\(/g, "![image](");
+  parsed.body = parsed.body.replace(/\[[^\]]*$/, "");
+  parsed.body = parsed.body.replace(/\[[^\]]*\]\([^)]*$/, "");
+
+  // Content guard
+  const guard = await scanContent(parsed.title, parsed.body, (siteData.site_name as string) || "");
+  const postStatus = guard.pass ? "draft" : "flagged";
+
+  const slug = generateSlug(parsed.title);
+
+  const [post] = await sql`
+    INSERT INTO blog_posts (
+      site_id, source_asset_id, slug, title, body, excerpt,
+      meta_title, meta_description, og_image_url, schema_json,
+      tags, content_pillar, content_type, status, metadata
+    ) VALUES (
+      ${siteData.site_id}, ${asset.id}, ${slug}, ${parsed.title},
+      ${parsed.body}, ${parsed.excerpt},
+      ${parsed.meta_title || parsed.title},
+      ${parsed.meta_description || parsed.excerpt},
+      ${asset.storageUrl},
+      '{}'::jsonb,
+      ${parsed.tags}, ${asset.contentPillar || null},
+      ${contentType}, ${postStatus},
+      ${JSON.stringify({
+        reward_prompt: rewardPrompt.prompt,
+        reward_category: rewardPrompt.category,
+        scene_type: rewardPrompt.scene,
+        seed_asset_id: asset.id,
+        editorial_images: researchResult.editorialImages,
+        ...(guard.pass ? {} : { guard_flags: guard.flags }),
+      })}::jsonb
+    )
+    RETURNING id
+  `;
+
+  return post.id as string;
+}

@@ -136,10 +136,11 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
   if (isSharpened && hasRewardPrompts) {
     // New autopilot path: reward prompt drives content generation
     try {
-      const { pickNextContent, buildContentMetadata } = await import("./content-matcher");
+      const { pickNextContent } = await import("./content-matcher");
+      const { generateFromPairing } = await import("./blog-generator");
       const { enhanceAssetPhoto } = await import("@/lib/image-gen/enhance");
 
-      // Check if we need content (respect cadence — max 1 blog post per pipeline run)
+      // Check cadence — max 1 blog post per 2 days
       const [recentPost] = await sql`
         SELECT id FROM blog_posts
         WHERE site_id = ${siteId} AND created_at > NOW() - INTERVAL '2 days'
@@ -152,29 +153,16 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
           // Just-in-time enhancement
           const enhancedUrl = await enhanceAssetPhoto(pairing.asset.id);
           if (enhancedUrl) {
+            pairing.asset.storageUrl = enhancedUrl;
             await sql`UPDATE media_assets SET storage_url = ${enhancedUrl} WHERE id = ${pairing.asset.id}`;
           }
 
-          // Generate blog post using the existing generator
-          const postId = await generateMissingBlogPosts(siteId);
+          // Generate ONE blog post from the reward prompt + asset pairing
+          const postId = await generateFromPairing(pairing);
           if (postId) {
-            // Tag the most recent post with reward prompt metadata
-            const contentMeta = buildContentMetadata(pairing.rewardPrompt, pairing.asset.id);
-            const [latestPost] = await sql`
-              SELECT id FROM blog_posts
-              WHERE site_id = ${siteId}
-              ORDER BY created_at DESC LIMIT 1
-            `;
-            if (latestPost) {
-              await sql`
-                UPDATE blog_posts
-                SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(contentMeta)}::jsonb
-                WHERE id = ${latestPost.id}
-              `;
-            }
             result.autopilotContentGenerated = 1;
+            result.blogPostsGenerated = 1;
           }
-          result.blogPostsGenerated = postId || 0;
         }
       }
     } catch (err: unknown) {
