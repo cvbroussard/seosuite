@@ -17,6 +17,7 @@ export interface PipelineRunResult {
   slotsFilled: number;
   captionsGenerated: number;
   blogPostsGenerated: number;
+  autopilotContentGenerated: number;
   postsPublished: number;
   postsFailed: number;
   inboxCommentsAdded: number;
@@ -44,6 +45,7 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     slotsFilled: 0,
     captionsGenerated: 0,
     blogPostsGenerated: 0,
+    autopilotContentGenerated: 0,
     postsPublished: 0,
     postsFailed: 0,
     inboxCommentsAdded: 0,
@@ -124,13 +126,57 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     result.errors.push(`captions: ${msg}`);
   }
 
-  // Step 5: Generate blog posts (only if playbook is sharpened — has subscriber angle)
+  // Step 5: Autopilot content generation (reward prompt → asset → blog post)
   const [siteVoice] = await sql`
-    SELECT brand_voice FROM sites WHERE id = ${siteId}
+    SELECT brand_voice, metadata FROM sites WHERE id = ${siteId}
   `;
   const isSharpened = !!(siteVoice?.brand_voice as Record<string, unknown>)?._subscriberAngle;
+  const hasRewardPrompts = !!((siteVoice?.metadata as Record<string, unknown>)?.reward_prompts as unknown[])?.length;
 
-  if (isSharpened) {
+  if (isSharpened && hasRewardPrompts) {
+    // New autopilot path: reward prompt drives content generation
+    try {
+      const { pickNextContent, buildContentMetadata } = await import("./content-matcher");
+      const { enhanceAssetPhoto } = await import("@/lib/image-gen/enhance");
+
+      // Check if we need content (respect cadence — max 1 blog post per pipeline run)
+      const [recentPost] = await sql`
+        SELECT id FROM blog_posts
+        WHERE site_id = ${siteId} AND created_at > NOW() - INTERVAL '2 days'
+        ORDER BY created_at DESC LIMIT 1
+      `;
+
+      if (!recentPost) {
+        const pairing = await pickNextContent(siteId);
+        if (pairing) {
+          // Just-in-time enhancement
+          const enhancedUrl = await enhanceAssetPhoto(pairing.asset.id);
+          if (enhancedUrl) {
+            await sql`UPDATE media_assets SET storage_url = ${enhancedUrl} WHERE id = ${pairing.asset.id}`;
+          }
+
+          // Generate blog post using the existing generator
+          const postId = await generateMissingBlogPosts(siteId);
+          if (postId) {
+            // Tag the post with reward prompt metadata
+            const contentMeta = buildContentMetadata(pairing.rewardPrompt, pairing.asset.id);
+            await sql`
+              UPDATE blog_posts
+              SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(contentMeta)}::jsonb
+              WHERE site_id = ${siteId}
+              ORDER BY created_at DESC LIMIT 1
+            `;
+            result.autopilotContentGenerated = 1;
+          }
+          result.blogPostsGenerated = postId || 0;
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      result.errors.push(`autopilot-content: ${msg}`);
+    }
+  } else if (isSharpened) {
+    // Fallback: legacy path — generate from assets without reward prompts
     try {
       result.blogPostsGenerated = await generateMissingBlogPosts(siteId);
     } catch (err: unknown) {
