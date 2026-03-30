@@ -202,7 +202,7 @@ export async function promoteBlogPost(blogPostId: string): Promise<PromotionResu
           ${post.og_image_url ? [post.og_image_url as string] : []},
           ${config.supportsLinks ? blogUrl : null},
           ${(post.content_pillar as string) || null},
-          'scheduled',
+          'draft',
           ${scheduledAt},
           'blog_publish',
           ${blogPostId}
