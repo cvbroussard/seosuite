@@ -17,7 +17,7 @@ export default async function SiteControlPanel({ params }: Props) {
            s.content_vibe, s.image_style, s.image_variations,
            s.image_processing_mode, s.pillar_config,
            s.autopilot_enabled, s.cadence_config, s.autopilot_config,
-           s.provisioning_status,
+           s.provisioning_status, s.metadata,
            sub.name AS subscriber_name, sub.plan,
            bs.blog_enabled, bs.subdomain, bs.custom_domain,
            bs.blog_title, bs.blog_description
