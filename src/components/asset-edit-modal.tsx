@@ -27,6 +27,7 @@ interface AssetEditModalProps {
   sceneType?: string | null;
   onClose: () => void;
   onSaved: (note: string, pillar: string, tags: string[]) => void;
+  onDeleted?: () => void;
 }
 
 export function AssetEditModal({
@@ -45,6 +46,7 @@ export function AssetEditModal({
   sceneType,
   onClose,
   onSaved,
+  onDeleted,
 }: AssetEditModalProps) {
   const [note, setNote] = useState(initialNote);
   const [pillar, setPillar] = useState(initialPillar);
@@ -369,20 +371,41 @@ export function AssetEditModal({
         )}
 
         {/* Footer: actions */}
-        <div className="flex justify-end gap-2 border-t border-border px-6 py-3">
+        <div className="flex items-center justify-between border-t border-border px-6 py-3">
           <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs text-muted hover:text-foreground"
+            onClick={async () => {
+              if (!confirm("Delete this asset? This cannot be undone.")) return;
+              try {
+                const res = await fetch(`/api/assets/${assetId}`, { method: "DELETE" });
+                if (res.ok) {
+                  onDeleted?.();
+                  onClose();
+                } else {
+                  alert("Delete failed");
+                }
+              } catch {
+                alert("Delete failed");
+              }
+            }}
+            className="px-4 py-2 text-xs text-danger hover:underline"
           >
-            Cancel
+            Delete
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-xs text-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

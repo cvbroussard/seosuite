@@ -93,3 +93,32 @@ export async function PATCH(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/assets/:id — Delete a media asset.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authResult = await authenticateRequest(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const auth = authResult as AuthContext;
+  const { id } = await params;
+
+  // Verify ownership
+  const [asset] = await sql`
+    SELECT ma.id
+    FROM media_assets ma
+    JOIN sites s ON ma.site_id = s.id
+    WHERE ma.id = ${id} AND s.subscriber_id = ${auth.subscriberId}
+  `;
+
+  if (!asset) {
+    return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+  }
+
+  await sql`DELETE FROM media_assets WHERE id = ${id}`;
+
+  return NextResponse.json({ success: true });
+}

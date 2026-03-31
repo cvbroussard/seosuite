@@ -163,6 +163,10 @@ export function MediaGrid({
           sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+          onDeleted={() => {
+            setAssets((prev) => prev.filter((a) => a.id !== editing.id));
+            setEditing(null);
+          }}
         />
       )}
     </>
