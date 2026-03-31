@@ -507,11 +507,17 @@ Content note: "${contextNote}"
             const key = `sites/${siteId}/media/${fname}`;
             const url = await uploadBufferToR2(key, image.data, image.mimeType);
 
+            // Derive per-image entity keys from the prompt text
+            const promptLower = imgPrompt.prompt.toLowerCase();
+            const imageEntities = allEntityKeys.filter((e) => promptLower.includes(e.toLowerCase())).slice(0, 5);
+            // Fall back to first 2 shared entities if no specific match
+            const imageTags = imageEntities.length > 0 ? imageEntities : allEntityKeys.slice(0, 2);
+
             const meta: EditorialImageMeta = {
               url,
               prompt: imgPrompt.prompt,
               alt: imgPrompt.alt,
-              entities: allEntityKeys.slice(0, 5),
+              entities: imageTags,
             };
             editorialImagesMeta.push(meta);
 
@@ -525,16 +531,16 @@ Content note: "${contextNote}"
                 ) VALUES (
                   ${siteId}, ${url}, 'image', ${imgPrompt.alt},
                   'ai_generated', 'triaged', 0.95,
-                  ${allEntityKeys.slice(0, 5)},
+                  ${imageTags},
                   ${JSON.stringify({
                     ai_generated: true,
                     generation_prompt: imgPrompt.prompt,
-                    source_entities: allEntityKeys.slice(0, 5),
+                    source_entities: imageTags,
                   })}::jsonb
                 )
                 RETURNING id
               `;
-              // Inherit vendor associations from the source asset
+              // Inherit vendor associations only for vendors mentioned in this image's prompt
               if (newAsset && sourceVendorIds && sourceVendorIds.length > 0) {
                 for (const vendorId of sourceVendorIds) {
                   await sql`
