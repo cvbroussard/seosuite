@@ -47,13 +47,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Convert HEIC/HEIF to JPEG before storing — browsers can't display HEIC
+    // Re-host external URLs to R2 — don't hot-link external sites
     let finalUrl = storage_url;
-    if (storage_url && media_type === "image" && (
-      storage_url.endsWith(".heic") || storage_url.endsWith(".heif")
+    if (storage_url && !storage_url.includes("assets.tracpost.com") && media_type === "image") {
+      try {
+        const imgRes = await fetch(storage_url, { signal: AbortSignal.timeout(15000) });
+        if (imgRes.ok) {
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+          const ext = contentType.includes("png") ? "png" : "jpg";
+          const fname = seoFilename(context_note || "product-image", ext);
+          const key = `sites/${site_id}/media/${fname}`;
+          finalUrl = await uploadBufferToR2(key, buffer, contentType);
+        }
+      } catch (err) {
+        console.warn("External image re-host failed, using original URL:", err instanceof Error ? err.message : err);
+      }
+    }
+
+    // Convert HEIC/HEIF to JPEG — browsers can't display HEIC
+    if (finalUrl && media_type === "image" && (
+      finalUrl.endsWith(".heic") || finalUrl.endsWith(".heif")
     )) {
       try {
-        const { data, mimeType } = await fetchAndConvert(storage_url);
+        const { data, mimeType } = await fetchAndConvert(finalUrl);
         const date = new Date().toISOString().slice(0, 10);
         const fname = seoFilename(context_note || "upload", "jpg");
         const key = `sites/${site_id}/${date}/${fname}`;
