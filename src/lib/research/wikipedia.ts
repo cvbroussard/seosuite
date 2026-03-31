@@ -362,7 +362,7 @@ ${corrections.length > 0
   : ""}
 
 Return ONLY JSON array, no markdown:
-[{"prompt": "...", "alt": "Short alt text"}]`,
+[{"prompt": "...", "alt": "<3-5 word alt text for accessibility, e.g. 'Walnut slab in workshop', 'Zellige tiles being cut', 'Brass sink detail'>"}]`,
       }],
     });
 
