@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       try {
         const { data, mimeType } = await fetchAndConvert(storage_url);
         const date = new Date().toISOString().slice(0, 10);
-        const fname = seoFilename(context_note || filename || "upload", "jpg");
+        const fname = seoFilename(context_note || "upload", "jpg");
         const key = `sites/${site_id}/${date}/${fname}`;
         finalUrl = await uploadBufferToR2(key, data, mimeType);
       } catch (err) {
