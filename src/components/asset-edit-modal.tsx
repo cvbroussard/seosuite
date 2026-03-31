@@ -204,8 +204,13 @@ export function AssetEditModal({
         <div className="flex">
           {/* Left: Image */}
           <div className="hidden sm:flex w-2/5 shrink-0 items-center justify-center bg-background">
-            {mediaType?.startsWith("video") ? (
-              <div className="flex h-full w-full items-center justify-center text-4xl text-muted">▶</div>
+            {mediaType?.startsWith("video") || mediaType === "video" ? (
+              <video
+                src={imageUrl}
+                controls
+                className="h-full w-full object-contain"
+                style={{ maxHeight: "50vh" }}
+              />
             ) : (
               <img
                 src={imageUrl}
