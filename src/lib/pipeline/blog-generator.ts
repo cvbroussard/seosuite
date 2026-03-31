@@ -1075,14 +1075,14 @@ export async function generateFromPairing(
     ORDER BY
       COALESCE((metadata->>'used_count')::int, 0) ASC,
       quality_score DESC
-    LIMIT 2
+    LIMIT 3
   `;
 
-  // Merge: uploads first (authenticity), then AI
+  // Merge: upload first (authenticity anchor), then AI (eye candy)
   const inlineImages = [...uploadsInline, ...aiInline];
 
   // Fallback: if either pool is empty, fill from the other
-  if (inlineImages.length < 3) {
+  if (inlineImages.length < 4) {
     const fallback = await sql`
       SELECT id, storage_url, context_note
       FROM media_assets
@@ -1094,7 +1094,7 @@ export async function generateFromPairing(
         AND storage_url != ALL(${excludeUrls})
         AND storage_url != ALL(${inlineImages.map(i => i.storage_url as string)})
       ORDER BY COALESCE((metadata->>'used_count')::int, 0) ASC, quality_score DESC
-      LIMIT ${3 - inlineImages.length}
+      LIMIT ${4 - inlineImages.length}
     `;
     inlineImages.push(...fallback);
   }
