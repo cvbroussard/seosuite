@@ -1033,28 +1033,71 @@ export async function generateFromPairing(
     await sql`UPDATE hook_bank SET used_count = used_count + 1, last_used_at = NOW() WHERE site_id = ${siteData.site_id} AND text = ${hook.text}`;
   }
 
-  // Inline images from other assets, excluding recently used
+  // Inline images: enforce mix of subscriber uploads + AI for authenticity
+  // Target: 2 subscriber uploads + 2 AI editorial = 4 inline images
   const recentPostImgs = await sql`
     SELECT bp.og_image_url FROM blog_posts bp
     WHERE bp.site_id = ${siteData.site_id}
       AND bp.created_at > NOW() - INTERVAL '14 days'
   `;
   const recentImgUrls = recentPostImgs.map((r: Record<string, unknown>) => r.og_image_url as string).filter(Boolean);
+  const excludeUrls = recentImgUrls.length > 0 ? recentImgUrls : ["__none__"];
 
-  const inlineImages = await sql`
+  // 2 subscriber uploads (proof of work)
+  const uploadsInline = await sql`
     SELECT storage_url, context_note
     FROM media_assets
     WHERE site_id = ${siteData.site_id}
       AND id != ${asset.id}
+      AND source = 'upload'
       AND triage_status IN ('triaged', 'scheduled')
       AND quality_score > 0.5
       AND storage_url IS NOT NULL
-      AND storage_url != ALL(${recentImgUrls.length > 0 ? recentImgUrls : ["__none__"]})
+      AND storage_url != ALL(${excludeUrls})
     ORDER BY
       COALESCE((metadata->>'used_count')::int, 0) ASC,
       quality_score DESC
-    LIMIT 3
+    LIMIT 2
   `;
+
+  // 2 AI editorial (eye candy)
+  const aiInline = await sql`
+    SELECT storage_url, context_note
+    FROM media_assets
+    WHERE site_id = ${siteData.site_id}
+      AND id != ${asset.id}
+      AND source = 'ai_generated'
+      AND triage_status IN ('triaged', 'scheduled')
+      AND quality_score > 0.5
+      AND storage_url IS NOT NULL
+      AND storage_url != ALL(${excludeUrls})
+    ORDER BY
+      COALESCE((metadata->>'used_count')::int, 0) ASC,
+      quality_score DESC
+    LIMIT 2
+  `;
+
+  // Merge: uploads first (authenticity), then AI
+  const inlineImages = [...uploadsInline, ...aiInline];
+
+  // Fallback: if either pool is empty, fill from the other
+  if (inlineImages.length < 4) {
+    const fallback = await sql`
+      SELECT storage_url, context_note
+      FROM media_assets
+      WHERE site_id = ${siteData.site_id}
+        AND id != ${asset.id}
+        AND triage_status IN ('triaged', 'scheduled')
+        AND quality_score > 0.5
+        AND storage_url IS NOT NULL
+        AND storage_url != ALL(${excludeUrls})
+        AND storage_url != ALL(${inlineImages.map(i => i.storage_url as string)})
+      ORDER BY COALESCE((metadata->>'used_count')::int, 0) ASC, quality_score DESC
+      LIMIT ${4 - inlineImages.length}
+    `;
+    inlineImages.push(...fallback);
+  }
+
   const imageUrls = inlineImages.map((img: Record<string, unknown>) => ({
     url: img.storage_url as string,
     context: (img.context_note as string) || "",
