@@ -77,6 +77,8 @@ export default async function ArticlePage({ params }: Props) {
   const publishedAt = post.published_at ? String(post.published_at) : null;
   const pillar = post.content_pillar ? String(post.content_pillar) : null;
   const tags = Array.isArray(post.tags) ? (post.tags as string[]) : [];
+  const metadata = (post.metadata || {}) as Record<string, unknown>;
+  const videoUrl = metadata.video_url ? String(metadata.video_url) : null;
 
   const schema = generateArticleSchema({
     title,
@@ -137,7 +139,21 @@ export default async function ArticlePage({ params }: Props) {
         </div>
       </header>
 
-      {ogImage && (
+      {videoUrl ? (
+        <video
+          src={videoUrl}
+          poster={ogImage || undefined}
+          controls
+          playsInline
+          style={{
+            width: "100%",
+            maxWidth: 400,
+            margin: "0 auto 32px",
+            display: "block",
+            borderRadius: "var(--blog-radius)",
+          }}
+        />
+      ) : ogImage ? (
         <img
           src={ogImage}
           alt={title}
@@ -147,7 +163,7 @@ export default async function ArticlePage({ params }: Props) {
             marginBottom: 32,
           }}
         />
-      )}
+      ) : null}
 
       {/* Blog body — auto-linked to related posts at render time */}
       <div

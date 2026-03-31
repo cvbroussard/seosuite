@@ -1287,6 +1287,20 @@ ${existingTitles.length > 0
 
           if (video) {
             videoUrl = video.url;
+            // Register video as media asset
+            try {
+              await sql`
+                INSERT INTO media_assets (
+                  site_id, storage_url, media_type, context_note,
+                  source, triage_status, quality_score, metadata
+                ) VALUES (
+                  ${siteData.site_id}, ${video.url}, 'video',
+                  ${rewardPrompt.prompt.slice(0, 100)},
+                  'ai_generated', 'triaged', 0.95,
+                  ${JSON.stringify({ ai_generated: true, duration: video.duration, generation_prompt: videoPrompt })}::jsonb
+                )
+              `;
+            } catch { /* non-blocking */ }
           }
         }
       }

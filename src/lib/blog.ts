@@ -144,7 +144,7 @@ export async function getBlogPost(
 ): Promise<Record<string, unknown> | null> {
   const [post] = await sql`
     SELECT id, slug, title, body, excerpt, meta_title, meta_description,
-           og_image_url, schema_json, tags, content_pillar,
+           og_image_url, schema_json, tags, content_pillar, metadata,
            published_at, updated_at, created_at
     FROM blog_posts
     WHERE site_id = ${siteId} AND slug = ${slug} AND status = 'published'
