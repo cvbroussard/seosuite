@@ -79,6 +79,7 @@ export function MediaFilters({
 
       {/* Media type filter */}
       <select
+        key="media-type"
         value={mediaTypeFilter}
         onChange={(e) => updateParams({ type: e.target.value })}
         className="bg-surface-hover px-2 py-1 text-[10px] text-muted"
@@ -90,6 +91,7 @@ export function MediaFilters({
 
       {/* Scene type filter */}
       <select
+        key="scene-type"
         value={sceneFilter}
         onChange={(e) => updateParams({ scene: e.target.value })}
         className="bg-surface-hover px-2 py-1 text-[10px] text-muted"
@@ -104,6 +106,7 @@ export function MediaFilters({
 
       {/* Quality filter */}
       <select
+        key="quality"
         value={qualityFilter}
         onChange={(e) => updateParams({ quality: e.target.value })}
         className="bg-surface-hover px-2 py-1 text-[10px] text-muted"
@@ -116,6 +119,7 @@ export function MediaFilters({
 
       {/* Sort */}
       <select
+        key="sort"
         value={sortOrder}
         onChange={(e) => updateParams({ sort: e.target.value })}
         className="bg-surface-hover px-2 py-1 text-[10px] text-muted"
