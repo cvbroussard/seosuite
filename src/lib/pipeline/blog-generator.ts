@@ -312,6 +312,19 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     (url) => `\n\n![image](${url})\n\n`
   );
 
+  // Validate image URLs — remove any that return 404
+  const bodyUrls = parsed.body.match(/https:\/\/assets\.tracpost\.com\/[^\s")\]]+/g) || [];
+  for (const url of bodyUrls) {
+    try {
+      const check = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+      if (check.status === 404) {
+        parsed.body = parsed.body.replace(new RegExp(`!\\[[^\\]]*\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "g"), "");
+      }
+    } catch {
+      parsed.body = parsed.body.replace(new RegExp(`!\\[[^\\]]*\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "g"), "");
+    }
+  }
+
   // Content safety scan — flag issues before storing
   const guard = await scanContent(
     parsed.title,
@@ -1163,6 +1176,19 @@ ${existingTitles.length > 0
     /(?:^|\n)\s*(https:\/\/assets\.tracpost\.com\/[^\s")\]]+\.(?:jpg|jpeg|png|webp))\s*(?:\n|$)/gm,
     (_, url) => `\n\n![image](${url})\n\n`
   );
+
+  // Validate image URLs — remove any that return 404
+  const pairingUrls = parsed.body.match(/https:\/\/assets\.tracpost\.com\/[^\s")\]]+/g) || [];
+  for (const url of pairingUrls) {
+    try {
+      const check = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+      if (check.status === 404) {
+        parsed.body = parsed.body.replace(new RegExp(`!\\[[^\\]]*\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "g"), "");
+      }
+    } catch {
+      parsed.body = parsed.body.replace(new RegExp(`!\\[[^\\]]*\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "g"), "");
+    }
+  }
 
   // Content guard
   const guard = await scanContent(parsed.title, parsed.body, (siteData.site_name as string) || "");
