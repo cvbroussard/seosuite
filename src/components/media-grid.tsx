@@ -15,6 +15,7 @@ interface Asset {
   content_pillars: string[] | null;
   content_tags: string[] | null;
   source: string | null;
+  ai_analysis: Record<string, unknown> | null;
   flag_reason: string | null;
   created_at: string;
 }
@@ -157,6 +158,9 @@ export function MediaGrid({
           pillarConfig={pillarConfig}
           vendors={vendors}
           initialVendorIds={assetVendorMap[editing.id] || []}
+          source={editing.source}
+          qualityScore={Number(editing.quality_score) || null}
+          sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />

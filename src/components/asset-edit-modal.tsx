@@ -22,6 +22,9 @@ interface AssetEditModalProps {
   availablePillars?: string[];
   vendors?: Vendor[];
   initialVendorIds?: string[];
+  source?: string | null;
+  qualityScore?: number | null;
+  sceneType?: string | null;
   onClose: () => void;
   onSaved: (note: string, pillar: string, tags: string[]) => void;
 }
@@ -37,6 +40,9 @@ export function AssetEditModal({
   pillarConfig,
   vendors = [],
   initialVendorIds = [],
+  source,
+  qualityScore,
+  sceneType,
   onClose,
   onSaved,
 }: AssetEditModalProps) {
@@ -208,9 +214,37 @@ export function AssetEditModal({
 
           {/* Right: Context Note */}
           <div className="flex flex-1 flex-col p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold">Edit Asset</h3>
               <button onClick={onClose} className="text-muted hover:text-foreground">✕</button>
+            </div>
+
+            {/* Asset metadata */}
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                source === "ai_generated" ? "bg-accent/20 text-accent" : "bg-surface-hover text-muted"
+              }`}>
+                {source === "ai_generated" ? "AI" : mediaType}
+              </span>
+              {sceneType && (
+                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted">
+                  {sceneType}
+                </span>
+              )}
+              {qualityScore != null && (
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  qualityScore >= 0.8 ? "bg-success/20 text-success"
+                    : qualityScore >= 0.5 ? "bg-warning/20 text-warning"
+                    : "bg-danger/20 text-danger"
+                }`}>
+                  {(qualityScore * 100).toFixed(0)}%
+                </span>
+              )}
+              {initialVendorIds.length > 0 && (
+                <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                  {initialVendorIds.length} vendor{initialVendorIds.length !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
 
             <label className="mb-1 block text-xs text-muted">Context Note</label>
