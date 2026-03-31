@@ -118,6 +118,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
 
+  // Nullify blog post references before deleting
+  await sql`UPDATE blog_posts SET source_asset_id = NULL WHERE source_asset_id = ${id}`;
+  await sql`DELETE FROM asset_vendors WHERE asset_id = ${id}`;
   await sql`DELETE FROM media_assets WHERE id = ${id}`;
 
   return NextResponse.json({ success: true });
