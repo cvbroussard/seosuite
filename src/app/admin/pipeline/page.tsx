@@ -54,12 +54,12 @@ export default async function PipelinePage() {
             </tr>
           </thead>
           <tbody>
-            {tokenHealth.map((t) => {
+            {tokenHealth.map((t, i) => {
               const expires = t.token_expires_at ? new Date(t.token_expires_at) : null;
               const daysLeft = expires ? Math.ceil((expires.getTime() - Date.now()) / 86400000) : null;
               const urgent = daysLeft !== null && daysLeft < 7;
               return (
-                <tr key={`${t.account_name}-${t.platform}`} className="border-b border-border last:border-0 transition-colors hover:bg-surface-hover">
+                <tr key={`${t.account_name}-${t.platform}-${i}`} className="border-b border-border last:border-0 transition-colors hover:bg-surface-hover">
                   <td className="py-3 pr-4 font-medium">{t.account_name}</td>
                   <td className="py-3 pr-4 text-sm">{t.platform}</td>
                   <td className="py-3 pr-4 text-sm text-muted">{t.subscriber_name}</td>
