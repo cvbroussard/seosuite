@@ -53,6 +53,8 @@ export function AssetEditModal({
   const [tags, setTags] = useState<string[]>(initialTags || []);
   const [vendorIds, setVendorIds] = useState<string[]>(initialVendorIds);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -372,25 +374,41 @@ export function AssetEditModal({
 
         {/* Footer: actions */}
         <div className="flex items-center justify-between border-t border-border px-6 py-3">
-          <button
-            onClick={async () => {
-              if (!confirm("Delete this asset? This cannot be undone.")) return;
-              try {
-                const res = await fetch(`/api/assets/${assetId}`, { method: "DELETE" });
-                if (res.ok) {
-                  onDeleted?.();
-                  onClose();
-                } else {
-                  alert("Delete failed");
-                }
-              } catch {
-                alert("Delete failed");
-              }
-            }}
-            className="px-4 py-2 text-xs text-danger hover:underline"
-          >
-            Delete
-          </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-danger">Delete this asset?</span>
+              <button
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    const res = await fetch(`/api/assets/${assetId}`, { method: "DELETE" });
+                    if (res.ok) {
+                      onDeleted?.();
+                      onClose();
+                    }
+                  } catch { /* ignore */ }
+                  setDeleting(false);
+                }}
+                disabled={deleting}
+                className="rounded bg-danger px-3 py-1 text-xs font-medium text-white hover:bg-danger/90 disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Yes, delete"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="px-4 py-2 text-xs text-danger hover:underline"
+            >
+              Delete
+            </button>
+          )}
           <div className="flex gap-2">
             <button
               onClick={onClose}
