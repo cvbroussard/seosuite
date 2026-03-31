@@ -416,7 +416,8 @@ function isRelevantResult(summary: WikiSummary, searchTerm: string, contextNote:
 export async function researchContextNote(
   contextNote: string,
   excludeImageUrls: string[] = [],
-  siteId?: string
+  siteId?: string,
+  sourceVendorIds?: string[]
 ): Promise<ResearchResult> {
   const empty: ResearchResult = { text: "", editorialImages: [] };
   if (!contextNote) return empty;
@@ -513,6 +514,39 @@ Content note: "${contextNote}"
               entities: allEntityKeys.slice(0, 5),
             };
             editorialImagesMeta.push(meta);
+
+            // Register as media asset so it enters the reservoir
+            try {
+              const [newAsset] = await sql`
+                INSERT INTO media_assets (
+                  site_id, storage_url, media_type, context_note,
+                  source, triage_status, quality_score,
+                  content_tags, metadata
+                ) VALUES (
+                  ${siteId}, ${url}, 'image', ${imgPrompt.alt},
+                  'ai_generated', 'triaged', 0.95,
+                  ${allEntityKeys.slice(0, 5)},
+                  ${JSON.stringify({
+                    ai_generated: true,
+                    generation_prompt: imgPrompt.prompt,
+                    source_entities: allEntityKeys.slice(0, 5),
+                  })}::jsonb
+                )
+                RETURNING id
+              `;
+              // Inherit vendor associations from the source asset
+              if (newAsset && sourceVendorIds && sourceVendorIds.length > 0) {
+                for (const vendorId of sourceVendorIds) {
+                  await sql`
+                    INSERT INTO asset_vendors (asset_id, vendor_id)
+                    VALUES (${newAsset.id}, ${vendorId})
+                    ON CONFLICT DO NOTHING
+                  `;
+                }
+              }
+            } catch {
+              // Non-blocking — image is still used in the article
+            }
           }
         } catch (err) {
           console.warn("Editorial image gen failed:", err instanceof Error ? err.message : err);

@@ -175,8 +175,13 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     }
   }
 
-  // Research entities mentioned in the context note
-  const researchResult = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string);
+  // Research entities — pass source vendor IDs for editorial image inheritance
+  const srcVendorIds = await sql`
+    SELECT vendor_id FROM asset_vendors WHERE asset_id = ${assetId}
+  `;
+  const srcVendorIdList = srcVendorIds.map((r: Record<string, unknown>) => r.vendor_id as string);
+
+  const researchResult = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string, srcVendorIdList);
   const research = researchResult.text;
 
   // Fetch vendor URLs linked to this asset (from vendor table)
@@ -1048,11 +1053,17 @@ export async function generateFromPairing(
   `;
   const existingTitles = existingPosts.map((p: Record<string, unknown>) => p.title as string);
 
-  // Research
+  // Research — pass source vendor IDs for editorial image inheritance
+  const sourceVendorIds = await sql`
+    SELECT vendor_id FROM asset_vendors WHERE asset_id = ${asset.id}
+  `;
+  const vendorIdList = sourceVendorIds.map((r: Record<string, unknown>) => r.vendor_id as string);
+
   const researchResult = await researchContextNote(
     asset.contextNote || asset.description || "",
     [],
-    siteData.site_id as string
+    siteData.site_id as string,
+    vendorIdList
   );
   const research = researchResult.text;
 
