@@ -45,8 +45,7 @@ export function MediaFilters({
     }
     const qs = params.toString();
     const url = `/dashboard/media${qs ? `?${qs}` : ""}`;
-    router.push(url);
-    router.refresh();
+    window.location.href = url;
   }
 
   return (
