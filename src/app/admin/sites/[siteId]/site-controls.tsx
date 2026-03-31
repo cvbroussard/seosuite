@@ -16,6 +16,7 @@ interface SiteData {
   blogEnabled: boolean;
   blogTitle: string;
   subdomain: string;
+  videoRatio: string;
 }
 
 interface Counts {
@@ -102,6 +103,7 @@ export function SiteControls({
   const [imageStyle, setImageStyle] = useState(site.imageStyle);
   const [variations, setVariations] = useState(site.imageVariations);
   const [processingMode, setProcessingMode] = useState(site.imageProcessingMode);
+  const [videoRatio, setVideoRatio] = useState(site.videoRatio || "1:3");
   const [saving, setSaving] = useState<string | null>(null);
   const [showPrompts, setShowPrompts] = useState(false);
   const [promptFilter, setPromptFilter] = useState("all");
@@ -318,6 +320,24 @@ export function SiteControls({
           <ReadOnly label="Blog" value={site.blogEnabled ? "Enabled" : "Disabled"} />
           <ReadOnly label="Blog Title" value={site.blogTitle} />
           <ReadOnly label="Subdomain" value={site.subdomain} />
+
+          <Field label="Video Ratio — 1 video post per N posts">
+            <div className="flex items-center gap-2">
+              <select
+                value={videoRatio}
+                onChange={(e) => setVideoRatio(e.target.value)}
+                className="bg-surface-hover px-2 py-1 text-xs text-muted"
+              >
+                <option value="1:1">Every post</option>
+                <option value="1:2">1 in 2</option>
+                <option value="1:3">1 in 3</option>
+                <option value="1:4">1 in 4</option>
+                <option value="1:5">1 in 5</option>
+                <option value="0:1">No video</option>
+              </select>
+              <SaveButton section="video" data={{ videoRatio }} />
+            </div>
+          </Field>
 
           {Object.keys(site.cadenceConfig).length > 0 && (
             <div className="mt-2 border-t border-border pt-2">
