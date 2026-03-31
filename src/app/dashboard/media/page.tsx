@@ -49,7 +49,6 @@ export default async function MediaPage({ searchParams }: Props) {
 
   // Use parameterized queries per sort to avoid SQL injection
   // while still supporting dynamic WHERE
-  let assets;
   // Fetch all assets for the site, apply server-side sort
   const orderClause = sortOrder === "quality" ? "quality_score DESC"
     : sortOrder === "least_used" ? "COALESCE((metadata->>'used_count')::int, 0) ASC, created_at DESC"
@@ -103,7 +102,7 @@ export default async function MediaPage({ searchParams }: Props) {
     });
   }
 
-  const assets = filtered.slice(0, 200);
+  const filteredAssets = filtered.slice(0, 200);
 
   // Counts for filter badges
   const counts = await sql`
@@ -147,7 +146,7 @@ export default async function MediaPage({ searchParams }: Props) {
         <div>
           <h1 className="mb-1 text-lg font-semibold">Media Library</h1>
           <p className="text-sm text-muted">
-            {assets.length} of {counts[0]?.total || 0} assets
+            {filteredAssets.length} of {counts[0]?.total || 0} assets
           </p>
         </div>
       </div>
@@ -161,9 +160,9 @@ export default async function MediaPage({ searchParams }: Props) {
         counts={counts[0] as { total: number; uploads: number; ai_generated: number; high_quality: number; medium_quality: number; low_quality: number }}
       />
 
-      {assets.length > 0 ? (
+      {filteredAssets.length > 0 ? (
         <MediaGrid
-          initialAssets={assets as Parameters<typeof MediaGrid>[0]["initialAssets"]}
+          initialAssets={filteredAssets as Parameters<typeof MediaGrid>[0]["initialAssets"]}
           availablePillars={pillars}
           pillarConfig={pillarConfig}
           siteId={siteId}
