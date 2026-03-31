@@ -1004,7 +1004,7 @@ export async function generateFromPairing(
   const [siteData] = await sql`
     SELECT s.id AS site_id, s.name AS site_name, s.url AS site_url,
            s.brand_voice, s.brand_playbook, s.image_style, s.content_vibe,
-           s.video_ratio,
+           s.video_ratio, s.inline_upload_count, s.inline_ai_count,
            bs.blog_enabled, bs.blog_title
     FROM sites s
     LEFT JOIN blog_settings bs ON bs.site_id = s.id
@@ -1044,7 +1044,11 @@ export async function generateFromPairing(
   const recentImgUrls = recentPostImgs.map((r: Record<string, unknown>) => r.og_image_url as string).filter(Boolean);
   const excludeUrls = recentImgUrls.length > 0 ? recentImgUrls : ["__none__"];
 
-  // 1 subscriber upload (proof of work / authenticity anchor)
+  // Subscriber uploads (proof of work / authenticity anchor)
+  const uploadCount = (siteData.inline_upload_count as number) ?? 1;
+  const aiCount = (siteData.inline_ai_count as number) ?? 3;
+  const totalInline = uploadCount + aiCount;
+
   const uploadsInline = await sql`
     SELECT id, storage_url, context_note
     FROM media_assets
@@ -1058,10 +1062,10 @@ export async function generateFromPairing(
     ORDER BY
       COALESCE((metadata->>'used_count')::int, 0) ASC,
       quality_score DESC
-    LIMIT 1
+    LIMIT ${uploadCount}
   `;
 
-  // 2 AI editorial (eye candy)
+  // AI editorial (eye candy)
   const aiInline = await sql`
     SELECT id, storage_url, context_note
     FROM media_assets
@@ -1075,14 +1079,14 @@ export async function generateFromPairing(
     ORDER BY
       COALESCE((metadata->>'used_count')::int, 0) ASC,
       quality_score DESC
-    LIMIT 3
+    LIMIT ${aiCount}
   `;
 
   // Merge: upload first (authenticity anchor), then AI (eye candy)
   const inlineImages = [...uploadsInline, ...aiInline];
 
   // Fallback: if either pool is empty, fill from the other
-  if (inlineImages.length < 4) {
+  if (inlineImages.length < totalInline) {
     const fallback = await sql`
       SELECT id, storage_url, context_note
       FROM media_assets
@@ -1094,7 +1098,7 @@ export async function generateFromPairing(
         AND storage_url != ALL(${excludeUrls})
         AND storage_url != ALL(${inlineImages.map(i => i.storage_url as string)})
       ORDER BY COALESCE((metadata->>'used_count')::int, 0) ASC, quality_score DESC
-      LIMIT ${4 - inlineImages.length}
+      LIMIT ${totalInline - inlineImages.length}
     `;
     inlineImages.push(...fallback);
   }

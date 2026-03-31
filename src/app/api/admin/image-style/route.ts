@@ -3,7 +3,7 @@ import { sql } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { siteId, style, variations, processingMode, contentVibe, videoRatio } = body;
+  const { siteId, style, variations, processingMode, contentVibe, videoRatio, inlineUploadCount, inlineAiCount } = body;
 
   if (!siteId) {
     return NextResponse.json({ error: "siteId required" }, { status: 400 });
@@ -11,8 +11,9 @@ export async function POST(req: NextRequest) {
 
   // Build dynamic update — only update fields that are provided
   if (videoRatio !== undefined && Object.keys(body).length === 2) {
-    // Video ratio only update
     await sql`UPDATE sites SET video_ratio = ${videoRatio} WHERE id = ${siteId}`;
+  } else if (inlineUploadCount !== undefined && inlineAiCount !== undefined && Object.keys(body).length === 3) {
+    await sql`UPDATE sites SET inline_upload_count = ${inlineUploadCount}, inline_ai_count = ${inlineAiCount} WHERE id = ${siteId}`;
   } else {
     await sql`
       UPDATE sites

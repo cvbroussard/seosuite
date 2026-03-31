@@ -18,6 +18,7 @@ export default async function SiteControlPanel({ params }: Props) {
            s.image_processing_mode, s.pillar_config,
            s.autopilot_enabled, s.cadence_config, s.autopilot_config,
            s.provisioning_status, s.metadata, s.video_ratio,
+           s.inline_upload_count, s.inline_ai_count,
            sub.name AS subscriber_name, sub.plan,
            bs.blog_enabled, bs.subdomain, bs.custom_domain,
            bs.blog_title, bs.blog_description
@@ -86,6 +87,8 @@ export default async function SiteControlPanel({ params }: Props) {
           blogTitle: (site.blog_title as string) || "",
           subdomain: (site.subdomain as string) || "",
           videoRatio: (site.video_ratio as string) || "1:3",
+          inlineUploadCount: (site.inline_upload_count as number) ?? 1,
+          inlineAiCount: (site.inline_ai_count as number) ?? 3,
         }}
         counts={{
           totalAssets: counts?.total_assets || 0,

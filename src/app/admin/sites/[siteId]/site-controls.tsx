@@ -17,6 +17,8 @@ interface SiteData {
   blogTitle: string;
   subdomain: string;
   videoRatio: string;
+  inlineUploadCount: number;
+  inlineAiCount: number;
 }
 
 interface Counts {
@@ -104,6 +106,8 @@ export function SiteControls({
   const [variations, setVariations] = useState(site.imageVariations);
   const [processingMode, setProcessingMode] = useState(site.imageProcessingMode);
   const [videoRatio, setVideoRatio] = useState(site.videoRatio || "1:3");
+  const [inlineUploadCount, setInlineUploadCount] = useState(site.inlineUploadCount ?? 1);
+  const [inlineAiCount, setInlineAiCount] = useState(site.inlineAiCount ?? 3);
   const [saving, setSaving] = useState<string | null>(null);
   const [showPrompts, setShowPrompts] = useState(false);
   const [promptFilter, setPromptFilter] = useState("all");
@@ -271,6 +275,37 @@ export function SiteControls({
               rows={3}
               placeholder="Natural daylight, neutral warm palette, medium format..."
             />
+          </Field>
+
+          <Field label="Image Mix Per Article">
+            <div className="flex items-center gap-4">
+              <div>
+                <label className="block text-[9px] text-muted mb-0.5">Uploads</label>
+                <select
+                  key="upload-count"
+                  value={inlineUploadCount}
+                  onChange={(e) => setInlineUploadCount(Number(e.target.value))}
+                  className="bg-surface-hover px-2 py-1 text-xs text-muted"
+                >
+                  {[0, 1, 2, 3].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] text-muted mb-0.5">AI Editorial</label>
+                <select
+                  key="ai-count"
+                  value={inlineAiCount}
+                  onChange={(e) => setInlineAiCount(Number(e.target.value))}
+                  className="bg-surface-hover px-2 py-1 text-xs text-muted"
+                >
+                  {[0, 1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="text-[9px] text-muted mt-3">
+                = {1 + inlineUploadCount + inlineAiCount} total (hero + {inlineUploadCount} upload + {inlineAiCount} AI)
+              </div>
+              <SaveButton section="mix" data={{ inlineUploadCount, inlineAiCount }} />
+            </div>
           </Field>
 
           <Field label={`Composition Variations (${variations.length})`}>
