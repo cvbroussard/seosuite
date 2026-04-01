@@ -51,9 +51,8 @@ export async function POST(req: NextRequest) {
     ORDER BY is_active DESC, created_at ASC
   `;
 
-  // Use active_site_id from metadata if set, otherwise first site
-  const activeSiteFromMeta = metadata.active_site_id as string | undefined;
-  const activeSiteId = activeSiteFromMeta || sites[0]?.id || null;
+  // Always start with no active site — subscriber picks from the account portal
+  const activeSiteId = null;
 
   // Session payload — no API key stored
   const session = {
