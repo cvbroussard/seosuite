@@ -7,6 +7,7 @@ interface Site {
   id: string;
   name: string;
   url: string;
+  is_active?: boolean;
 }
 
 export function AccountPortal({
@@ -19,6 +20,30 @@ export function AccountPortal({
   plan: string;
 }) {
   const [showAddSite, setShowAddSite] = useState(false);
+  const [localSites, setLocalSites] = useState(sites);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  const activeSites = localSites.filter(s => s.is_active !== false);
+  const inactiveSites = localSites.filter(s => s.is_active === false);
+
+  async function toggleSite(siteId: string) {
+    setToggling(siteId);
+    try {
+      const res = await fetch(`/api/sites/${siteId}/toggle`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setLocalSites(prev => prev.map(s =>
+          s.id === siteId ? { ...s, is_active: data.is_active } : s
+        ));
+        // Refresh session
+        await fetch("/api/auth/refresh-session", { method: "POST" });
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed");
+      }
+    } catch { /* ignore */ }
+    setToggling(null);
+  }
 
   async function selectSite(siteId: string) {
     await fetch("/api/auth/session", {
@@ -48,20 +73,58 @@ export function AccountPortal({
           )}
         </div>
 
-        {sites.length > 0 ? (
+        {localSites.length > 0 ? (
           <div className="space-y-2">
-            {sites.map((site) => (
-              <button
+            {/* Active sites */}
+            {activeSites.map((site) => (
+              <div
                 key={site.id}
-                onClick={() => selectSite(site.id)}
-                className="flex w-full items-center justify-between rounded-lg border border-border bg-surface p-4 text-left transition-colors hover:border-accent/40"
+                className="flex items-center justify-between rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
               >
-                <div>
+                <button
+                  onClick={() => selectSite(site.id)}
+                  className="flex-1 text-left"
+                >
                   <p className="text-sm font-medium">{site.name}</p>
                   <p className="text-xs text-muted">{site.url || "No domain set"}</p>
+                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => toggleSite(site.id)}
+                    disabled={toggling === site.id}
+                    className="text-[10px] text-muted hover:text-warning"
+                  >
+                    {toggling === site.id ? "..." : "Deactivate"}
+                  </button>
+                  <span className="text-xs text-muted">Open →</span>
                 </div>
-                <span className="text-xs text-muted">Open →</span>
-              </button>
+              </div>
+            ))}
+
+            {/* Inactive sites */}
+            {inactiveSites.map((site) => (
+              <div
+                key={site.id}
+                className="flex items-center justify-between rounded-lg border border-border bg-surface p-4 opacity-50"
+              >
+                <button
+                  onClick={() => selectSite(site.id)}
+                  className="flex-1 text-left"
+                >
+                  <p className="text-sm font-medium">{site.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted">{site.url || "No domain set"}</p>
+                    <span className="rounded bg-muted/20 px-1.5 py-0.5 text-[9px] text-muted">inactive</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => toggleSite(site.id)}
+                  disabled={toggling === site.id}
+                  className="rounded bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                >
+                  {toggling === site.id ? "..." : "Reactivate"}
+                </button>
+              </div>
             ))}
           </div>
         ) : (

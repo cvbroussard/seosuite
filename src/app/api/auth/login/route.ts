@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
   const ownerId = parentId || subscriber.id;
 
   const sites = await sql`
-    SELECT id, name, url FROM sites
+    SELECT id, name, url, is_active FROM sites
     WHERE subscriber_id = ${ownerId} AND deleted_at IS NULL
-    ORDER BY created_at ASC
+    ORDER BY is_active DESC, created_at ASC
   `;
 
   // Use active_site_id from metadata if set, otherwise first site
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     subscriberId: subscriber.id,
     subscriberName: subscriber.name,
     plan: subscriber.plan,
-    sites: sites.map((s) => ({ id: s.id, name: s.name, url: s.url })),
+    sites: sites.map((s) => ({ id: s.id, name: s.name, url: s.url, is_active: s.is_active !== false })),
     activeSiteId,
   };
 

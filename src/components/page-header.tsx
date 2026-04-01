@@ -8,6 +8,7 @@ interface Site {
   id: string;
   name: string;
   url: string;
+  is_active?: boolean;
 }
 
 interface PageHeaderProps {
@@ -117,14 +118,23 @@ export function PageHeader({ siteName, sites, activeSiteId, children }: PageHead
                       className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
                         site.id === activeSiteId
                           ? "bg-accent-muted text-accent"
+                          : site.is_active === false
+                          ? "text-muted/50 hover:bg-surface-hover"
                           : "text-muted hover:bg-surface-hover hover:text-foreground"
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${site.id === activeSiteId ? "bg-success" : "bg-dim"}`} />
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        site.id === activeSiteId ? "bg-success"
+                          : site.is_active === false ? "bg-muted/30"
+                          : "bg-dim"
+                      }`} />
                       <div>
-                        <p className="font-medium">{site.name}</p>
+                        <p className={`font-medium ${site.is_active === false ? "opacity-50" : ""}`}>{site.name}</p>
                         {site.url && <p className="text-[10px] text-dim">{site.url}</p>}
                       </div>
+                      {site.is_active === false && (
+                        <span className="ml-auto text-[9px] text-muted/50">inactive</span>
+                      )}
                     </button>
                   ))}
                   <div className="border-t border-border mt-1 pt-1">

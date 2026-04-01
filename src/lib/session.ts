@@ -4,7 +4,7 @@ export interface Session {
   subscriberId: string;
   subscriberName: string;
   plan: string;
-  sites: Array<{ id: string; name: string; url: string }>;
+  sites: Array<{ id: string; name: string; url: string; is_active?: boolean }>;
   activeSiteId: string | null;
 }
 
