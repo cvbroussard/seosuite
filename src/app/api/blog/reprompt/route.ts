@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
            s.image_style
     FROM blog_posts bp
     JOIN sites s ON s.id = bp.site_id
-    WHERE bp.id = ${post_id} AND s.subscriber_id = ${auth.subscriberId}
+    WHERE bp.id = ${post_id} AND s.subscription_id = ${auth.subscriptionId}
   `;
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });

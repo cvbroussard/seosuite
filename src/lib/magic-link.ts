@@ -1,11 +1,5 @@
 /**
- * Magic link authentication for passwordless onboarding.
- *
- * Flow:
- * 1. Stripe webhook creates subscriber → generates magic token
- * 2. Welcome email includes link: /auth/magic?token=xxx
- * 3. Subscriber clicks → token validated → session created → dashboard
- * 4. Subscriber sets password later in Settings (optional, for mobile app)
+ * Magic link authentication for passwordless sign-in.
  */
 import { randomBytes, createHmac } from "node:crypto";
 import { sql } from "@/lib/db";
@@ -14,38 +8,33 @@ const SECRET = process.env.SESSION_TOKEN_SECRET || process.env.META_APP_SECRET |
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
- * Generate a magic link token for a subscriber.
- * Stores the token hash in subscriber metadata.
+ * Generate a magic link token for a user.
  */
-export async function generateMagicToken(subscriberId: string): Promise<string> {
+export async function generateMagicToken(userId: string): Promise<string> {
   const raw = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
-
-  // Hash the token for storage (don't store raw)
   const hash = createHmac("sha256", SECRET).update(raw).digest("hex");
 
   await sql`
-    UPDATE subscribers
-    SET metadata = jsonb_set(
-      COALESCE(metadata, '{}'::jsonb),
-      '{magic_token}',
-      ${JSON.stringify({ hash, expires_at: expiresAt })}::jsonb
-    ),
-    updated_at = NOW()
-    WHERE id = ${subscriberId}
+    UPDATE users
+    SET magic_token_hash = ${hash}, magic_token_expires = ${expiresAt}
+    WHERE id = ${userId}
   `;
 
-  // The token encodes subscriber ID + raw token
-  return Buffer.from(JSON.stringify({
-    sub: subscriberId,
-    tok: raw,
-  })).toString("base64url");
+  return Buffer.from(JSON.stringify({ sub: userId, tok: raw })).toString("base64url");
 }
 
 /**
- * Validate a magic link token. Returns subscriber ID if valid.
+ * Validate a magic link token. Returns user info if valid, null otherwise.
+ * Clears the token on success (one-time use).
  */
-export async function validateMagicToken(token: string): Promise<string | null> {
+export async function validateMagicToken(token: string): Promise<{
+  id: string;
+  name: string;
+  subscriptionId: string;
+  plan: string;
+  role: string;
+} | null> {
   let parsed: { sub: string; tok: string };
   try {
     parsed = JSON.parse(Buffer.from(token, "base64url").toString());
@@ -53,37 +42,34 @@ export async function validateMagicToken(token: string): Promise<string | null> 
     return null;
   }
 
-  const { sub: subscriberId, tok: raw } = parsed;
+  const { sub: userId, tok: raw } = parsed;
 
-  const [subscriber] = await sql`
-    SELECT id, metadata FROM subscribers
-    WHERE id = ${subscriberId} AND is_active = true
+  const [user] = await sql`
+    SELECT u.id, u.name, u.role, u.subscription_id, u.magic_token_hash, u.magic_token_expires,
+           s.plan
+    FROM users u
+    JOIN subscriptions s ON u.subscription_id = s.id
+    WHERE u.id = ${userId} AND u.is_active = true
   `;
 
-  if (!subscriber) return null;
+  if (!user) return null;
+  if (!user.magic_token_hash) return null;
 
-  const meta = (subscriber.metadata || {}) as Record<string, unknown>;
-  const magicToken = meta.magic_token as { hash: string; expires_at: string } | undefined;
-
-  if (!magicToken) return null;
-
-  // Check expiry
-  if (new Date(magicToken.expires_at) < new Date()) {
+  if (new Date(user.magic_token_expires as string) < new Date()) {
+    await sql`UPDATE users SET magic_token_hash = NULL, magic_token_expires = NULL WHERE id = ${userId}`;
     return null;
   }
 
-  // Verify hash
   const hash = createHmac("sha256", SECRET).update(raw).digest("hex");
-  if (hash !== magicToken.hash) {
-    return null;
-  }
+  if (hash !== user.magic_token_hash) return null;
 
-  // Clear the token (one-time use)
-  await sql`
-    UPDATE subscribers
-    SET metadata = metadata - 'magic_token', updated_at = NOW()
-    WHERE id = ${subscriberId}
-  `;
+  await sql`UPDATE users SET magic_token_hash = NULL, magic_token_expires = NULL WHERE id = ${userId}`;
 
-  return subscriberId;
+  return {
+    id: user.id as string,
+    name: user.name as string,
+    subscriptionId: user.subscription_id as string,
+    plan: (user.plan as string) || "free",
+    role: (user.role as string) || "owner",
+  };
 }

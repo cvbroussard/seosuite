@@ -20,7 +20,7 @@ export async function PATCH(
 
   // Verify ownership
   const [vendor] = await sql`
-    SELECT id FROM vendors WHERE id = ${id} AND subscriber_id = ${auth.subscriberId}
+    SELECT id FROM entities WHERE id = ${id} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!vendor) {
     return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
@@ -32,13 +32,13 @@ export async function PATCH(
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_|_$/g, "")
       .slice(0, 40);
-    await sql`UPDATE vendors SET name = ${name}, slug = ${slug} WHERE id = ${id}`;
+    await sql`UPDATE entities SET name = ${name}, slug = ${slug} WHERE id = ${id}`;
   }
   if (url !== undefined) {
-    await sql`UPDATE vendors SET url = ${url || null} WHERE id = ${id}`;
+    await sql`UPDATE entities SET url = ${url || null} WHERE id = ${id}`;
   }
 
-  const [updated] = await sql`SELECT id, name, slug, url FROM vendors WHERE id = ${id}`;
+  const [updated] = await sql`SELECT id, name, slug, url FROM entities WHERE id = ${id}`;
   return NextResponse.json({ vendor: updated });
 }
 
@@ -55,7 +55,7 @@ export async function DELETE(
   const { id } = await params;
 
   await sql`
-    DELETE FROM vendors WHERE id = ${id} AND subscriber_id = ${auth.subscriberId}
+    DELETE FROM entities WHERE id = ${id} AND subscription_id = ${auth.subscriptionId}
   `;
 
   return NextResponse.json({ success: true });

@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { TagPicker, type PillarGroup } from "./tag-picker";
 
-interface Vendor {
+interface Brand {
   id: string;
   name: string;
   slug: string;
   url: string | null;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 interface AssetEditModalProps {
@@ -20,8 +26,12 @@ interface AssetEditModalProps {
   initialTags: string[];
   pillarConfig: PillarGroup[];
   availablePillars?: string[];
-  vendors?: Vendor[];
-  initialVendorIds?: string[];
+  brands?: Brand[];
+  projects?: Project[];
+  brandLabel?: string | null;
+  projectLabel?: string | null;
+  initialBrandIds?: string[];
+  initialProjectIds?: string[];
   source?: string | null;
   qualityScore?: number | null;
   sceneType?: string | null;
@@ -39,8 +49,12 @@ export function AssetEditModal({
   initialPillar,
   initialTags,
   pillarConfig,
-  vendors = [],
-  initialVendorIds = [],
+  brands = [],
+  projects = [],
+  brandLabel,
+  projectLabel,
+  initialBrandIds = [],
+  initialProjectIds = [],
   source,
   qualityScore,
   sceneType,
@@ -51,7 +65,8 @@ export function AssetEditModal({
   const [note, setNote] = useState(initialNote);
   const [pillar, setPillar] = useState(initialPillar);
   const [tags, setTags] = useState<string[]>(initialTags || []);
-  const [vendorIds, setVendorIds] = useState<string[]>(initialVendorIds);
+  const [brandIds, setBrandIds] = useState<string[]>(initialBrandIds);
+  const [projectIds, setProjectIds] = useState<string[]>(initialProjectIds);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<boolean | "force">(false);
   const [deleting, setDeleting] = useState(false);
@@ -65,8 +80,9 @@ export function AssetEditModal({
   const [hashIndex, setHashIndex] = useState(0);
   const [hashStart, setHashStart] = useState(0);
 
+  // Hashtag autocomplete uses brands
   const hashMatches = hashQuery !== null
-    ? vendors.filter((v) =>
+    ? brands.filter((v) =>
         v.slug.startsWith(hashQuery.toLowerCase()) ||
         v.name.toLowerCase().startsWith(hashQuery.toLowerCase())
       ).slice(0, 6)
@@ -101,23 +117,23 @@ export function AssetEditModal({
       setHashIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
-      insertVendorTag(hashMatches[hashIndex]);
+      insertBrandTag(hashMatches[hashIndex]);
     } else if (e.key === "Escape") {
       setHashQuery(null);
     }
   }
 
-  function insertVendorTag(vendor: Vendor) {
+  function insertBrandTag(brand: Brand) {
     const before = note.slice(0, hashStart);
     const after = note.slice(textareaRef.current?.selectionStart || hashStart + (hashQuery?.length || 0) + 1);
-    const inserted = `#${vendor.slug} `;
+    const inserted = `#${brand.slug} `;
     const newNote = before + inserted + after;
     setNote(newNote);
     setHashQuery(null);
 
-    // Auto-add vendor to selection
-    setVendorIds((prev) =>
-      prev.includes(vendor.id) ? prev : [...prev, vendor.id]
+    // Auto-add brand to selection
+    setBrandIds((prev) =>
+      prev.includes(brand.id) ? prev : [...prev, brand.id]
     );
 
     // Restore cursor position
@@ -167,7 +183,8 @@ export function AssetEditModal({
       if (note !== initialNote) body.context_note = note;
       if (pillar !== initialPillar) body.pillar = pillar;
       if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
-      if (JSON.stringify(vendorIds.sort()) !== JSON.stringify(initialVendorIds.sort())) body.vendor_ids = vendorIds;
+      if (JSON.stringify(brandIds.sort()) !== JSON.stringify(initialBrandIds.sort())) body.brand_ids = brandIds;
+      if (JSON.stringify(projectIds.sort()) !== JSON.stringify(initialProjectIds.sort())) body.project_ids = projectIds;
 
       if (Object.keys(body).length === 0) {
         onClose();
@@ -190,6 +207,8 @@ export function AssetEditModal({
       setSaving(false);
     }
   }
+
+  const totalTagged = initialBrandIds.length + initialProjectIds.length;
 
   return (
     <div
@@ -249,9 +268,9 @@ export function AssetEditModal({
                   {(qualityScore * 100).toFixed(0)}%
                 </span>
               )}
-              {initialVendorIds.length > 0 && (
+              {totalTagged > 0 && (
                 <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
-                  {initialVendorIds.length} vendor{initialVendorIds.length !== 1 ? "s" : ""}
+                  {totalTagged} tagged
                 </span>
               )}
             </div>
@@ -265,7 +284,7 @@ export function AssetEditModal({
                 onKeyDown={handleNoteKeyDown}
                 className="w-full h-full text-sm"
                 style={{ minHeight: 120 }}
-                placeholder="List details: brass bar sink, #VendorName, walnut countertop, https://vendor.com/product..."
+                placeholder="List details: brass bar sink, #BrandName, walnut countertop, https://vendor.com/product..."
               />
               {hashQuery !== null && hashMatches.length > 0 && (
                 <div className="absolute left-0 right-0 z-10 mt-1 overflow-hidden rounded border border-border bg-surface shadow-lg">
@@ -274,7 +293,7 @@ export function AssetEditModal({
                       key={v.id}
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        insertVendorTag(v);
+                        insertBrandTag(v);
                       }}
                       className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                         i === hashIndex ? "bg-accent/10 text-accent" : "text-foreground hover:bg-surface-hover"
@@ -345,19 +364,19 @@ export function AssetEditModal({
           </div>
         )}
 
-        {/* Row 3: Vendors */}
-        {vendors.length > 0 && (
+        {/* Row 3: Brands */}
+        {brandLabel && brands.length > 0 && (
           <div className="border-t border-border px-6 py-4">
-            <label className="mb-2 block text-xs text-muted">Vendors</label>
+            <label className="mb-1.5 block text-xs text-muted">{brandLabel}</label>
             <div className="flex flex-wrap gap-1.5">
-              {vendors.map((v) => {
-                const selected = vendorIds.includes(v.id);
+              {brands.map((b) => {
+                const selected = brandIds.includes(b.id);
                 return (
                   <button
-                    key={v.id}
+                    key={b.id}
                     onClick={() =>
-                      setVendorIds((prev) =>
-                        selected ? prev.filter((id) => id !== v.id) : [...prev, v.id]
+                      setBrandIds((prev) =>
+                        selected ? prev.filter((id) => id !== b.id) : [...prev, b.id]
                       )
                     }
                     className={`rounded px-2 py-0.5 text-xs transition-colors ${
@@ -366,10 +385,39 @@ export function AssetEditModal({
                         : "bg-surface-hover text-muted hover:text-foreground"
                     }`}
                   >
-                    {v.name}
-                    {v.url && selected && (
+                    {b.name}
+                    {b.url && selected && (
                       <span className="ml-1 text-accent/50">↗</span>
                     )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Row 4: Projects */}
+        {projectLabel && projects.length > 0 && (
+          <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{projectLabel}</label>
+            <div className="flex flex-wrap gap-1.5">
+              {projects.map((p) => {
+                const selected = projectIds.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      setProjectIds((prev) =>
+                        selected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                      )
+                    }
+                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                      selected
+                        ? "bg-accent/20 text-accent"
+                        : "bg-surface-hover text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {p.name}
                   </button>
                 );
               })}

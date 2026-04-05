@@ -31,11 +31,17 @@ const statusColors: Record<string, string> = {
   rejected: "bg-danger/70 text-white",
 };
 
-interface Vendor {
+interface Brand {
   id: string;
   name: string;
   slug: string;
   url: string | null;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 export function MediaGrid({
@@ -43,15 +49,23 @@ export function MediaGrid({
   availablePillars,
   pillarConfig,
   siteId,
-  vendors = [],
-  assetVendorMap = {},
+  brands = [],
+  projects = [],
+  brandLabel = null,
+  projectLabel = null,
+  assetBrandMap = {},
+  assetProjectMap = {},
 }: {
   initialAssets: Asset[];
   availablePillars: string[];
   pillarConfig: PillarGroup[];
   siteId: string;
-  vendors?: Vendor[];
-  assetVendorMap?: Record<string, string[]>;
+  brands?: Brand[];
+  projects?: Project[];
+  brandLabel?: string | null;
+  projectLabel?: string | null;
+  assetBrandMap?: Record<string, string[]>;
+  assetProjectMap?: Record<string, string[]>;
 }) {
   const [assets, setAssets] = useState(initialAssets);
   const [editing, setEditing] = useState<Asset | null>(null);
@@ -156,8 +170,12 @@ export function MediaGrid({
           initialPillar={editing.content_pillar || ""}
           initialTags={editing.content_tags || editing.content_pillars || []}
           pillarConfig={pillarConfig}
-          vendors={vendors}
-          initialVendorIds={assetVendorMap[editing.id] || []}
+          brands={brands}
+          projects={projects}
+          brandLabel={brandLabel}
+          projectLabel={projectLabel}
+          initialBrandIds={assetBrandMap[editing.id] || []}
+          initialProjectIds={assetProjectMap[editing.id] || []}
           source={editing.source}
           qualityScore={Number(editing.quality_score) || null}
           sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}

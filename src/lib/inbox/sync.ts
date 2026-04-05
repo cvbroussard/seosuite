@@ -40,13 +40,13 @@ export async function syncInboxEngagement(siteId: string): Promise<InboxSyncResu
 async function notifyNewEngagement(siteId: string, result: InboxSyncResult): Promise<void> {
   try {
     const siteRows = await sql`
-      SELECT si.subscriber_id, si.name as site_name
+      SELECT si.subscription_id, si.name as site_name
       FROM sites si
       WHERE si.id = ${siteId}
     `;
     if (siteRows.length === 0) return;
 
-    const { subscriber_id, site_name } = siteRows[0];
+    const { subscription_id, site_name } = siteRows[0];
     const parts: string[] = [];
 
     if (result.commentsAdded > 0) {
@@ -59,7 +59,7 @@ async function notifyNewEngagement(siteId: string, result: InboxSyncResult): Pro
     const title = `New engagement — ${site_name || "Your Site"}`;
     const body = parts.join(", ");
 
-    await sendPushNotification(subscriber_id, title, body, {
+    await sendPushNotification(subscription_id, title, body, {
       siteId,
       type: "inbox",
     });

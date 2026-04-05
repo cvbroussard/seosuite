@@ -1,7 +1,7 @@
 import { sql } from "@/lib/db";
 
-interface ParsedVendor {
-  vendorId: string;
+interface ParsedEntity {
+  entityId: string;
   name: string;
   urls: string[];
 }
@@ -18,11 +18,11 @@ interface ParseResult {
  * URLs: https://thermador.com/wine-refrigeration → associated with
  *   the nearest preceding hashtag, or standalone if no hashtag nearby
  *
- * Returns vendor IDs for asset_vendors and a link array for the blog generator.
+ * Returns brand IDs for asset_brands and a link array for the blog generator.
  */
 export async function parseContextNote(
   contextNote: string,
-  subscriberId: string
+  siteId: string
 ): Promise<ParseResult> {
   if (!contextNote) return { vendorIds: [], vendorLinks: [] };
 
@@ -37,30 +37,30 @@ export async function parseContextNote(
     return { vendorIds: [], vendorLinks: [] };
   }
 
-  // Fetch all vendors for this subscriber
-  const vendors = await sql`
-    SELECT id, name, slug, url FROM vendors WHERE subscriber_id = ${subscriberId}
+  // Fetch all brands for this subscriber (brands = slot 1 / link_in_post behavior)
+  const brands = await sql`
+    SELECT id, name, slug, url FROM brands WHERE site_id = ${siteId}
   `;
 
-  const vendorMap = new Map<string, { id: string; name: string; url: string | null }>();
-  for (const v of vendors) {
-    vendorMap.set(v.slug as string, {
-      id: v.id as string,
-      name: v.name as string,
-      url: v.url as string | null,
+  const brandMap = new Map<string, { id: string; name: string; url: string | null }>();
+  for (const b of brands) {
+    brandMap.set(b.slug as string, {
+      id: b.id as string,
+      name: b.name as string,
+      url: b.url as string | null,
     });
   }
 
-  // Match hashtags to vendors
-  const matched = new Map<string, ParsedVendor>();
+  // Match hashtags to brands
+  const matched = new Map<string, ParsedEntity>();
   for (const tag of hashtags) {
-    const vendor = vendorMap.get(tag);
-    if (vendor) {
-      if (!matched.has(vendor.id)) {
-        matched.set(vendor.id, {
-          vendorId: vendor.id,
-          name: vendor.name,
-          urls: vendor.url ? [vendor.url] : [],
+    const brand = brandMap.get(tag);
+    if (brand) {
+      if (!matched.has(brand.id)) {
+        matched.set(brand.id, {
+          entityId: brand.id,
+          name: brand.name,
+          urls: brand.url ? [brand.url] : [],
         });
       }
     }
@@ -72,7 +72,7 @@ export async function parseContextNote(
     const urlIndex = contextNote.indexOf(url);
 
     // Find the nearest hashtag before this URL
-    let nearestVendor: ParsedVendor | null = null;
+    let nearestEntity: ParsedEntity | null = null;
     let nearestDist = Infinity;
 
     for (const htMatch of hashtagMatches) {
@@ -81,31 +81,31 @@ export async function parseContextNote(
         const dist = urlIndex - htIndex;
         if (dist < nearestDist) {
           const slug = htMatch.slice(1).toLowerCase();
-          const vendor = vendorMap.get(slug);
-          if (vendor && matched.has(vendor.id)) {
-            nearestVendor = matched.get(vendor.id)!;
+          const brand = brandMap.get(slug);
+          if (brand && matched.has(brand.id)) {
+            nearestEntity = matched.get(brand.id)!;
             nearestDist = dist;
           }
         }
       }
     }
 
-    // Also try matching URL domain to a vendor
-    if (!nearestVendor) {
+    // Also try matching URL domain to an entity
+    if (!nearestEntity) {
       try {
         const domain = new URL(url).hostname.replace(/^www\./, "");
-        for (const [, vendor] of matched) {
-          if (vendor.urls.some((u) => u.includes(domain))) {
-            nearestVendor = vendor;
+        for (const [, entity] of matched) {
+          if (entity.urls.some((u) => u.includes(domain))) {
+            nearestEntity = entity;
             break;
           }
         }
       } catch { /* invalid URL */ }
     }
 
-    if (nearestVendor) {
-      if (!nearestVendor.urls.includes(url)) {
-        nearestVendor.urls.push(url);
+    if (nearestEntity) {
+      if (!nearestEntity.urls.includes(url)) {
+        nearestEntity.urls.push(url);
       }
     }
     // Standalone URLs without a vendor match are ignored —
@@ -116,10 +116,10 @@ export async function parseContextNote(
   const vendorIds: string[] = [];
   const vendorLinks: string[] = [];
 
-  for (const [, vendor] of matched) {
-    vendorIds.push(vendor.vendorId);
-    for (const url of vendor.urls) {
-      vendorLinks.push(`${vendor.name}: ${url}`);
+  for (const [, entity] of matched) {
+    vendorIds.push(entity.entityId);
+    for (const url of entity.urls) {
+      vendorLinks.push(`${entity.name}: ${url}`);
     }
   }
 

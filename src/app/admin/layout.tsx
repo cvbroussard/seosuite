@@ -13,7 +13,7 @@ export default function AdminLayout({
 }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <TopBar subscriberName="Admin" variant="platform" />
+      <TopBar userName="Admin" variant="platform" />
       <div className="flex flex-1 overflow-hidden">
         <AdminSidebar />
         <main className="flex-1 overflow-y-auto p-8">{children}</main>

@@ -12,7 +12,7 @@ const MAX_POSTS_PER_SYNC = 20;
 export async function syncComments(siteId: string): Promise<number> {
   // Get all active social accounts for this site that have an adapter with fetchComments
   const accounts = await sql`
-    SELECT sa.id, sa.subscriber_id, sa.platform, sa.account_id,
+    SELECT sa.id, sa.subscription_id, sa.platform, sa.account_id,
            sa.access_token_encrypted, sa.metadata
     FROM social_accounts sa
     JOIN site_social_links ssl ON ssl.social_account_id = sa.id
@@ -60,13 +60,13 @@ export async function syncComments(siteId: string): Promise<number> {
         for (const comment of comments) {
           const [inserted] = await sql`
             INSERT INTO inbox_comments (
-              subscriber_id, site_id, social_account_id, post_id,
+              subscription_id, site_id, social_account_id, post_id,
               platform, platform_post_id, platform_comment_id,
               author_name, author_username, author_avatar_url, author_platform_id,
               body, commented_at, raw_data
             )
             VALUES (
-              ${account.subscriber_id}, ${siteId}, ${account.id}, ${post.id},
+              ${account.subscription_id}, ${siteId}, ${account.id}, ${post.id},
               ${account.platform}, ${post.platform_post_id}, ${comment.platformCommentId},
               ${comment.authorName}, ${comment.authorUsername || null}, ${comment.authorAvatarUrl || null}, ${comment.authorPlatformId || null},
               ${comment.body}, ${comment.commentedAt}, ${JSON.stringify(comment.rawData || {})}

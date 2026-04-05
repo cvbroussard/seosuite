@@ -4,19 +4,16 @@ import { useState } from "react";
 import { PhoneField } from "@/components/phone-input";
 
 interface Props {
-  subscriberId: string;
+  userId: string;
   initialName: string;
-  initialOwnerName: string;
-  initialCompanyPhone: string;
+  initialPhone: string;
   hasPassword: boolean;
 }
 
-export function AccountProfile({ subscriberId, initialName, initialOwnerName, initialCompanyPhone, hasPassword }: Props) {
-  const [name, setName] = useState(initialName);
-  const [ownerName, setOwnerName] = useState(initialOwnerName);
-  const [companyPhone, setCompanyPhone] = useState(initialCompanyPhone);
+export function AccountProfile({ userId, initialName, initialPhone, hasPassword }: Props) {
+  const [ownerName, setOwnerName] = useState(initialName);
+  const [companyPhone, setCompanyPhone] = useState(initialPhone);
   const [saving, setSaving] = useState(false);
-  const [nameSuccess, setNameSuccess] = useState(false);
   const [ownerNameSuccess, setOwnerNameSuccess] = useState(false);
   const [companyPhoneSuccess, setCompanyPhoneSuccess] = useState(false);
 
@@ -25,6 +22,7 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpVerified, setOtpVerified] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -32,7 +30,7 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   async function saveCompanyPhone() {
-    if (companyPhone === initialCompanyPhone) return;
+    if (companyPhone === initialPhone) return;
     setSaving(true);
     setCompanyPhoneSuccess(false);
     try {
@@ -51,7 +49,7 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
   }
 
   async function saveOwnerName() {
-    if (!ownerName.trim() || ownerName === initialOwnerName) return;
+    if (!ownerName.trim() || ownerName === initialName) return;
     setSaving(true);
     setOwnerNameSuccess(false);
     try {
@@ -63,29 +61,6 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
       if (res.ok) {
         setOwnerNameSuccess(true);
         setTimeout(() => setOwnerNameSuccess(false), 3000);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
-
-
-  async function saveName() {
-    if (!name.trim() || name === initialName) return;
-    setSaving(true);
-    setNameSuccess(false);
-    try {
-      const res = await fetch("/api/account/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      if (res.ok) {
-        setNameSuccess(true);
-        // Refresh session to reflect name change
-        await fetch("/api/auth/refresh-session", { method: "POST" });
-        setTimeout(() => setNameSuccess(false), 3000);
       }
     } finally {
       setSaving(false);
@@ -169,9 +144,9 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
 
   return (
     <>
-      {/* Owner name */}
+      {/* Name */}
       <div className="flex items-center justify-between border-b border-border py-2">
-        <span className="text-sm text-muted">Your name</span>
+        <span className="text-sm text-muted">Name</span>
         <div className="flex items-center gap-2">
           <input
             value={ownerName}
@@ -182,7 +157,7 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
           />
           <button
             onClick={saveOwnerName}
-            disabled={saving || !ownerName.trim() || ownerName === initialOwnerName}
+            disabled={saving || !ownerName.trim() || ownerName === initialName}
             className="border border-border px-3 py-1 text-sm text-muted hover:text-foreground disabled:opacity-30"
           >
             {saving ? "..." : ownerNameSuccess ? "Saved" : "Save"}
@@ -190,29 +165,9 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
         </div>
       </div>
 
-      {/* Business name */}
+      {/* Phone */}
       <div className="flex items-center justify-between border-b border-border py-2">
-        <span className="text-sm text-muted">Business name</span>
-        <div className="flex items-center gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="px-2 py-1 text-right"
-            style={{ width: 200 }}
-          />
-          <button
-            onClick={saveName}
-            disabled={saving || !name.trim() || name === initialName}
-            className="border border-border px-3 py-1 text-sm text-muted hover:text-foreground disabled:opacity-30"
-          >
-            {saving ? "..." : nameSuccess ? "Saved" : "Save"}
-          </button>
-        </div>
-      </div>
-
-      {/* Company phone */}
-      <div className="flex items-center justify-between border-b border-border py-2">
-        <span className="text-sm text-muted">Company phone</span>
+        <span className="text-sm text-muted">Phone</span>
         <div className="flex items-center gap-2">
           <PhoneField
             value={companyPhone}
@@ -222,7 +177,7 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
           />
           <button
             onClick={saveCompanyPhone}
-            disabled={saving || companyPhone === initialCompanyPhone}
+            disabled={saving || companyPhone === initialPhone}
             className="border border-border px-3 py-1 text-sm text-muted hover:text-foreground disabled:opacity-30"
           >
             {saving ? "..." : companyPhoneSuccess ? "Saved" : "Save"}
@@ -310,23 +265,34 @@ export function AccountProfile({ subscriberId, initialName, initialOwnerName, in
               <div className="space-y-3">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">New password</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 8 characters"
-                    className="w-full px-3 py-2.5"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      className="w-full px-3 py-2.5 pr-14"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted hover:text-foreground"
+                    >
+                      {showNewPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">Confirm password</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your password"
-                    className="w-full px-3 py-2.5"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your password"
+                      className="w-full px-3 py-2.5 pr-14"
+                    />
+                  </div>
                 </div>
                 <button
                   onClick={savePassword}

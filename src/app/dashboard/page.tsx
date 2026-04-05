@@ -15,7 +15,8 @@ export default async function DashboardOverview() {
   if (!session.activeSiteId) {
     return (
       <AccountPortal
-        subscriberName={session.subscriberName}
+        userName={session.userName}
+        subscriptionName={session.subscriptionName || session.userName}
         sites={session.sites}
         plan={session.plan}
       />

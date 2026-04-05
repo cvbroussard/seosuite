@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(oauthErrorUrl(source, "missing_params"));
   }
 
-  let state: { subscriber_id: string; site_id?: string | null; source?: string; code_verifier: string };
+  let state: { subscription_id: string; site_id?: string | null; source?: string; code_verifier: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -62,18 +62,18 @@ export async function GET(req: NextRequest) {
 
     await sql`
       INSERT INTO social_accounts (
-        subscriber_id, platform, account_name, account_id,
+        subscription_id, platform, account_name, account_id,
         access_token_encrypted, refresh_token_encrypted, token_expires_at,
         scopes, status, metadata
       )
       VALUES (
-        ${state.subscriber_id}, 'twitter', ${accountName}, ${accountId},
+        ${state.subscription_id}, 'twitter', ${accountName}, ${accountId},
         ${encrypt(accessToken)}, ${encrypt(refreshToken)}, ${expiresAt},
         ${"{tweet.read,tweet.write,users.read,offline.access}"},
         'active',
         ${JSON.stringify({ username: accountName, user_id: accountId })}
       )
-      ON CONFLICT (subscriber_id, platform, account_id)
+      ON CONFLICT (subscription_id, platform, account_id)
       DO UPDATE SET
         account_name = EXCLUDED.account_name,
         access_token_encrypted = EXCLUDED.access_token_encrypted,
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     if (state.site_id && accountId) {
       const [acct] = await sql`
         SELECT id FROM social_accounts
-        WHERE subscriber_id = ${state.subscriber_id} AND platform = 'twitter' AND account_id = ${accountId}
+        WHERE subscription_id = ${state.subscription_id} AND platform = 'twitter' AND account_id = ${accountId}
       `;
       if (acct) {
         await sql`
@@ -101,8 +101,8 @@ export async function GET(req: NextRequest) {
     }
 
     await sql`
-      INSERT INTO usage_log (subscriber_id, action, metadata)
-      VALUES (${state.subscriber_id}, 'twitter_connect', ${JSON.stringify({
+      INSERT INTO usage_log (subscription_id, action, metadata)
+      VALUES (${state.subscription_id}, 'twitter_connect', ${JSON.stringify({
         username: accountName,
       })})
     `;

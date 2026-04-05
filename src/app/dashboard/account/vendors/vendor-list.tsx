@@ -10,7 +10,7 @@ interface Vendor {
   created_at: string;
 }
 
-export function VendorList({ initialVendors }: { initialVendors: Vendor[] }) {
+export function VendorList({ initialVendors, siteId }: { initialVendors: Vendor[]; siteId: string }) {
   const [vendors, setVendors] = useState(initialVendors);
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
@@ -26,7 +26,7 @@ export function VendorList({ initialVendors }: { initialVendors: Vendor[] }) {
       const res = await fetch("/api/vendors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), url: newUrl.trim() || null }),
+        body: JSON.stringify({ name: newName.trim(), url: newUrl.trim() || null, site_id: siteId }),
       });
       if (res.ok) {
         const data = await res.json();

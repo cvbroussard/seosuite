@@ -16,17 +16,17 @@ interface ExpoPushTicket {
 }
 
 /**
- * Send a push notification to all registered devices for a subscriber.
+ * Send a push notification to all registered devices for a subscription.
  */
 export async function sendPushNotification(
-  subscriberId: string,
+  subscriptionId: string,
   title: string,
   body: string,
   data?: Record<string, unknown>
 ): Promise<void> {
   const tokens = await sql`
     SELECT id, token FROM push_tokens
-    WHERE subscriber_id = ${subscriberId}
+    WHERE subscription_id = ${subscriptionId}
   `;
 
   if (tokens.length === 0) return;

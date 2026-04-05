@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(oauthErrorUrl(source, "missing_params"));
   }
 
-  let state: { subscriber_id: string; site_id: string; source?: string };
+  let state: { subscription_id: string; site_id: string; source?: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -98,12 +98,12 @@ export async function GET(req: NextRequest) {
       // Create social_account for the pipeline to publish through
       await sql`
         INSERT INTO social_accounts (
-          subscriber_id, platform, account_name, account_id,
+          subscription_id, platform, account_name, account_id,
           access_token_encrypted, token_expires_at,
           scopes, status, metadata
         )
         VALUES (
-          ${state.subscriber_id}, 'gbp', ${loc.locationName}, ${loc.locationId},
+          ${state.subscription_id}, 'gbp', ${loc.locationName}, ${loc.locationId},
           ${encrypt(accessToken)}, ${expiresAt},
           ${"{business.manage}"},
           'active',
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
             site_id: state.site_id,
           })}
         )
-        ON CONFLICT (subscriber_id, platform, account_id)
+        ON CONFLICT (subscription_id, platform, account_id)
         DO UPDATE SET
           account_name = EXCLUDED.account_name,
           access_token_encrypted = EXCLUDED.access_token_encrypted,
@@ -130,8 +130,8 @@ export async function GET(req: NextRequest) {
 
     // Log usage
     await sql`
-      INSERT INTO usage_log (subscriber_id, action, metadata)
-      VALUES (${state.subscriber_id}, 'google_connect', ${JSON.stringify({
+      INSERT INTO usage_log (subscription_id, action, metadata)
+      VALUES (${state.subscription_id}, 'google_connect', ${JSON.stringify({
         locations: locations.map((l) => l.locationName),
         email,
       })})

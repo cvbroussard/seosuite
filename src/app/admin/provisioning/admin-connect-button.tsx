@@ -15,11 +15,11 @@ const PLATFORMS = [
 
 interface AdminConnectButtonProps {
   siteId: string;
-  subscriberId: string;
+  subscriptionId: string;
   connectedPlatforms: string[];
 }
 
-export function AdminConnectButton({ siteId, subscriberId, connectedPlatforms }: AdminConnectButtonProps) {
+export function AdminConnectButton({ siteId, subscriptionId, connectedPlatforms }: AdminConnectButtonProps) {
   const [open, setOpen] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -34,7 +34,7 @@ export function AdminConnectButton({ siteId, subscriberId, connectedPlatforms }:
 
     try {
       const apiPlatform = platform === "gbp" ? "google" : platform;
-      const url = `/api/auth/${apiPlatform}?site_id=${siteId}&subscriber_id=${subscriberId}&source=admin`;
+      const url = `/api/auth/${apiPlatform}?site_id=${siteId}&subscription_id=${subscriptionId}&source=admin`;
 
       const res = await fetch(url);
       if (!res.ok) {

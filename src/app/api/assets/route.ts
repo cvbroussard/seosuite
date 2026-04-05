@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     // Verify site belongs to this subscriber
     const [site] = await sql`
       SELECT id FROM sites
-      WHERE id = ${site_id} AND subscriber_id = ${auth.subscriberId}
+      WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}
     `;
 
     if (!site) {
@@ -95,12 +95,39 @@ export async function POST(req: NextRequest) {
 
     // Log usage
     await sql`
-      INSERT INTO usage_log (subscriber_id, site_id, action, metadata)
-      VALUES (${auth.subscriberId}, ${site_id}, 'asset_upload', ${JSON.stringify({
+      INSERT INTO usage_log (subscription_id, site_id, action, metadata)
+      VALUES (${auth.subscriptionId}, ${site_id}, 'asset_upload', ${JSON.stringify({
         asset_id: asset.id,
         media_type,
       })})
     `;
+
+    // Extract EXIF metadata + geo-match — non-blocking
+    if (media_type?.startsWith("image")) {
+      import("@/lib/image-utils").then(({ extractExif }) =>
+        extractExif(finalUrl).then(async (exif) => {
+          if (exif.dateTaken || exif.lat !== null) {
+            const exifMeta = {
+              ...(exif.dateTaken && { date_taken: exif.dateTaken }),
+              ...(exif.lat !== null && { geo: { lat: exif.lat, lng: exif.lng } }),
+              ...(exif.camera && { camera: exif.camera }),
+            };
+            await sql`
+              UPDATE media_assets
+              SET date_taken = ${exif.dateTaken},
+                  metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(exifMeta)}::jsonb
+              WHERE id = ${asset.id}
+            `.catch(() => {});
+
+            // Auto-associate with nearby locations/projects
+            if (exif.lat !== null && exif.lng !== null) {
+              const { matchAssetToEntities } = await import("@/lib/geo-match");
+              await matchAssetToEntities(asset.id as string, site_id, exif.lat, exif.lng).catch(() => {});
+            }
+          }
+        })
+      ).catch(() => {});
+    }
 
     // Fire pipeline immediately — non-blocking (don't await)
     runPipeline(site_id).catch((err) =>
@@ -138,7 +165,7 @@ export async function GET(req: NextRequest) {
     // Verify ownership
     const [site] = await sql`
       SELECT id FROM sites
-      WHERE id = ${siteId} AND subscriber_id = ${auth.subscriberId}
+      WHERE id = ${siteId} AND subscription_id = ${auth.subscriptionId}
     `;
 
     if (!site) {

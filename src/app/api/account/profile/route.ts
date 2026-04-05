@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 
 /**
  * PATCH /api/account/profile
- * Update subscriber name and/or phone.
+ * Update subscription name and/or user profile.
  */
 export async function PATCH(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -12,33 +12,34 @@ export async function PATCH(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, ownerName, phone, companyPhone } = body;
+  const { name, subscriptionName, ownerName, phone, companyPhone } = body;
+  const bizName = subscriptionName || name;
 
-  if (name) {
+  if (bizName) {
     await sql`
-      UPDATE subscribers SET name = ${name}, updated_at = NOW()
-      WHERE id = ${auth.subscriberId}
+      UPDATE subscriptions SET name = ${bizName}, updated_at = NOW()
+      WHERE id = ${auth.subscriptionId}
     `;
   }
 
   if (companyPhone !== undefined) {
     await sql`
-      UPDATE subscribers SET company_phone = ${companyPhone || null}, updated_at = NOW()
-      WHERE id = ${auth.subscriberId}
+      UPDATE sites SET business_phone = ${companyPhone || null}, updated_at = NOW()
+      WHERE subscription_id = ${auth.subscriptionId}
     `;
   }
 
   if (ownerName) {
     await sql`
-      UPDATE team_members SET name = ${ownerName}
-      WHERE subscriber_id = ${auth.subscriberId} AND role = 'owner'
+      UPDATE users SET name = ${ownerName}
+      WHERE id = ${auth.userId}
     `;
   }
 
   if (phone !== undefined) {
     await sql`
-      UPDATE team_members SET phone = ${phone || null}
-      WHERE subscriber_id = ${auth.subscriberId} AND role = 'owner'
+      UPDATE users SET phone = ${phone || null}
+      WHERE id = ${auth.userId}
     `;
   }
 

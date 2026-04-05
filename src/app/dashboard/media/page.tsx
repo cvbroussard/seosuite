@@ -52,16 +52,16 @@ export default async function MediaPage({ searchParams }: Props) {
   // Fetch all assets for the site, apply server-side sort
   const orderClause = sortOrder === "quality" ? "quality_score DESC"
     : sortOrder === "least_used" ? "COALESCE((metadata->>'used_count')::int, 0) ASC, created_at DESC"
-    : "created_at DESC";
+    : "COALESCE(date_taken, created_at) DESC";
 
   // Single query — filter in JS for reliability with Neon tagged templates
   const allAssets = await sql`
     SELECT id, storage_url, media_type, context_note, triage_status,
            quality_score, content_pillar, content_pillars, content_tags,
-           source, ai_analysis, metadata,
+           source, ai_analysis, metadata, date_taken,
            platform_fit, flag_reason, shelve_reason, created_at
     FROM media_assets WHERE site_id = ${siteId}
-    ORDER BY created_at DESC
+    ORDER BY COALESCE(date_taken, created_at) DESC
     LIMIT 500
   `;
 
@@ -116,22 +116,36 @@ export default async function MediaPage({ searchParams }: Props) {
     FROM media_assets WHERE site_id = ${siteId}
   `;
 
-  const [siteData, vendors, assetVendorRows] = await Promise.all([
-    sql`SELECT content_pillars, pillar_config FROM sites WHERE id = ${siteId}`,
-    sql`SELECT id, name, slug, url FROM vendors WHERE subscriber_id = ${session.subscriberId} ORDER BY name ASC`,
+  const [siteData, allBrands, allProjects, assetBrandRows, assetProjectRows] = await Promise.all([
+    sql`SELECT content_pillars, pillar_config, brand_label, project_label, client_label, location_label FROM sites WHERE id = ${siteId}`,
+    sql`SELECT id, name, slug, url FROM brands WHERE site_id = ${siteId} ORDER BY name ASC`,
+    sql`SELECT id, name, slug FROM projects WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`
-      SELECT av.asset_id, av.vendor_id
-      FROM asset_vendors av
-      JOIN media_assets ma ON ma.id = av.asset_id
+      SELECT ab.asset_id, ab.brand_id
+      FROM asset_brands ab
+      JOIN media_assets ma ON ma.id = ab.asset_id
+      WHERE ma.site_id = ${siteId}
+    `,
+    sql`
+      SELECT ap.asset_id, ap.project_id
+      FROM asset_projects ap
+      JOIN media_assets ma ON ma.id = ap.asset_id
       WHERE ma.site_id = ${siteId}
     `,
   ]);
 
-  const assetVendorMap: Record<string, string[]> = {};
-  for (const row of assetVendorRows) {
+  const assetBrandMap: Record<string, string[]> = {};
+  for (const row of assetBrandRows) {
     const aid = row.asset_id as string;
-    if (!assetVendorMap[aid]) assetVendorMap[aid] = [];
-    assetVendorMap[aid].push(row.vendor_id as string);
+    if (!assetBrandMap[aid]) assetBrandMap[aid] = [];
+    assetBrandMap[aid].push(row.brand_id as string);
+  }
+
+  const assetProjectMap: Record<string, string[]> = {};
+  for (const row of assetProjectRows) {
+    const aid = row.asset_id as string;
+    if (!assetProjectMap[aid]) assetProjectMap[aid] = [];
+    assetProjectMap[aid].push(row.project_id as string);
   }
 
   const pillars = (siteData[0]?.content_pillars || []) as string[];
@@ -139,6 +153,9 @@ export default async function MediaPage({ searchParams }: Props) {
     id: string; label: string; description: string;
     tags: Array<{ id: string; label: string }>;
   }>;
+
+  const brandLabel = (siteData[0]?.brand_label as string) || null;
+  const projectLabel = (siteData[0]?.project_label as string) || null;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -166,8 +183,12 @@ export default async function MediaPage({ searchParams }: Props) {
           availablePillars={pillars}
           pillarConfig={pillarConfig}
           siteId={siteId}
-          vendors={vendors as Array<{ id: string; name: string; slug: string; url: string | null }>}
-          assetVendorMap={assetVendorMap}
+          brands={allBrands as Array<{ id: string; name: string; slug: string; url: string | null }>}
+          projects={allProjects as Array<{ id: string; name: string; slug: string }>}
+          brandLabel={brandLabel}
+          projectLabel={projectLabel}
+          assetBrandMap={assetBrandMap}
+          assetProjectMap={assetProjectMap}
         />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-8 py-16 text-center">

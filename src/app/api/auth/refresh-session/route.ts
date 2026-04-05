@@ -6,7 +6,7 @@ import { cookieDomain } from "@/lib/subdomains";
 /**
  * POST /api/auth/refresh-session
  *
- * Re-fetches subscriber data and updates the session cookie.
+ * Re-fetches user/subscription data and updates the session cookie.
  * Used after creating a site so the session includes the new site.
  */
 export async function POST() {
@@ -16,16 +16,19 @@ export async function POST() {
   }
 
   const sites = await sql`
-    SELECT id, name, url FROM sites
-    WHERE subscriber_id = ${session.subscriberId} AND deleted_at IS NULL
-    ORDER BY created_at ASC
+    SELECT id, name, url, is_active FROM sites
+    WHERE subscription_id = ${session.subscriptionId}
+    ORDER BY is_active DESC, created_at ASC
   `;
 
   const updated = {
-    subscriberId: session.subscriberId,
-    subscriberName: session.subscriberName,
+    userId: session.userId,
+    userName: session.userName,
+    subscriptionId: session.subscriptionId,
+    subscriptionName: session.subscriptionName || session.userName,
     plan: session.plan,
-    sites: sites.map((s) => ({ id: s.id, name: s.name, url: s.url })),
+    role: session.role || "owner",
+    sites: sites.map((s) => ({ id: s.id, name: s.name, url: s.url, is_active: s.is_active !== false })),
     activeSiteId: sites.find((s) => s.id === session.activeSiteId) ? session.activeSiteId : sites[0]?.id || null,
   };
 

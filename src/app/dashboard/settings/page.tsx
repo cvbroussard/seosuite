@@ -1,7 +1,7 @@
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { SiteDeletion } from "./site-deletion";
+import { SiteDeactivation } from "./site-deactivation";
 import { EditExistingAccounts } from "./edit-existing-accounts";
 import { BlogSettings } from "../blog/blog-settings";
 
@@ -25,7 +25,7 @@ export default async function SettingsPage() {
     sql`
       SELECT s.name, s.url, s.brand_voice, s.autopilot_enabled, s.cadence_config,
              s.content_pillars, s.pillar_config, s.autopilot_config, s.created_at,
-             s.deletion_requested_at, s.deletion_status,
+             s.is_active,
              s.provisioning_status, s.metadata AS site_metadata
       FROM sites s
       WHERE s.id = ${siteId}
@@ -161,12 +161,11 @@ export default async function SettingsPage() {
         />
       )}
 
-      {/* Site Deletion */}
-      <SiteDeletion
+      {/* Site Deactivation */}
+      <SiteDeactivation
         siteId={siteId}
         siteName={site?.name ? String(site.name) : "this site"}
-        deletionStatus={site?.deletion_status ? String(site.deletion_status) : null}
-        deletionRequestedAt={site?.deletion_requested_at ? String(site.deletion_requested_at) : null}
+        isActive={site?.is_active !== false}
       />
     </div>
   );

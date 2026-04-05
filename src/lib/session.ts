@@ -1,15 +1,18 @@
 import { cookies } from "next/headers";
 
 export interface Session {
-  subscriberId: string;
-  subscriberName: string;
+  userId: string;
+  userName: string;
+  subscriptionId: string;
+  subscriptionName: string;
   plan: string;
+  role: string;
   sites: Array<{ id: string; name: string; url: string; is_active?: boolean }>;
   activeSiteId: string | null;
 }
 
 /**
- * Read the subscriber session from the httpOnly cookie.
+ * Read the user session from the httpOnly cookie.
  * Returns null if not logged in.
  */
 export async function getSession(): Promise<Session | null> {

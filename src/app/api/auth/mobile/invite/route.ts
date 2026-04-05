@@ -20,12 +20,12 @@ export async function POST(req: NextRequest) {
 
   // Find the invite
   const [member] = await sql`
-    SELECT tm.id, tm.subscriber_id, tm.site_id, tm.name, tm.role,
-           tm.invite_expires, tm.invite_consumed, tm.is_active,
-           sub.plan
-    FROM team_members tm
-    JOIN subscribers sub ON tm.subscriber_id = sub.id
-    WHERE tm.invite_token = ${token}
+    SELECT u.id, u.subscription_id, u.site_id, u.name, u.role,
+           u.invite_expires, u.invite_consumed, u.is_active,
+           s.plan
+    FROM users u
+    JOIN subscriptions s ON u.subscription_id = s.id
+    WHERE u.invite_token = ${token}
   `;
 
   if (!member) {
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   // Mark invite as consumed + store session
   await sql`
-    UPDATE team_members
+    UPDATE users
     SET invite_consumed = true,
         session_token_hash = ${sessionHash},
         session_issued_at = NOW(),
@@ -62,11 +62,11 @@ export async function POST(req: NextRequest) {
   const sites = member.site_id
     ? await sql`
         SELECT id, name, url FROM sites
-        WHERE id = ${member.site_id} AND deleted_at IS NULL
+        WHERE id = ${member.site_id} AND is_active = true
       `
     : await sql`
         SELECT id, name, url FROM sites
-        WHERE subscriber_id = ${member.subscriber_id} AND deleted_at IS NULL
+        WHERE subscription_id = ${member.subscription_id} AND is_active = true
         ORDER BY created_at ASC
       `;
 
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     session_token: sessionToken,
     user: {
       id: member.id,
-      subscriberId: member.subscriber_id,
+      subscriptionId: member.subscription_id,
       name: member.name,
       role: member.role,
       siteId: member.site_id || null,

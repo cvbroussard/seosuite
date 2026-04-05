@@ -9,13 +9,13 @@ interface SiteInfo {
 }
 
 interface SidebarBrandProps {
-  subscriberName: string;
+  userName: string;
   sites: SiteInfo[];
   activeSiteId: string | null;
   onSiteChange?: (siteId: string) => void;
 }
 
-export function SidebarBrand({ subscriberName, sites, activeSiteId, onSiteChange }: SidebarBrandProps) {
+export function SidebarBrand({ userName, sites, activeSiteId, onSiteChange }: SidebarBrandProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 

@@ -14,6 +14,7 @@ const siteNav = [
   { label: "Brand", path: "/brand", icon: "◈" },
   { label: "Capture", path: "/capture", icon: "◎" },
   { label: "Media", path: "/media", icon: "▣" },
+  { label: "Entities", path: "/entities", icon: "◫" },
   { label: "Calendar", path: "/calendar", icon: "▦" },
   { label: "Inbox", path: "/inbox", icon: "▤" },
   { label: "Blog", path: "/blog", icon: "✎" },
@@ -26,25 +27,39 @@ const siteNav = [
 
 const accountNav = [
   { label: "My Account", path: "/account", icon: "◯" },
-  { label: "Vendors", path: "/account/vendors", icon: "◫" },
-  { label: "Mobile App", path: "/account/mobile-app", icon: "◱" },
+  { label: "Team", path: "/account/team", icon: "◱" },
+  { label: "Subscription", path: "/account/subscription", icon: "◈" },
 ];
 
+// Role-based nav visibility
+const MANAGER_SITE_PATHS = new Set(["", "/brand", "/calendar", "/inbox", "/blog", "/entities"]);
+const MANAGER_ACCOUNT_PATHS = new Set(["/account"]);
+
 interface SidebarProps {
-  subscriberName: string;
+  userName: string;
   sites: SiteInfo[];
   activeSiteId: string | null;
+  role?: string;
 }
 
-export function Sidebar({ subscriberName, sites, activeSiteId }: SidebarProps) {
+export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: SidebarProps) {
   const pathname = usePathname();
 
   const isSubdomain =
     typeof window !== "undefined" &&
     window.location.hostname === "studio.tracpost.com";
   const prefix = isSubdomain ? "" : "/dashboard";
-  const siteLinks = siteNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
-  const accountLinks = accountNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
+
+  const filteredSiteNav = role === "manager"
+    ? siteNav.filter((item) => MANAGER_SITE_PATHS.has(item.path))
+    : siteNav;
+
+  const filteredAccountNav = role === "manager"
+    ? accountNav.filter((item) => MANAGER_ACCOUNT_PATHS.has(item.path))
+    : accountNav;
+
+  const siteLinks = filteredSiteNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
+  const accountLinks = filteredAccountNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
 
   return (
     <aside className="flex h-full w-48 flex-col border-r border-border bg-surface">

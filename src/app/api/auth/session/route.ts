@@ -14,8 +14,9 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    subscriberId: session.subscriberId,
-    subscriberName: session.subscriberName,
+    userId: session.userId,
+    userName: session.userName,
+    subscriptionId: session.subscriptionId,
     plan: session.plan,
     activeSiteId: session.activeSiteId,
     sites: session.sites,

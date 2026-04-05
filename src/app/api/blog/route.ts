@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   // Verify ownership
   const [site] = await sql`
-    SELECT id FROM sites WHERE id = ${siteId} AND subscriber_id = ${auth.subscriberId}
+    SELECT id FROM sites WHERE id = ${siteId} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!site) {
     return NextResponse.json({ error: "Site not found" }, { status: 404 });
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
 
     // Verify ownership
     const [site] = await sql`
-      SELECT id FROM sites WHERE id = ${site_id} AND subscriber_id = ${auth.subscriberId}
+      SELECT id FROM sites WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}
     `;
     if (!site) return NextResponse.json({ error: "Site not found" }, { status: 404 });
 
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       SELECT bp.id, bp.site_id
       FROM blog_posts bp
       JOIN sites s ON s.id = bp.site_id
-      WHERE bp.id = ${post_id} AND s.subscriber_id = ${auth.subscriberId}
+      WHERE bp.id = ${post_id} AND s.subscription_id = ${auth.subscriptionId}
     `;
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       SELECT bp.id
       FROM blog_posts bp
       JOIN sites s ON s.id = bp.site_id
-      WHERE bp.id = ${post_id} AND s.subscriber_id = ${auth.subscriberId}
+      WHERE bp.id = ${post_id} AND s.subscription_id = ${auth.subscriptionId}
     `;
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 

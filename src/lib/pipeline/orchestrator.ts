@@ -238,15 +238,15 @@ async function notifyPipelineResults(
   if (!hasMeaningfulResults) return;
 
   try {
-    // Look up subscriber_id from the site
+    // Look up subscription_id from the site
     const siteRows = await sql`
-      SELECT subscriber_id, name as site_name
+      SELECT subscription_id, name as site_name
       FROM sites
       WHERE id = ${siteId}
     `;
     if (siteRows.length === 0) return;
 
-    const { subscriber_id, site_name } = siteRows[0];
+    const { subscription_id, site_name } = siteRows[0];
     const parts: string[] = [];
 
     if (result.assetsTriaged > 0) {
@@ -259,7 +259,7 @@ async function notifyPipelineResults(
     const title = `Pipeline Complete — ${site_name || "Your Site"}`;
     const body = parts.join(", ");
 
-    await sendPushNotification(subscriber_id, title, body, {
+    await sendPushNotification(subscription_id, title, body, {
       siteId,
       type: "pipeline_complete",
     });
@@ -277,7 +277,7 @@ export async function runAllPipelines(): Promise<PipelineRunResult[]> {
   const sites = await sql`
     SELECT id FROM sites
     WHERE autopilot_enabled = true
-      AND deleted_at IS NULL
+      AND is_active = true
       AND provisioning_status = 'complete'
   `;
 

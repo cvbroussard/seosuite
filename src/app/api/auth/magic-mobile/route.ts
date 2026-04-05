@@ -17,29 +17,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "token required" }, { status: 400 });
   }
 
-  const subscriberId = await validateMagicToken(token);
+  const subscriber = await validateMagicToken(token);
 
-  if (!subscriberId) {
+  if (!subscriber) {
     return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
   }
 
-  const [subscriber] = await sql`
-    SELECT id, name, plan, email FROM subscribers
-    WHERE id = ${subscriberId} AND is_active = true
-  `;
-
-  if (!subscriber) {
-    return NextResponse.json({ error: "Subscriber not found" }, { status: 404 });
-  }
-
   const sites = await sql`
-    SELECT id, name, url FROM sites
-    WHERE subscriber_id = ${subscriberId}
-    ORDER BY created_at ASC
+    SELECT id, name, url, is_active FROM sites
+    WHERE subscription_id = ${subscriber.subscriptionId}
+    ORDER BY is_active DESC, created_at ASC
   `;
 
   // Generate session token for mobile app
-  const sessionToken = await createSessionToken(subscriberId);
+  const sessionToken = await createSessionToken(subscriber.id);
 
   return NextResponse.json({
     session_token: sessionToken,
@@ -47,11 +38,13 @@ export async function POST(req: NextRequest) {
       id: subscriber.id,
       name: subscriber.name,
       plan: subscriber.plan,
+      role: subscriber.role,
     },
     sites: sites.map((s: Record<string, unknown>) => ({
       id: s.id,
       name: s.name,
       url: s.url,
+      is_active: s.is_active !== false,
     })),
   });
 }

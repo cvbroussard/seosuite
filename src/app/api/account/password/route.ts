@@ -28,9 +28,9 @@ export async function POST(req: NextRequest) {
   const hash = await bcrypt.hash(password, 12);
 
   await sql`
-    UPDATE subscribers
+    UPDATE users
     SET password_hash = ${hash}, updated_at = NOW()
-    WHERE id = ${auth.subscriberId}
+    WHERE id = ${auth.userId}
   `;
 
   return NextResponse.json({ ok: true });

@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@/lib/db";
+import { triageAsset } from "@/lib/pipeline/triage";
 import { runAllPipelines } from "@/lib/pipeline/orchestrator";
 import { refreshExpiringTokens } from "@/lib/pipeline/token-refresh";
 
+export const maxDuration = 300;
+
 /**
- * GET /api/pipeline/cron — Run autopilot pipeline for all enabled sites.
+ * GET /api/pipeline/cron — Runs every 15 minutes (Vercel cron).
  *
- * Secured by CRON_SECRET header (Vercel Cron or external scheduler).
- * Not subscriber-authenticated — this is a system-level endpoint.
- *
- * Also refreshes any social account tokens expiring within 7 days.
+ * 1. Retries stuck triage (assets at "received" older than 5 minutes)
+ * 2. Refreshes expiring social tokens
+ * 3. Runs autopilot pipelines for all enabled sites
  */
 export async function GET(req: NextRequest) {
   const secret = req.headers.get("authorization");
@@ -18,13 +21,41 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Refresh expiring tokens first
+    // ── 1. Retry stuck triage ──
+    // Assets stuck at "received" for 5+ minutes — triage failed or was rate-limited.
+    // Process up to 20 per run to stay within timeout.
+    const stuck = await sql`
+      SELECT id FROM media_assets
+      WHERE triage_status = 'received'
+        AND created_at < NOW() - INTERVAL '5 minutes'
+      ORDER BY created_at ASC
+      LIMIT 20
+    `;
+
+    let triageRetried = 0;
+    let triageErrors = 0;
+    for (const asset of stuck) {
+      try {
+        await triageAsset(asset.id as string);
+        triageRetried++;
+      } catch (err) {
+        triageErrors++;
+        console.error(`Triage retry failed for ${asset.id}:`, err instanceof Error ? err.message : err);
+      }
+      // Small delay to avoid rate limiting
+      if (stuck.length > 5) await new Promise((r) => setTimeout(r, 500));
+    }
+
+    // ── 2. Refresh expiring tokens ──
     const tokenResult = await refreshExpiringTokens();
 
-    // Run all pipelines
+    // ── 3. Run all pipelines ──
     const results = await runAllPipelines();
 
     const summary = {
+      triage_retried: triageRetried,
+      triage_errors: triageErrors,
+      triage_remaining: stuck.length === 20 ? "20+" : 0,
       sites_processed: results.length,
       total_triaged: results.reduce((n, r) => n + r.assetsTriaged, 0),
       total_slots_generated: results.reduce((n, r) => n + r.slotsGenerated, 0),

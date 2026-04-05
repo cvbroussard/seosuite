@@ -21,7 +21,7 @@ export async function DELETE(
   // Verify ownership and get token for revocation
   const [account] = await sql`
     SELECT id, account_id, access_token_encrypted FROM social_accounts
-    WHERE id = ${id} AND subscriber_id = ${auth.subscriberId}
+    WHERE id = ${id} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });

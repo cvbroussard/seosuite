@@ -19,19 +19,21 @@ import { generateRedirectInstructions } from "@/lib/blog-import/redirects";
  * Returns the R2 download URL.
  */
 export async function buildExportArchive(
-  subscriberId: string
+  subscriptionId: string
 ): Promise<string> {
   // Gather all data
   const [subscriber] = await sql`
-    SELECT id, name, email, plan, created_at
-    FROM subscribers WHERE id = ${subscriberId}
+    SELECT sub.id, u.name, u.email, sub.plan, sub.created_at
+    FROM subscriptions sub
+    JOIN users u ON u.subscription_id = sub.id AND u.role = 'owner'
+    WHERE sub.id = ${subscriptionId}
   `;
-  if (!subscriber) throw new Error("Subscriber not found");
+  if (!subscriber) throw new Error("Subscription not found");
 
   const sites = await sql`
     SELECT id, name, url, brand_voice, cadence_config, content_pillars,
            autopilot_config, autopilot_enabled, created_at
-    FROM sites WHERE subscriber_id = ${subscriberId}
+    FROM sites WHERE subscription_id = ${subscriptionId}
   `;
 
   // Create zip in memory
@@ -202,7 +204,7 @@ export async function buildExportArchive(
 
   // Upload to R2
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const key = `exports/${subscriberId}/${timestamp}.zip`;
+  const key = `exports/${subscriptionId}/${timestamp}.zip`;
   const downloadUrl = await uploadBufferToR2(key, buffer, "application/zip");
 
   return downloadUrl;

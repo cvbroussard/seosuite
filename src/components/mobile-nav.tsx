@@ -17,7 +17,7 @@ const baseNav = [
   { label: "Settings", path: "/settings", icon: "⚙" },
 ];
 
-export function MobileNav({ subscriberName }: { subscriberName: string }) {
+export function MobileNav({ userName }: { userName: string }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -75,7 +75,7 @@ export function MobileNav({ subscriberName }: { subscriberName: string }) {
           })}
           <div className="mt-1 border-t border-border px-3 pt-2">
             <div className="mb-1 flex items-center justify-between">
-              <p className="truncate text-xs font-medium">{subscriberName}</p>
+              <p className="truncate text-xs font-medium">{userName}</p>
               <ThemeToggle />
             </div>
             <button

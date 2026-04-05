@@ -2,7 +2,7 @@ import { sql } from "@/lib/db";
 import Link from "next/link";
 
 interface Alert {
-  type: "deletion_request" | "new_subscriber" | "token_expiring" | "pipeline_error";
+  type: "new_subscriber" | "token_expiring" | "pipeline_error";
   severity: "warning" | "danger" | "info";
   title: string;
   detail: string;
@@ -13,32 +13,25 @@ interface Alert {
 export async function AdminAlerts() {
   const alerts: Alert[] = [];
 
-  const [deletionRequests, newSubscribers, expiringTokens] = await Promise.all([
-    // Pending site deletion requests
-    sql`
-      SELECT s.id AS site_id, s.name AS site_name, s.deletion_requested_at, s.deletion_reason,
-             sub.id AS subscriber_id, sub.name AS subscriber_name
-      FROM sites s
-      JOIN subscribers sub ON s.subscriber_id = sub.id
-      WHERE s.deletion_status = 'pending' AND s.deleted_at IS NULL
-      ORDER BY s.deletion_requested_at ASC
-    `,
+  const [newSubscribers, expiringTokens] = await Promise.all([
     // Sites with provisioning explicitly requested by subscriber
     sql`
-      SELECT sub.id AS subscriber_id, sub.name AS subscriber_name,
+      SELECT sub.id AS subscription_id, u.name AS subscriber_name,
              s.name AS site_name, s.metadata AS site_metadata, s.created_at
-      FROM subscribers sub
-      JOIN sites s ON s.subscriber_id = sub.id
+      FROM subscriptions sub
+      JOIN users u ON u.subscription_id = sub.id AND u.role = 'owner'
+      JOIN sites s ON s.subscription_id = sub.id
       WHERE s.provisioning_status = 'requested'
-        AND s.deleted_at IS NULL
+        AND s.is_active = true
       ORDER BY s.created_at DESC
     `,
     // Social accounts with tokens expiring in the next 7 days
     sql`
       SELECT sa.id, sa.platform, sa.account_name, sa.token_expires_at,
-             sub.id AS subscriber_id, sub.name AS subscriber_name
+             sub.id AS subscription_id, u.name AS subscriber_name
       FROM social_accounts sa
-      JOIN subscribers sub ON sa.subscriber_id = sub.id
+      JOIN subscriptions sub ON sa.subscription_id = sub.id
+      JOIN users u ON u.subscription_id = sub.id AND u.role = 'owner'
       WHERE sa.status = 'active'
         AND sa.token_expires_at IS NOT NULL
         AND sa.token_expires_at < NOW() + INTERVAL '7 days'
@@ -46,19 +39,6 @@ export async function AdminAlerts() {
       ORDER BY sa.token_expires_at ASC
     `,
   ]);
-
-  for (const req of deletionRequests) {
-    alerts.push({
-      type: "deletion_request",
-      severity: "warning",
-      title: `Delete request: ${req.site_name}`,
-      detail: req.deletion_reason
-        ? `${req.subscriber_name} — "${req.deletion_reason}"`
-        : req.subscriber_name as string,
-      href: `/admin/subscribers/${req.subscriber_id}`,
-      timestamp: req.deletion_requested_at as string,
-    });
-  }
 
   for (const sub of newSubscribers) {
     const meta = (sub.site_metadata || {}) as Record<string, unknown>;
@@ -86,7 +66,7 @@ export async function AdminAlerts() {
       severity: daysLeft <= 2 ? "danger" : "warning",
       title: `Token expiring: ${token.account_name}`,
       detail: `${token.platform} — ${daysLeft}d left — ${token.subscriber_name}`,
-      href: `/admin/subscribers/${token.subscriber_id}`,
+      href: `/admin/subscribers/${token.subscription_id}`,
       timestamp: token.token_expires_at as string,
     });
   }

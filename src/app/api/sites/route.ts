@@ -22,15 +22,15 @@ export async function POST(req: NextRequest) {
     }
 
     const rows = await sql`
-      INSERT INTO sites (subscriber_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location)
+      INSERT INTO sites (subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location)
       VALUES (
-        ${auth.subscriberId}, ${name},
+        ${auth.subscriptionId}, ${name},
         ${domain || null}, ${blog_url || null},
         ${url || (domain ? `https://${domain}` : null)},
         ${external_id || null}, ${JSON.stringify(brand_voice || {})},
         ${business_type || null}, ${location || null}
       )
-      RETURNING id, subscriber_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location, created_at
+      RETURNING id, subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location, created_at
     `;
 
     return NextResponse.json({ site: rows[0] }, { status: 201 });
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const rows = await sql`
       SELECT id, name, url, external_id, brand_voice, metadata, created_at, updated_at
       FROM sites
-      WHERE subscriber_id = ${auth.subscriberId}
+      WHERE subscription_id = ${auth.subscriptionId}
       ORDER BY created_at DESC
     `;
     return NextResponse.json({ sites: rows });

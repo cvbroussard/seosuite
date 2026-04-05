@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "send") {
-    const sent = await sendOtp(auth.subscriberId, purpose);
+    const sent = await sendOtp(auth.userId, purpose);
     if (!sent) {
       return NextResponse.json({ error: "Failed to send verification code" }, { status: 500 });
     }
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     if (!code) {
       return NextResponse.json({ error: "code required" }, { status: 400 });
     }
-    const valid = await verifyOtp(auth.subscriberId, code, purpose);
+    const valid = await verifyOtp(auth.userId, code, purpose);
     if (!valid) {
       return NextResponse.json({ error: "Invalid or expired code" }, { status: 400 });
     }

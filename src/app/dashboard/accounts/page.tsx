@@ -11,7 +11,7 @@ export default async function AccountsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const subscriberId = session.subscriberId;
+  const subscriptionId = session.subscriptionId;
   const activeSiteId = session.activeSiteId;
 
   // Social accounts linked to the active site
@@ -23,7 +23,7 @@ export default async function AccountsPage() {
                (SELECT COUNT(*)::int FROM social_posts sp WHERE sp.account_id = sa.id AND sp.status = 'scheduled') AS scheduled
         FROM social_accounts sa
         JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-        WHERE ssl.site_id = ${activeSiteId} AND sa.subscriber_id = ${subscriberId}
+        WHERE ssl.site_id = ${activeSiteId} AND sa.subscription_id = ${subscriptionId}
         ORDER BY sa.created_at DESC
       `
     : [];

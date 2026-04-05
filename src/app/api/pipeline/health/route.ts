@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     // Verify ownership
     const [site] = await sql`
       SELECT id FROM sites
-      WHERE id = ${siteId} AND subscriber_id = ${auth.subscriberId}
+      WHERE id = ${siteId} AND subscription_id = ${auth.subscriptionId}
     `;
 
     if (!site) {

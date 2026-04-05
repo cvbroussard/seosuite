@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 export interface AuthContext {
-  subscriberId: string;
-  subscriberName: string;
+  userId: string;
+  userName: string;
+  subscriptionId: string;
   plan: string;
+  role: string;
 }
 
 /**
@@ -43,11 +45,13 @@ export async function authenticateRequest(
   if (raw) {
     try {
       const session = JSON.parse(raw);
-      if (session.subscriberId) {
+      if (session.userId) {
         return {
-          subscriberId: session.subscriberId,
-          subscriberName: session.subscriberName,
+          userId: session.userId,
+          userName: session.userName,
+          subscriptionId: session.subscriptionId,
           plan: session.plan,
+          role: session.role || "owner",
         };
       }
     } catch {
@@ -55,20 +59,26 @@ export async function authenticateRequest(
     }
   }
 
-  // Path 3: Admin cookie + subscriber_id param (admin acting on behalf of subscriber)
+  // Path 3: Admin cookie + subscription_id param (admin acting on behalf)
   const adminCookie = cookieStore.get("tp_admin")?.value;
   if (adminCookie === "authenticated") {
     const url = new URL(req.url);
-    const subscriberId = url.searchParams.get("subscriber_id");
-    if (subscriberId) {
+    const subscriptionId = url.searchParams.get("subscription_id") || url.searchParams.get("subscriber_id");
+    if (subscriptionId) {
       const [sub] = await sql`
-        SELECT id, name, plan FROM subscribers WHERE id = ${subscriberId} AND is_active = true
+        SELECT s.id AS subscription_id, s.plan, u.id AS user_id, u.name, u.role
+        FROM subscriptions s
+        JOIN users u ON u.subscription_id = s.id AND u.role = 'owner'
+        WHERE s.id = ${subscriptionId} AND s.is_active = true
+        LIMIT 1
       `;
       if (sub) {
         return {
-          subscriberId: sub.id as string,
-          subscriberName: sub.name as string,
+          userId: sub.user_id as string,
+          userName: sub.name as string,
+          subscriptionId: sub.subscription_id as string,
           plan: (sub.plan as string) || "free",
+          role: (sub.role as string) || "owner",
         };
       }
     }
@@ -95,10 +105,13 @@ async function authenticateByApiKey(
     .join("");
 
   const rows = await sql`
-    SELECT id, name, plan
-    FROM subscribers
-    WHERE api_key_hash = ${apiKeyHash}
-      AND is_active = true
+    SELECT s.id AS subscription_id, s.plan,
+           u.id AS user_id, u.name, u.role
+    FROM subscriptions s
+    JOIN users u ON u.subscription_id = s.id AND u.role = 'owner'
+    WHERE s.api_key_hash = ${apiKeyHash}
+      AND s.is_active = true
+    LIMIT 1
   `;
 
   if (rows.length === 0) {
@@ -106,15 +119,16 @@ async function authenticateByApiKey(
   }
 
   return {
-    subscriberId: rows[0].id,
-    subscriberName: rows[0].name,
-    plan: rows[0].plan,
+    userId: rows[0].user_id as string,
+    userName: rows[0].name as string,
+    subscriptionId: rows[0].subscription_id as string,
+    plan: rows[0].plan as string,
+    role: rows[0].role as string,
   };
 }
 
 /**
  * Authenticate by device session token (mobile app via QR invite).
- * Token is hashed with SHA-256 and matched against team_members.session_token_hash.
  */
 async function authenticateByDeviceSession(
   token: string
@@ -128,13 +142,13 @@ async function authenticateByDeviceSession(
     .join("");
 
   const rows = await sql`
-    SELECT tm.subscriber_id, tm.name, tm.role,
-           sub.plan
-    FROM team_members tm
-    JOIN subscribers sub ON tm.subscriber_id = sub.id
-    WHERE tm.session_token_hash = ${sessionHash}
-      AND tm.is_active = true
-      AND sub.is_active = true
+    SELECT u.id AS user_id, u.name, u.role, u.subscription_id,
+           s.plan
+    FROM users u
+    JOIN subscriptions s ON u.subscription_id = s.id
+    WHERE u.session_token_hash = ${sessionHash}
+      AND u.is_active = true
+      AND s.is_active = true
   `;
 
   if (rows.length === 0) {
@@ -143,14 +157,16 @@ async function authenticateByDeviceSession(
 
   // Update last active
   sql`
-    UPDATE team_members SET last_active_at = NOW()
+    UPDATE users SET last_active_at = NOW()
     WHERE session_token_hash = ${sessionHash}
   `.catch(() => {});
 
   return {
-    subscriberId: rows[0].subscriber_id as string,
-    subscriberName: rows[0].name as string,
+    userId: rows[0].user_id as string,
+    userName: rows[0].name as string,
+    subscriptionId: rows[0].subscription_id as string,
     plan: (rows[0].plan as string) || "free",
+    role: (rows[0].role as string) || "owner",
   };
 }
 
@@ -172,11 +188,11 @@ const SESSION_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
  * Create a signed session token for the native mobile app.
- * Format: tp_s_{subscriberId}.{expiry}.{signature}
+ * Format: tp_s_{userId}.{expiry}.{signature}
  */
-export async function createSessionToken(subscriberId: string): Promise<string> {
+export async function createSessionToken(userId: string): Promise<string> {
   const expiry = Date.now() + SESSION_TOKEN_TTL;
-  const payload = `${subscriberId}.${expiry}`;
+  const payload = `${userId}.${expiry}`;
   const signature = await hmacSign(payload);
   return `tp_s_${payload}.${signature}`;
 }
@@ -187,15 +203,15 @@ export async function createSessionToken(subscriberId: string): Promise<string> 
 async function authenticateBySessionToken(
   token: string
 ): Promise<AuthContext | NextResponse> {
-  // Strip prefix: tp_s_{subscriberId}.{expiry}.{signature}
+  // Strip prefix: tp_s_{userId}.{expiry}.{signature}
   const raw = token.slice(5); // remove "tp_s_"
   const parts = raw.split(".");
   if (parts.length !== 3) {
     return NextResponse.json({ error: "Invalid session token" }, { status: 401 });
   }
 
-  const [subscriberId, expiryStr, signature] = parts;
-  const payload = `${subscriberId}.${expiryStr}`;
+  const [userId, expiryStr, signature] = parts;
+  const payload = `${userId}.${expiryStr}`;
 
   // Verify signature
   const expected = await hmacSign(payload);
@@ -208,21 +224,25 @@ async function authenticateBySessionToken(
     return NextResponse.json({ error: "Session token expired" }, { status: 401 });
   }
 
-  // Look up subscriber
+  // Look up user + subscription
   const rows = await sql`
-    SELECT id, name, plan
-    FROM subscribers
-    WHERE id = ${subscriberId} AND is_active = true
+    SELECT u.id AS user_id, u.name, u.role, u.subscription_id,
+           s.plan
+    FROM users u
+    JOIN subscriptions s ON u.subscription_id = s.id
+    WHERE u.id = ${userId} AND u.is_active = true AND s.is_active = true
   `;
 
   if (rows.length === 0) {
-    return NextResponse.json({ error: "Subscriber not found" }, { status: 401 });
+    return NextResponse.json({ error: "User not found" }, { status: 401 });
   }
 
   return {
-    subscriberId: rows[0].id,
-    subscriberName: rows[0].name,
-    plan: rows[0].plan,
+    userId: rows[0].user_id as string,
+    userName: rows[0].name as string,
+    subscriptionId: rows[0].subscription_id as string,
+    plan: rows[0].plan as string,
+    role: rows[0].role as string,
   };
 }
 

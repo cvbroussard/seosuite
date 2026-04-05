@@ -23,16 +23,21 @@ export function AddSiteForm() {
         body: JSON.stringify({ name, domain, blog_url: blogUrl }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         setError(data.error || "Failed to create site");
         return;
       }
 
-      // Refresh session to include new site
-      await fetch("/api/auth/refresh-session", { method: "POST" });
+      // Switch to the new site and reload
+      await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeSiteId: data.site.id }),
+      });
 
-      router.refresh();
+      window.location.href = "/dashboard";
     } catch {
       setError("Network error");
     } finally {

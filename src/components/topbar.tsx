@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { ThemeToggle } from "./theme-toggle";
 
 interface TopBarProps {
-  subscriberName: string;
+  userName: string;
   variant?: "studio" | "platform";
 }
 
-export function TopBar({ subscriberName, variant = "studio" }: TopBarProps) {
+export function TopBar({ userName, variant = "studio" }: TopBarProps) {
   const router = useRouter();
 
   const isSubdomain =
@@ -59,7 +59,7 @@ export function TopBar({ subscriberName, variant = "studio" }: TopBarProps) {
         </a>
         <ThemeToggle />
         <div className="flex items-center gap-2">
-          <span className="text-sm text-white/50">{subscriberName}</span>
+          <span className="text-sm text-white/50">{userName}</span>
           <button
             onClick={handleLogout}
             className="text-sm text-white/30 transition-colors hover:text-white"

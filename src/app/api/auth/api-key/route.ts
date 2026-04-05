@@ -20,9 +20,9 @@ export async function POST() {
   const apiKeyHash = await hashApiKey(apiKey);
 
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET api_key_hash = ${apiKeyHash}, updated_at = NOW()
-    WHERE id = ${session.subscriberId}
+    WHERE id = ${session.subscriptionId}
   `;
 
   return NextResponse.json({ api_key: apiKey });

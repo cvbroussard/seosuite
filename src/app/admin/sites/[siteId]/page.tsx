@@ -19,11 +19,12 @@ export default async function SiteControlPanel({ params }: Props) {
            s.autopilot_enabled, s.cadence_config, s.autopilot_config,
            s.provisioning_status, s.metadata, s.video_ratio,
            s.inline_upload_count, s.inline_ai_count,
-           sub.name AS subscriber_name, sub.plan,
+           u.name AS subscriber_name, sub.plan,
            bs.blog_enabled, bs.subdomain, bs.custom_domain,
            bs.blog_title, bs.blog_description
     FROM sites s
-    JOIN subscribers sub ON sub.id = s.subscriber_id
+    JOIN subscriptions sub ON sub.id = s.subscription_id
+    JOIN users u ON u.subscription_id = sub.id AND u.role = 'owner'
     LEFT JOIN blog_settings bs ON bs.site_id = s.id
     WHERE s.id = ${siteId}
   `;
@@ -39,7 +40,10 @@ export default async function SiteControlPanel({ params }: Props) {
       (SELECT COUNT(*)::int FROM blog_posts WHERE site_id = ${siteId}) AS total_posts,
       (SELECT COUNT(*)::int FROM blog_posts WHERE site_id = ${siteId} AND status = 'published') AS published_posts,
       (SELECT COUNT(*)::int FROM blog_posts WHERE site_id = ${siteId} AND status = 'draft') AS draft_posts,
-      (SELECT COUNT(*)::int FROM vendors v JOIN sites s2 ON s2.subscriber_id = v.subscriber_id WHERE s2.id = ${siteId}) AS vendors,
+      (SELECT COUNT(*)::int FROM brands WHERE site_id = ${siteId}) AS vendors,
+      (SELECT COUNT(*)::int FROM projects WHERE site_id = ${siteId}) AS projects,
+      (SELECT COUNT(*)::int FROM clients WHERE site_id = ${siteId}) AS clients,
+      (SELECT COUNT(*)::int FROM locations WHERE site_id = ${siteId}) AS locations,
       (SELECT COUNT(*)::int FROM image_corrections WHERE site_id = ${siteId}) AS corrections
   `;
 
@@ -98,6 +102,9 @@ export default async function SiteControlPanel({ params }: Props) {
           publishedPosts: counts?.published_posts || 0,
           draftPosts: counts?.draft_posts || 0,
           vendors: counts?.vendors || 0,
+          projects: counts?.projects || 0,
+          clients: counts?.clients || 0,
+          locations: counts?.locations || 0,
           corrections: counts?.corrections || 0,
           rewardPrompts: rewardPrompts.length,
         }}

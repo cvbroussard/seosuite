@@ -12,23 +12,27 @@ export default async function SubscriberDetail({
 }) {
   const { id } = await params;
 
-  const [subscriber] = await sql`
-    SELECT id, name, plan, is_active, metadata, created_at, updated_at
-    FROM subscribers WHERE id = ${id}
+  const [subscription] = await sql`
+    SELECT sub.id, u.name, sub.plan, sub.is_active, sub.metadata, sub.created_at, sub.updated_at
+    FROM subscriptions sub
+    JOIN users u ON u.subscription_id = sub.id AND u.role = 'owner'
+    WHERE sub.id = ${id}
   `;
 
-  if (!subscriber) notFound();
+  if (!subscription) notFound();
+
+  const subscriber = subscription;
 
   const [sites, accounts, recentPosts, usage] = await Promise.all([
     sql`
-      SELECT id, name, url, autopilot_enabled, deleted_at, deletion_status, deletion_requested_at, deletion_reason, created_at
-      FROM sites WHERE subscriber_id = ${id}
-      ORDER BY deleted_at ASC NULLS FIRST, created_at DESC
+      SELECT id, name, url, autopilot_enabled, is_active, created_at
+      FROM sites WHERE subscription_id = ${id}
+      ORDER BY is_active DESC, created_at DESC
     `,
     sql`
       SELECT sa.id, sa.platform, sa.account_name, sa.status, sa.token_expires_at
       FROM social_accounts sa
-      WHERE sa.subscriber_id = ${id}
+      WHERE sa.subscription_id = ${id}
       ORDER BY sa.created_at DESC
     `,
     sql`
@@ -36,14 +40,14 @@ export default async function SubscriberDetail({
              sa.account_name, sa.platform
       FROM social_posts sp
       JOIN social_accounts sa ON sp.account_id = sa.id
-      WHERE sa.subscriber_id = ${id}
+      WHERE sa.subscription_id = ${id}
       ORDER BY sp.created_at DESC
       LIMIT 10
     `,
     sql`
       SELECT action, COUNT(*)::int AS count
       FROM usage_log
-      WHERE subscriber_id = ${id}
+      WHERE subscription_id = ${id}
       GROUP BY action
       ORDER BY count DESC
     `,
@@ -89,18 +93,13 @@ export default async function SubscriberDetail({
             </thead>
             <tbody>
               {sites.map((site) => {
-                const isDeleted = !!site.deleted_at;
+                const isInactive = site.is_active === false;
                 return (
-                  <tr key={site.id} className={`border-b border-border last:border-0 ${isDeleted ? "opacity-50" : ""}`}>
+                  <tr key={site.id} className={`border-b border-border last:border-0 ${isInactive ? "opacity-50" : ""}`}>
                     <td className="px-4 py-2 font-medium">
                       {site.name}
-                      {isDeleted && (
-                        <span className="ml-2 rounded bg-danger/10 px-1.5 py-0.5 text-[10px] text-danger">deleted</span>
-                      )}
-                      {site.deletion_status === "pending" && !isDeleted && (
-                        <span className="ml-2 rounded bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning" title={site.deletion_reason ? `Reason: ${site.deletion_reason}` : undefined}>
-                          deletion requested
-                        </span>
+                      {isInactive && (
+                        <span className="ml-2 rounded bg-muted/10 px-1.5 py-0.5 text-[10px] text-muted">inactive</span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-xs text-muted">{site.url}</td>
@@ -116,8 +115,7 @@ export default async function SubscriberDetail({
                       <SiteActions
                         siteId={site.id}
                         siteName={site.name}
-                        isDeleted={isDeleted}
-                        deletionStatus={(site.deletion_status as string) || null}
+                        isActive={!isInactive}
                       />
                     </td>
                   </tr>

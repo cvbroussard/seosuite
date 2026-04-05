@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     SELECT *
     FROM inbox_reviews
     WHERE site_id = ${siteId}
-      AND subscriber_id = ${auth.subscriberId}
+      AND subscription_id = ${auth.subscriptionId}
       AND is_hidden = false
       ${unreadOnly ? sql`AND is_read = false` : sql``}
     ORDER BY reviewed_at DESC

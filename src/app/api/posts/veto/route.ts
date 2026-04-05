@@ -31,14 +31,14 @@ export async function POST(req: NextRequest) {
     // post → account → site → subscriber
     const [post] = await sql`
       SELECT sp.id, sp.status, sp.slot_id, sp.source_asset_id,
-             sa.site_id, s.subscriber_id
+             sa.site_id, s.subscription_id
       FROM social_posts sp
       JOIN social_accounts sa ON sp.account_id = sa.id
       JOIN sites s ON sa.site_id = s.id
       WHERE sp.id = ${post_id}
     `;
 
-    if (!post || post.subscriber_id !== auth.subscriberId) {
+    if (!post || post.subscription_id !== auth.subscriptionId) {
       return NextResponse.json(
         { error: "Post not found" },
         { status: 404 }

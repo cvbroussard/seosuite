@@ -8,7 +8,7 @@ import { createSessionToken } from "@/lib/auth";
  * POST /api/auth/login
  * Body: { email, password }
  *
- * Validates credentials, sets a session cookie with subscriber + site info.
+ * Validates credentials, sets a session cookie with user + subscription info.
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -19,35 +19,43 @@ export async function POST(req: NextRequest) {
   }
 
   const rows = await sql`
-    SELECT id, name, plan, password_hash, metadata
-    FROM subscribers
-    WHERE email = ${email}
-      AND is_active = true
+    SELECT u.id, u.name, u.role, u.password_hash, u.subscription_id,
+           s.plan, s.name AS subscription_name
+    FROM users u
+    JOIN subscriptions s ON u.subscription_id = s.id
+    WHERE u.email = ${email}
+      AND u.is_active = true
   `;
 
   if (rows.length === 0) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const subscriber = rows[0];
+  const user = rows[0];
 
-  if (!subscriber.password_hash) {
+  if (!user.password_hash) {
     return NextResponse.json({ error: "Password not set — contact admin" }, { status: 401 });
   }
 
-  const valid = await bcrypt.compare(password, subscriber.password_hash);
+  const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  // Fetch subscriber's sites — check own sites and parent's sites (for sub-subscribers)
-  const metadata = (subscriber.metadata || {}) as Record<string, unknown>;
-  const parentId = metadata.parent_subscriber_id as string | undefined;
-  const ownerId = parentId || subscriber.id;
+  // Capture-only users cannot access the web dashboard
+  const role = (user.role as string) || "owner";
+  if (role === "capture") {
+    return NextResponse.json(
+      { error: "This account is mobile-only. Use the TracPost Studio app instead." },
+      { status: 403 }
+    );
+  }
+
+  const subscriptionId = user.subscription_id as string;
 
   const sites = await sql`
     SELECT id, name, url, is_active FROM sites
-    WHERE subscriber_id = ${ownerId} AND deleted_at IS NULL
+    WHERE subscription_id = ${subscriptionId}
     ORDER BY is_active DESC, created_at ASC
   `;
 
@@ -56,21 +64,24 @@ export async function POST(req: NextRequest) {
 
   // Session payload — no API key stored
   const session = {
-    subscriberId: subscriber.id,
-    subscriberName: subscriber.name,
-    plan: subscriber.plan,
+    userId: user.id,
+    userName: user.name,
+    subscriptionId,
+    subscriptionName: user.subscription_name || user.name,
+    plan: user.plan,
+    role,
     sites: sites.map((s) => ({ id: s.id, name: s.name, url: s.url, is_active: s.is_active !== false })),
     activeSiteId,
   };
 
   // Generate session token for native app clients
-  const sessionToken = await createSessionToken(subscriber.id);
+  const sessionToken = await createSessionToken(user.id);
 
   const response = NextResponse.json({
     subscriber: {
-      id: subscriber.id,
-      name: subscriber.name,
-      plan: subscriber.plan,
+      id: user.id,
+      name: user.name,
+      plan: user.plan,
     },
     sites,
     session_token: sessionToken, // For native app — store in SecureStore

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   const state = Buffer.from(
     JSON.stringify({
-      subscriber_id: auth.subscriberId,
+      subscription_id: auth.subscriptionId,
       site_id: siteId,
     })
   ).toString("base64url");

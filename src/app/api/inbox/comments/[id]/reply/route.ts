@@ -29,7 +29,7 @@ export async function POST(
     SELECT ic.*, sa.access_token_encrypted, sa.account_id, sa.metadata AS account_metadata
     FROM inbox_comments ic
     JOIN social_accounts sa ON sa.id = ic.social_account_id
-    WHERE ic.id = ${id} AND ic.subscriber_id = ${auth.subscriberId}
+    WHERE ic.id = ${id} AND ic.subscription_id = ${auth.subscriptionId}
   `;
 
   if (!comment) {

@@ -26,7 +26,7 @@ export function generateSessionCode(): string {
 export interface KioskContext {
   kioskId: string;
   siteId: string;
-  subscriberId: string;
+  subscriptionId: string;
   settings: Record<string, unknown>;
 }
 
@@ -40,7 +40,7 @@ export async function authenticateKiosk(
   if (!token || !token.startsWith(TOKEN_PREFIX)) return null;
 
   const [kiosk] = await sql`
-    SELECT k.id, k.site_id, k.settings, s.subscriber_id
+    SELECT k.id, k.site_id, k.settings, s.subscription_id
     FROM spotlight_kiosks k
     JOIN sites s ON s.id = k.site_id
     WHERE k.kiosk_token = ${token} AND k.is_active = true
@@ -54,7 +54,7 @@ export async function authenticateKiosk(
   return {
     kioskId: kiosk.id,
     siteId: kiosk.site_id,
-    subscriberId: kiosk.subscriber_id,
+    subscriptionId: kiosk.subscription_id,
     settings: (kiosk.settings as Record<string, unknown>) || {},
   };
 }

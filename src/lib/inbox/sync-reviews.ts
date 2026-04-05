@@ -10,7 +10,7 @@ import type { FetchReviewsInput } from "@/lib/pipeline/adapters/types";
 export async function syncReviews(siteId: string): Promise<number> {
   // Get all active social accounts for this site that have an adapter with fetchReviews
   const accounts = await sql`
-    SELECT sa.id, sa.subscriber_id, sa.platform, sa.account_id,
+    SELECT sa.id, sa.subscription_id, sa.platform, sa.account_id,
            sa.access_token_encrypted, sa.metadata
     FROM social_accounts sa
     JOIN site_social_links ssl ON ssl.social_account_id = sa.id
@@ -44,13 +44,13 @@ export async function syncReviews(siteId: string): Promise<number> {
       for (const review of reviews) {
         const [inserted] = await sql`
           INSERT INTO inbox_reviews (
-            subscriber_id, site_id, social_account_id,
+            subscription_id, site_id, social_account_id,
             platform, platform_review_id,
             reviewer_name, reviewer_avatar_url,
             rating, body, reviewed_at, raw_data
           )
           VALUES (
-            ${account.subscriber_id}, ${siteId}, ${account.id},
+            ${account.subscription_id}, ${siteId}, ${account.id},
             ${account.platform}, ${review.platformReviewId},
             ${review.reviewerName}, ${review.reviewerAvatarUrl || null},
             ${review.rating}, ${review.body}, ${review.reviewedAt},

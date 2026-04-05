@@ -201,11 +201,11 @@ async function buildAssetResult(
 ): Promise<ContentPairing["asset"]> {
   const assetId = asset.id as string;
 
-  // Fetch associated vendors
+  // Fetch associated brands (vendors)
   const vendors = await sql`
-    SELECT v.name, v.url FROM asset_vendors av
-    JOIN vendors v ON v.id = av.vendor_id
-    WHERE av.asset_id = ${assetId}
+    SELECT b.name, b.url FROM asset_brands ab
+    JOIN brands b ON b.id = ab.brand_id
+    WHERE ab.asset_id = ${assetId}
   `;
 
   // Increment used_count

@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from "next/server";
+import { authenticateRequest, AuthContext } from "@/lib/auth";
+import { sql } from "@/lib/db";
+
+/**
+ * GET /api/entities/config?site_id=...
+ * Returns entity slot labels for a site.
+ */
+export async function GET(req: NextRequest) {
+  const authResult = await authenticateRequest(req);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const siteId = req.nextUrl.searchParams.get("site_id");
+  if (!siteId) {
+    return NextResponse.json({ error: "site_id required" }, { status: 400 });
+  }
+
+  const [site] = await sql`
+    SELECT brand_label, project_label, client_label, location_label
+    FROM sites WHERE id = ${siteId}
+  `;
+
+  if (!site) {
+    return NextResponse.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    labels: {
+      brand_label: site.brand_label as string | null,
+      project_label: site.project_label as string | null,
+      client_label: site.client_label as string | null,
+      location_label: site.location_label as string | null,
+    },
+  });
+}
+
+/**
+ * PATCH /api/entities/config
+ * Body: { site_id, brand_label?, project_label?, client_label?, location_label? }
+ */
+export async function PATCH(req: NextRequest) {
+  const authResult = await authenticateRequest(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const auth = authResult as AuthContext;
+
+  const body = await req.json();
+  const { site_id, brand_label, project_label, client_label, location_label } = body;
+
+  if (!site_id) {
+    return NextResponse.json({ error: "site_id required" }, { status: 400 });
+  }
+
+  // Verify ownership
+  const [site] = await sql`
+    SELECT id FROM sites WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}
+  `;
+  if (!site) {
+    return NextResponse.json({ error: "Site not found" }, { status: 404 });
+  }
+
+  await sql`
+    UPDATE sites
+    SET brand_label = ${brand_label ?? null},
+        project_label = ${project_label ?? null},
+        client_label = ${client_label ?? null},
+        location_label = ${location_label ?? null}
+    WHERE id = ${site_id}
+  `;
+
+  return NextResponse.json({ success: true });
+}

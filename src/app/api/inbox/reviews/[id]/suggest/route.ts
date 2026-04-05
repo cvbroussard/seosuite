@@ -23,7 +23,7 @@ export async function POST(
     SELECT ir.*, s.name AS site_name, s.brand_voice, s.brand_playbook
     FROM inbox_reviews ir
     JOIN sites s ON s.id = ir.site_id
-    WHERE ir.id = ${id} AND ir.subscriber_id = ${auth.subscriberId}
+    WHERE ir.id = ${id} AND ir.subscription_id = ${auth.subscriptionId}
   `;
 
   if (!review) {

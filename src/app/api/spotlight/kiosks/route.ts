@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify site ownership
-  const [site] = await sql`SELECT id FROM sites WHERE id = ${site_id} AND subscriber_id = ${auth.subscriberId}`;
+  const [site] = await sql`SELECT id FROM sites WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}`;
   if (!site) return NextResponse.json({ error: "Site not found" }, { status: 404 });
 
   const kioskToken = generateKioskToken();
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     SELECT id, name, is_active, settings, last_seen_at, created_at
     FROM spotlight_kiosks
     WHERE site_id = ${siteId}
-      AND site_id IN (SELECT id FROM sites WHERE subscriber_id = ${auth.subscriberId})
+      AND site_id IN (SELECT id FROM sites WHERE subscription_id = ${auth.subscriptionId})
     ORDER BY created_at DESC
   `;
 

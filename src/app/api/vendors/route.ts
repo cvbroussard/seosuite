@@ -3,17 +3,23 @@ import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
 
 /**
- * GET /api/vendors — list all vendors for the subscriber
+ * GET /api/vendors — list vendors for the active site
+ * Query: ?site_id=... (optional, falls back to session activeSiteId)
  */
 export async function GET(req: NextRequest) {
   const authResult = await authenticateRequest(req);
   if (authResult instanceof NextResponse) return authResult;
   const auth = authResult as AuthContext;
 
+  const siteId = req.nextUrl.searchParams.get("site_id");
+  if (!siteId) {
+    return NextResponse.json({ vendors: [] });
+  }
+
   const vendors = await sql`
     SELECT id, name, slug, url, created_at
-    FROM vendors
-    WHERE subscriber_id = ${auth.subscriberId}
+    FROM entities
+    WHERE site_id = ${siteId} AND slot = 1
     ORDER BY name ASC
   `;
 
@@ -21,8 +27,8 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/vendors — create a new vendor
- * Body: { name, url? }
+ * POST /api/vendors — create a new vendor for a site
+ * Body: { name, url?, site_id? }
  */
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -30,10 +36,23 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, url } = body;
+  const { name, url, site_id } = body;
+  const siteId = site_id;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  if (!siteId) {
+    return NextResponse.json({ error: "No site selected" }, { status: 400 });
+  }
+
+  // Verify site ownership
+  const [site] = await sql`
+    SELECT id FROM sites WHERE id = ${siteId} AND subscription_id = ${auth.subscriptionId}
+  `;
+  if (!site) {
+    return NextResponse.json({ error: "Site not found" }, { status: 404 });
   }
 
   const slug = name
@@ -43,9 +62,9 @@ export async function POST(req: NextRequest) {
     .slice(0, 40);
 
   const [vendor] = await sql`
-    INSERT INTO vendors (subscriber_id, name, slug, url)
-    VALUES (${auth.subscriberId}, ${name.trim()}, ${slug}, ${url || null})
-    ON CONFLICT (subscriber_id, slug) DO UPDATE SET name = ${name.trim()}, url = ${url || null}
+    INSERT INTO entities (subscription_id, site_id, name, slug, url, slot)
+    VALUES (${auth.subscriptionId}, ${siteId}, ${name.trim()}, ${slug}, ${url || null}, 1)
+    ON CONFLICT (site_id, slot, slug) WHERE site_id IS NOT NULL DO UPDATE SET name = ${name.trim()}, url = ${url || null}
     RETURNING id, name, slug, url
   `;
 

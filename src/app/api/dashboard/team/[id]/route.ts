@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   const [member] = await sql`
     SELECT id, role FROM team_members
-    WHERE id = ${id} AND subscriber_id = ${session.subscriberId}
+    WHERE id = ${id} AND subscription_id = ${session.subscriptionId}
   `;
 
   if (!member) {
@@ -59,7 +59,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
 
   const [member] = await sql`
     SELECT id, role FROM team_members
-    WHERE id = ${id} AND subscriber_id = ${session.subscriberId}
+    WHERE id = ${id} AND subscription_id = ${session.subscriptionId}
   `;
 
   if (!member) {
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const [member] = await sql`
     SELECT id, phone, invite_token, name FROM team_members
-    WHERE id = ${id} AND subscriber_id = ${session.subscriberId}
+    WHERE id = ${id} AND subscription_id = ${session.subscriptionId}
   `;
 
   if (!member) {
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       body: new URLSearchParams({
         To: phone,
         From: twilioFrom,
-        Body: `${session.subscriberName} invited you to TracPost Studio. Tap to get started: ${inviteUrl}`,
+        Body: `${session.userName} invited you to TracPost Studio. Tap to get started: ${inviteUrl}`,
       }),
     });
 

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       MAX(ic.commented_at) AS latest_activity
     FROM inbox_comments ic
     LEFT JOIN social_posts sp ON sp.platform_post_id = ic.platform_post_id     WHERE ic.site_id = ${siteId}
-      AND ic.subscriber_id = ${auth.subscriberId}
+      AND ic.subscription_id = ${auth.subscriptionId}
       AND ic.is_hidden = false
       ${unreadOnly ? sql`AND ic.is_read = false` : sql``}
     GROUP BY ic.platform_post_id, ic.platform, sp.id, sp.caption, sp.media_urls, sp.platform_post_url

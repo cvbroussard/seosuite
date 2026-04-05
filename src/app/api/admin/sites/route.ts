@@ -8,23 +8,23 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { subscriber_id, name, domain, blog_url } = body;
+    const { subscription_id, name, domain, blog_url } = body;
 
-    if (!subscriber_id || !name) {
+    if (!subscription_id || !name) {
       return NextResponse.json(
-        { error: "subscriber_id and name are required" },
+        { error: "subscription_id and name are required" },
         { status: 400 }
       );
     }
 
     const rows = await sql`
-      INSERT INTO sites (subscriber_id, name, domain, blog_url, url)
+      INSERT INTO sites (subscription_id, name, domain, blog_url, url)
       VALUES (
-        ${subscriber_id}, ${name},
+        ${subscription_id}, ${name},
         ${domain || null}, ${blog_url || null},
         ${domain ? `https://${domain}` : null}
       )
-      RETURNING id, subscriber_id, name, domain, blog_url, url, created_at
+      RETURNING id, subscription_id, name, domain, blog_url, url, created_at
     `;
 
     return NextResponse.json({ site: rows[0] }, { status: 201 });

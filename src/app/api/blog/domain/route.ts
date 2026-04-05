@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     SELECT s.id, s.url, bs.subdomain, bs.custom_domain
     FROM sites s
     LEFT JOIN blog_settings bs ON bs.site_id = s.id
-    WHERE s.id = ${site_id} AND s.subscriber_id = ${auth.subscriberId}
+    WHERE s.id = ${site_id} AND s.subscription_id = ${auth.subscriptionId}
   `;
   if (!site) return NextResponse.json({ error: "Site not found" }, { status: 404 });
 

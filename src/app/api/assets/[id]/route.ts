@@ -19,9 +19,9 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { context_note, pillar, content_tags, vendor_ids } = body;
+    const { context_note, pillar, content_tags, vendor_ids, brand_ids, project_ids, client_ids, location_ids } = body;
 
-    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined) {
+    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && client_ids === undefined && location_ids === undefined) {
       return NextResponse.json(
         { error: "Nothing to update" },
         { status: 400 }
@@ -33,7 +33,7 @@ export async function PATCH(
       SELECT ma.id, ma.site_id, ma.metadata
       FROM media_assets ma
       JOIN sites s ON ma.site_id = s.id
-      WHERE ma.id = ${id} AND s.subscriber_id = ${auth.subscriberId}
+      WHERE ma.id = ${id} AND s.subscription_id = ${auth.subscriptionId}
     `;
 
     if (!asset) {
@@ -60,21 +60,42 @@ export async function PATCH(
     if (Array.isArray(content_tags)) {
       await sql`UPDATE media_assets SET content_tags = ${content_tags} WHERE id = ${id}`;
     }
-    // Parse hashtags from context note and merge with explicit vendor_ids
-    let resolvedVendorIds = Array.isArray(vendor_ids) ? [...vendor_ids] : null;
+    // Parse hashtags from context note and merge with explicit brand IDs
+    // vendor_ids is kept for backward compat — treated as brand IDs
+    let resolvedBrandIds = Array.isArray(brand_ids) ? [...brand_ids] : Array.isArray(vendor_ids) ? [...vendor_ids] : null;
     if (context_note !== undefined && typeof context_note === "string") {
-      const parsed = await parseContextNote(context_note, auth.subscriberId);
+      const parsed = await parseContextNote(context_note, asset.site_id as string);
       if (parsed.vendorIds.length > 0) {
-        const existing = resolvedVendorIds || [];
+        const existing = resolvedBrandIds || [];
         const merged = [...new Set([...existing, ...parsed.vendorIds])];
-        resolvedVendorIds = merged;
+        resolvedBrandIds = merged;
       }
     }
 
-    if (Array.isArray(resolvedVendorIds)) {
-      await sql`DELETE FROM asset_vendors WHERE asset_id = ${id}`;
-      for (const vendorId of resolvedVendorIds) {
-        await sql`INSERT INTO asset_vendors (asset_id, vendor_id) VALUES (${id}, ${vendorId}) ON CONFLICT DO NOTHING`;
+    if (Array.isArray(resolvedBrandIds)) {
+      await sql`DELETE FROM asset_brands WHERE asset_id = ${id}`;
+      for (const brandId of resolvedBrandIds) {
+        await sql`INSERT INTO asset_brands (asset_id, brand_id) VALUES (${id}, ${brandId}) ON CONFLICT DO NOTHING`;
+      }
+    }
+
+    // Project, client, location tagging (separate body fields)
+    if (Array.isArray(project_ids)) {
+      await sql`DELETE FROM asset_projects WHERE asset_id = ${id}`;
+      for (const projectId of project_ids) {
+        await sql`INSERT INTO asset_projects (asset_id, project_id) VALUES (${id}, ${projectId}) ON CONFLICT DO NOTHING`;
+      }
+    }
+    if (Array.isArray(client_ids)) {
+      await sql`DELETE FROM asset_clients WHERE asset_id = ${id}`;
+      for (const clientId of client_ids) {
+        await sql`INSERT INTO asset_clients (asset_id, client_id) VALUES (${id}, ${clientId}) ON CONFLICT DO NOTHING`;
+      }
+    }
+    if (Array.isArray(location_ids)) {
+      await sql`DELETE FROM asset_locations WHERE asset_id = ${id}`;
+      for (const locationId of location_ids) {
+        await sql`INSERT INTO asset_locations (asset_id, location_id) VALUES (${id}, ${locationId}) ON CONFLICT DO NOTHING`;
       }
     }
 
@@ -111,7 +132,7 @@ export async function DELETE(
     SELECT ma.id
     FROM media_assets ma
     JOIN sites s ON ma.site_id = s.id
-    WHERE ma.id = ${id} AND s.subscriber_id = ${auth.subscriberId}
+    WHERE ma.id = ${id} AND s.subscription_id = ${auth.subscriptionId}
   `;
 
   if (!asset) {
@@ -135,7 +156,10 @@ export async function DELETE(
 
   // Clear references and delete
   await sql`UPDATE blog_posts SET source_asset_id = NULL WHERE source_asset_id = ${id}`;
-  await sql`DELETE FROM asset_vendors WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_brands WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_projects WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_clients WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_locations WHERE asset_id = ${id}`;
   await sql`DELETE FROM media_assets WHERE id = ${id}`;
 
   return NextResponse.json({ success: true });

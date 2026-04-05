@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   // Verify ownership
   const [account] = await sql`
     SELECT id, metadata FROM social_accounts
-    WHERE id = ${accountId} AND subscriber_id = ${session.subscriberId} AND platform = 'linkedin'
+    WHERE id = ${accountId} AND subscription_id = ${session.subscriptionId} AND platform = 'linkedin'
   `;
 
   if (!account) {

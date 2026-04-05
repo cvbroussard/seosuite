@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
 
   const devicePlatform = platform || "expo";
 
-  // Upsert: if token already exists, update subscriber_id
+  // Upsert: if token already exists, update subscription_id
   await sql`
-    INSERT INTO push_tokens (subscriber_id, token, platform)
-    VALUES (${auth.subscriberId}, ${token}, ${devicePlatform})
+    INSERT INTO push_tokens (subscription_id, token, platform)
+    VALUES (${auth.subscriptionId}, ${token}, ${devicePlatform})
     ON CONFLICT (token)
-    DO UPDATE SET subscriber_id = ${auth.subscriberId}, platform = ${devicePlatform}
+    DO UPDATE SET subscription_id = ${auth.subscriptionId}, platform = ${devicePlatform}
   `;
 
   return NextResponse.json({ ok: true });

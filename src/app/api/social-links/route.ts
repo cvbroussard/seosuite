@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   // Verify ownership of both
   const [account] = await sql`
     SELECT id FROM social_accounts
-    WHERE id = ${social_account_id} AND subscriber_id = ${auth.subscriberId}
+    WHERE id = ${social_account_id} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!account) {
     return NextResponse.json({ error: "Social account not found" }, { status: 404 });
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const [site] = await sql`
     SELECT id FROM sites
-    WHERE id = ${site_id} AND subscriber_id = ${auth.subscriberId}
+    WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!site) {
     return NextResponse.json({ error: "Site not found" }, { status: 404 });
@@ -72,7 +72,7 @@ export async function DELETE(req: NextRequest) {
   // Verify ownership
   const [account] = await sql`
     SELECT id FROM social_accounts
-    WHERE id = ${social_account_id} AND subscriber_id = ${auth.subscriberId}
+    WHERE id = ${social_account_id} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!account) {
     return NextResponse.json({ error: "Social account not found" }, { status: 404 });

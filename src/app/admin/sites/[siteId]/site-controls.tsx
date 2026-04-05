@@ -29,6 +29,9 @@ interface Counts {
   publishedPosts: number;
   draftPosts: number;
   vendors: number;
+  projects: number;
+  clients: number;
+  locations: number;
   corrections: number;
   rewardPrompts: number;
 }

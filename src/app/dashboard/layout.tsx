@@ -22,6 +22,10 @@ export default async function DashboardLayout({
   const session = await getSession();
   if (!session) redirect("/login");
 
+  // Capture-only users cannot access the web dashboard
+  const role = session.role || "owner";
+  if (role === "capture") redirect("/login?error=mobile_only");
+
   const activeSite = session.sites.find((s) => s.id === session.activeSiteId) || session.sites[0];
   const siteId = activeSite?.id;
 
@@ -89,20 +93,21 @@ export default async function DashboardLayout({
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <div className="hidden md:block">
-        <TopBar subscriberName={session.subscriberName} />
+        <TopBar userName={session.userName} />
         <PageHeader
           siteName={activeSite?.name || "TracPost"}
           sites={session.sites}
           activeSiteId={session.activeSiteId}
         />
       </div>
-      <MobileNav subscriberName={session.subscriberName} />
+      <MobileNav userName={session.userName} />
       <div className="flex flex-1 overflow-hidden">
         <div className="hidden md:block">
           <Sidebar
-            subscriberName={session.subscriberName}
+            userName={session.userName}
             sites={session.sites}
             activeSiteId={session.activeSiteId}
+            role={role}
           />
         </div>
         <main className="flex-1 overflow-y-auto p-4 md:p-8">{children}</main>

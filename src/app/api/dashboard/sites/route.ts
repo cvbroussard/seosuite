@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
   const metadata = JSON.stringify(metaObj);
 
   const [site] = await sql`
-    INSERT INTO sites (subscriber_id, name, domain, url, business_type, location, blog_slug, provisioning_status, metadata)
+    INSERT INTO sites (subscription_id, name, domain, url, business_type, location, blog_slug, provisioning_status, metadata)
     VALUES (
-      ${session.subscriberId},
+      ${session.subscriptionId},
       ${name},
       ${domain || null},
       ${url},
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   // Update session cookie to include the new site and switch to it
   const allSites = await sql`
     SELECT id, name, url FROM sites
-    WHERE subscriber_id = ${session.subscriberId} AND deleted_at IS NULL
+    WHERE subscription_id = ${session.subscriptionId} AND is_active = true
     ORDER BY created_at ASC
   `;
 

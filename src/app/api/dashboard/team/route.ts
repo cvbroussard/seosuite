@@ -19,7 +19,7 @@ export async function GET() {
            invite_consumed, last_active_at, is_active, created_at,
            invite_token, invite_expires
     FROM team_members
-    WHERE subscriber_id = ${session.subscriberId}
+    WHERE subscription_id = ${session.subscriptionId}
     ORDER BY
       CASE role WHEN 'owner' THEN 0 WHEN 'engagement' THEN 1 WHEN 'capture' THEN 2 ELSE 3 END,
       created_at ASC
@@ -60,17 +60,17 @@ export async function POST(req: NextRequest) {
   }
 
   // Check for existing email
-  const [existingEmail] = await sql`SELECT id FROM subscribers WHERE email = ${email}`;
+  const [existingEmail] = await sql`SELECT id FROM users WHERE email = ${email}`;
   if (existingEmail) {
     return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
   }
 
   // Check plan limits
-  const [sub] = await sql`SELECT plan FROM subscribers WHERE id = ${session.subscriberId}`;
+  const [sub] = await sql`SELECT plan FROM subscriptions WHERE id = ${session.subscriptionId}`;
   const plan = (sub?.plan as string) || "free";
   const currentCount = await sql`
     SELECT COUNT(*)::int AS count FROM team_members
-    WHERE subscriber_id = ${session.subscriberId} AND is_active = true
+    WHERE subscription_id = ${session.subscriptionId} AND is_active = true
   `;
   const count = currentCount[0]?.count || 0;
   const limit = plan === "pro" || plan === "authority" ? 5 : 1;
@@ -87,21 +87,21 @@ export async function POST(req: NextRequest) {
   const apiKeyHash = crypto.createHash("sha256").update(`team-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`).digest("hex");
 
   const [newSub] = await sql`
-    INSERT INTO subscribers (name, email, password_hash, api_key_hash, plan, is_active, metadata)
+    INSERT INTO users (name, email, password_hash, api_key_hash, plan, is_active, metadata)
     VALUES (
       ${name}, ${email}, ${passwordHash}, ${apiKeyHash}, ${plan}, true,
-      ${JSON.stringify({ parent_subscriber_id: session.subscriberId, role })}::jsonb
+      ${JSON.stringify({ parent_subscription_id: session.subscriptionId, role })}::jsonb
     )
     RETURNING id
   `;
 
   // Link sub-subscriber to the same sites as the parent
-  const parentSites = await sql`SELECT id FROM sites WHERE subscriber_id = ${session.subscriberId}`;
+  const parentSites = await sql`SELECT id FROM sites WHERE subscription_id = ${session.subscriptionId}`;
   // For now, set active site to the specified site or the first available
   const activeSite = siteId || (parentSites[0]?.id as string) || null;
   if (activeSite) {
     await sql`
-      UPDATE subscribers
+      UPDATE users
       SET metadata = jsonb_set(COALESCE(metadata, '{}'), '{active_site_id}', ${JSON.stringify(activeSite)}::jsonb)
       WHERE id = ${newSub.id}
     `;
@@ -113,9 +113,9 @@ export async function POST(req: NextRequest) {
 
   // Create team_member record for role/scope + magic link
   const [member] = await sql`
-    INSERT INTO team_members (subscriber_id, site_id, name, email, phone, role, invite_token, invite_method, invite_expires)
+    INSERT INTO team_members (subscription_id, site_id, name, email, phone, role, invite_token, invite_method, invite_expires)
     VALUES (
-      ${session.subscriberId},
+      ${session.subscriptionId},
       ${siteId || null},
       ${name},
       ${email},
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
           body: new URLSearchParams({
             To: phone,
             From: twilioFrom,
-            Body: `${session.subscriberName} added you to TracPost. Log in at studio.tracpost.com with your email, or tap for the mobile app: ${inviteUrl}`,
+            Body: `${session.userName} added you to TracPost. Log in at studio.tracpost.com with your email, or tap for the mobile app: ${inviteUrl}`,
           }),
         });
       }
@@ -155,5 +155,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ member, subscriber_id: newSub.id });
+  return NextResponse.json({ member, subscription_id: newSub.id });
 }

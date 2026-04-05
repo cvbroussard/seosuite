@@ -29,7 +29,7 @@ export async function POST(
     SELECT ir.*, sa.access_token_encrypted, sa.account_id, sa.metadata AS account_metadata
     FROM inbox_reviews ir
     JOIN social_accounts sa ON sa.id = ir.social_account_id
-    WHERE ir.id = ${id} AND ir.subscriber_id = ${auth.subscriberId}
+    WHERE ir.id = ${id} AND ir.subscription_id = ${auth.subscriptionId}
   `;
 
   if (!review) {

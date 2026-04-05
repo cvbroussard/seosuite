@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const [site] = await sql`
     SELECT id, name FROM sites
     WHERE id = ${siteId}
-      AND subscriber_id = ${session.subscriberId}
+      AND subscription_id = ${session.subscriptionId}
       AND deleted_at IS NULL
       AND deletion_status IS NULL
   `;
@@ -73,7 +73,7 @@ export async function DELETE(req: NextRequest) {
   const [site] = await sql`
     SELECT id FROM sites
     WHERE id = ${siteId}
-      AND subscriber_id = ${session.subscriberId}
+      AND subscription_id = ${session.subscriptionId}
       AND deletion_status = 'pending'
   `;
 

@@ -22,7 +22,7 @@ export async function POST(
   // Verify ownership
   const [site] = await sql`
     SELECT id, is_active FROM sites
-    WHERE id = ${id} AND subscriber_id = ${auth.subscriberId} AND deleted_at IS NULL
+    WHERE id = ${id} AND subscription_id = ${auth.subscriptionId}
   `;
   if (!site) {
     return NextResponse.json({ error: "Site not found" }, { status: 404 });
@@ -32,7 +32,7 @@ export async function POST(
 
   if (!currentlyActive) {
     // Reactivating — check tier limit
-    const [sub] = await sql`SELECT plan FROM subscribers WHERE id = ${auth.subscriberId}`;
+    const [sub] = await sql`SELECT plan FROM subscriptions WHERE id = ${auth.subscriptionId}`;
     const plan = (sub?.plan as string) || "free";
 
     const tierLimits: Record<string, number> = {
@@ -45,7 +45,7 @@ export async function POST(
 
     const [activeCount] = await sql`
       SELECT COUNT(*)::int AS cnt FROM sites
-      WHERE subscriber_id = ${auth.subscriberId} AND is_active = true AND deleted_at IS NULL
+      WHERE subscription_id = ${auth.subscriptionId} AND is_active = true
     `;
 
     if ((activeCount?.cnt || 0) >= maxSites) {
@@ -60,6 +60,5 @@ export async function POST(
   const newState = !currentlyActive;
   await sql`UPDATE sites SET is_active = ${newState} WHERE id = ${id}`;
 
-  // Refresh session to update sites list
   return NextResponse.json({ success: true, is_active: newState });
 }

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   // Verify ownership
   const [site] = await sql`
     SELECT id FROM sites
-    WHERE id = ${siteId} AND subscriber_id = ${session.subscriberId}
+    WHERE id = ${siteId} AND subscription_id = ${session.subscriptionId}
   `;
 
   if (!site) {

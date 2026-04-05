@@ -32,8 +32,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/analytics": "Analytics",
   "/accounts": "Connections",
   "/account": "My Account",
+  "/entities": "Entities",
   "/account/vendors": "Vendors",
   "/account/mobile-app": "Team",
+  "/account/team": "Team",
+  "/account/subscription": "Subscription",
   "/settings": "Settings",
 };
 

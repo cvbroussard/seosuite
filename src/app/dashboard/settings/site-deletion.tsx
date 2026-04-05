@@ -43,6 +43,24 @@ export function SiteDeletion({
     }
   }
 
+  async function restoreSite() {
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/sites/${siteId}/toggle`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        await fetch("/api/auth/refresh-session", { method: "POST" });
+        window.location.reload();
+      } else {
+        alert(data.error || "Restore failed");
+      }
+    } catch {
+      alert("Request failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function cancelRequest() {
     setRevoking(true);
     try {
@@ -101,6 +119,30 @@ export function SiteDeletion({
             <strong>{siteName}</strong> has been approved for deletion and will be removed within 30 days.
             Export your data before then.
           </p>
+          {showConfirm ? (
+            <div className="mt-3 flex gap-3">
+              <button
+                onClick={restoreSite}
+                disabled={submitting}
+                className="bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {submitting ? "Restoring..." : "Confirm Restore"}
+              </button>
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="px-4 py-1.5 text-sm text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowConfirm(true)}
+              className="mt-3 border border-accent/40 px-4 py-1.5 text-sm font-medium text-accent hover:bg-accent/10"
+            >
+              Restore This Site
+            </button>
+          )}
         </div>
       </section>
     );

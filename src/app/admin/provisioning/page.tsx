@@ -19,9 +19,9 @@ const ALL_PLATFORMS = [
 export default async function ProvisioningPage() {
   const subscribers = await sql`
     SELECT
-      sub.id AS subscriber_id,
-      sub.name AS subscriber_name,
-      sub.email,
+      sub.id AS subscription_id,
+      u.name AS subscriber_name,
+      u.email,
       sub.plan,
       sub.created_at,
       sub.metadata,
@@ -50,9 +50,10 @@ export default async function ProvisioningPage() {
       (
         SELECT blog_enabled FROM blog_settings WHERE site_id = s.id
       ) AS blog_enabled
-    FROM subscribers sub
-    JOIN sites s ON s.subscriber_id = sub.id
-    WHERE sub.is_active = true AND s.deleted_at IS NULL
+    FROM subscriptions sub
+    JOIN users u ON u.subscription_id = sub.id AND u.role = 'owner'
+    JOIN sites s ON s.subscription_id = sub.id
+    WHERE sub.is_active = true AND s.is_active = true
     ORDER BY sub.created_at DESC
   `;
 
@@ -111,7 +112,7 @@ export default async function ProvisioningPage() {
 
             return (
               <div
-                key={`${sub.subscriber_id}-${sub.site_id}`}
+                key={`${sub.subscription_id}-${sub.site_id}`}
                 className="mb-6 border-b border-border pb-6 last:border-0"
               >
                 {/* Header */}
@@ -146,7 +147,7 @@ export default async function ProvisioningPage() {
                       status={sub.provisioning_status as string | null}
                     />
                     <Link
-                      href={`/admin/subscribers/${sub.subscriber_id}`}
+                      href={`/admin/subscribers/${sub.subscription_id}`}
                       className="text-sm text-accent hover:underline"
                     >
                       View subscriber
@@ -170,7 +171,7 @@ export default async function ProvisioningPage() {
                 {/* Connect accounts (admin OAuth on behalf of subscriber) */}
                 <AdminConnectButton
                   siteId={sub.site_id as string}
-                  subscriberId={sub.subscriber_id as string}
+                  subscriptionId={sub.subscription_id as string}
                   connectedPlatforms={connected}
                 />
 

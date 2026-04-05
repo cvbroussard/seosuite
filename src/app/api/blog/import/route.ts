@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
            bi.errors, bi.current_post, bi.created_at
     FROM blog_imports bi
     JOIN sites s ON s.id = bi.site_id
-    WHERE bi.id = ${importId} AND s.subscriber_id = ${auth.subscriberId}
+    WHERE bi.id = ${importId} AND s.subscription_id = ${auth.subscriptionId}
   `;
 
   if (!job) {
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     // Verify ownership
     const [site] = await sql`
-      SELECT id FROM sites WHERE id = ${site_id} AND subscriber_id = ${auth.subscriberId}
+      SELECT id FROM sites WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}
     `;
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       SELECT bi.id, bi.site_id, bi.discovered_urls
       FROM blog_imports bi
       JOIN sites s ON s.id = bi.site_id
-      WHERE bi.id = ${import_id} AND s.subscriber_id = ${auth.subscriberId}
+      WHERE bi.id = ${import_id} AND s.subscription_id = ${auth.subscriptionId}
     `;
     if (!job) {
       return NextResponse.json({ error: "Import not found" }, { status: 404 });
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
              bi.errors, bi.current_post, bi.created_at
       FROM blog_imports bi
       JOIN sites s ON s.id = bi.site_id
-      WHERE bi.id = ${import_id} AND s.subscriber_id = ${auth.subscriberId}
+      WHERE bi.id = ${import_id} AND s.subscription_id = ${auth.subscriptionId}
     `;
 
     if (!job) {

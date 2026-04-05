@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(oauthErrorUrl(source, "missing_params"));
   }
 
-  let state: { subscriber_id: string; site_id?: string | null; source?: string };
+  let state: { subscription_id: string; site_id?: string | null; source?: string };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -68,18 +68,18 @@ export async function GET(req: NextRequest) {
     // Store in social_accounts
     await sql`
       INSERT INTO social_accounts (
-        subscriber_id, platform, account_name, account_id,
+        subscription_id, platform, account_name, account_id,
         access_token_encrypted, refresh_token_encrypted, token_expires_at,
         scopes, status, metadata
       )
       VALUES (
-        ${state.subscriber_id}, 'tiktok', ${accountName}, ${openId},
+        ${state.subscription_id}, 'tiktok', ${accountName}, ${openId},
         ${encrypt(accessToken)}, ${encrypt(refreshToken)}, ${expiresAt},
         ${"{user.info.basic,video.publish,video.upload}"},
         'active',
         ${JSON.stringify(userMeta)}
       )
-      ON CONFLICT (subscriber_id, platform, account_id)
+      ON CONFLICT (subscription_id, platform, account_id)
       DO UPDATE SET
         account_name = EXCLUDED.account_name,
         access_token_encrypted = EXCLUDED.access_token_encrypted,
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
     if (state.site_id) {
       const [acct] = await sql`
         SELECT id FROM social_accounts
-        WHERE subscriber_id = ${state.subscriber_id} AND platform = 'tiktok' AND account_id = ${openId}
+        WHERE subscription_id = ${state.subscription_id} AND platform = 'tiktok' AND account_id = ${openId}
       `;
       if (acct) {
         await sql`
@@ -108,8 +108,8 @@ export async function GET(req: NextRequest) {
 
     // Log usage
     await sql`
-      INSERT INTO usage_log (subscriber_id, action, metadata)
-      VALUES (${state.subscriber_id}, 'tiktok_connect', ${JSON.stringify({
+      INSERT INTO usage_log (subscription_id, action, metadata)
+      VALUES (${state.subscription_id}, 'tiktok_connect', ${JSON.stringify({
         account_name: accountName,
       })})
     `;

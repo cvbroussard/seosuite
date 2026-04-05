@@ -16,7 +16,6 @@ interface UploadItem {
 export default function CapturePage() {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [siteId, setSiteId] = useState<string>("");
-  const [sites, setSites] = useState<Array<{ id: string; name: string }>>([]);
   const [loaded, setLoaded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -24,24 +23,22 @@ export default function CapturePage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
-  // Load sites on mount
-  const loadSites = useCallback(async () => {
+  // Resolve site from session — no manual picker needed
+  const loadSite = useCallback(async () => {
     if (loaded) return;
     try {
-      const res = await fetch("/api/sites");
+      const res = await fetch("/api/auth/session");
       if (res.ok) {
         const data = await res.json();
-        setSites(data.sites || []);
-        if (data.sites?.length === 1) {
-          setSiteId(data.sites[0].id);
+        if (data.activeSiteId) {
+          setSiteId(data.activeSiteId);
         }
       }
     } catch { /* ignore */ }
     setLoaded(true);
   }, [loaded]);
 
-  // Load on first render
-  if (!loaded) loadSites();
+  if (!loaded) loadSite();
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList) return;
@@ -223,23 +220,6 @@ export default function CapturePage() {
       <h1 className="mb-1 text-lg font-semibold">Capture</h1>
       <p className="mb-6 text-sm text-muted">Upload photos and videos to your media library</p>
 
-      {/* Site selector */}
-      {sites.length > 1 && (
-        <div className="mb-4">
-          <label className="mb-1 block text-xs text-muted">Site</label>
-          <select
-            value={siteId}
-            onChange={(e) => setSiteId(e.target.value)}
-            className="w-full text-sm"
-          >
-            <option value="">Select a site</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {/* Capture buttons */}
       <div className="mb-6 grid grid-cols-4 gap-2">
         <button
@@ -393,7 +373,7 @@ export default function CapturePage() {
           )}
 
           {pending.length > 0 && !siteId && (
-            <p className="text-center text-xs text-warning">Select a site to upload</p>
+            <p className="text-center text-xs text-warning">Select a site first from the header</p>
           )}
         </div>
       )}

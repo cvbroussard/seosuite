@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "email required" }, { status: 400 });
   }
 
-  // Look up subscriber — don't reveal if not found
+  // Look up user — don't reveal if not found
   const [subscriber] = await sql`
-    SELECT id FROM subscribers WHERE email = ${email} AND is_active = true
+    SELECT id FROM users WHERE email = ${email} AND is_active = true
   `;
 
   if (subscriber) {

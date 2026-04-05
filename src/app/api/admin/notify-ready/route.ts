@@ -15,13 +15,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { subscriber_id } = await req.json();
-  if (!subscriber_id) {
-    return NextResponse.json({ error: "subscriber_id required" }, { status: 400 });
+  const { subscription_id } = await req.json();
+  if (!subscription_id) {
+    return NextResponse.json({ error: "subscription_id required" }, { status: 400 });
   }
 
   const [subscriber] = await sql`
-    SELECT name, email FROM subscribers WHERE id = ${subscriber_id}
+    SELECT u.name, u.email
+    FROM users u
+    WHERE u.subscription_id = ${subscription_id} AND u.role = 'owner'
   `;
 
   if (!subscriber?.email) {
@@ -67,19 +69,19 @@ export async function POST(req: NextRequest) {
 
   // Update onboarding status
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET metadata = jsonb_set(
       COALESCE(metadata, '{}'::jsonb),
       '{onboarding_status}',
       '"provisioned"'::jsonb
     ),
     updated_at = NOW()
-    WHERE id = ${subscriber_id}
+    WHERE id = ${subscription_id}
   `;
 
   await sql`
-    INSERT INTO usage_log (subscriber_id, action, metadata)
-    VALUES (${subscriber_id}, 'provisioning_complete', '{}')
+    INSERT INTO usage_log (subscription_id, action, metadata)
+    VALUES (${subscription_id}, 'provisioning_complete', '{}')
   `;
 
   return NextResponse.json({ sent: true });

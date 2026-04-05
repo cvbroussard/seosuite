@@ -16,7 +16,7 @@ export default async function ReviewsPage() {
     SELECT *
     FROM inbox_reviews
     WHERE site_id = ${siteId}
-      AND subscriber_id = ${session.subscriberId}
+      AND subscription_id = ${session.subscriptionId}
       AND is_hidden = false
     ORDER BY reviewed_at DESC
     LIMIT 50

@@ -10,7 +10,7 @@ interface SiteInfo {
   location: string | null;
   provisioning_status: string | null;
   autopilot_enabled: boolean;
-  deleted_at: string | null;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -93,8 +93,8 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
     }
   }
 
-  const activeSites = sites.filter((s) => !s.deleted_at);
-  const deletedSites = sites.filter((s) => s.deleted_at);
+  const activeSites = sites.filter((s) => s.is_active);
+  const inactiveSites = sites.filter((s) => !s.is_active);
 
   return (
     <section className="mb-8">
@@ -331,21 +331,21 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
         <p className="text-sm text-muted">No active sites. Add one to get started.</p>
       )}
 
-      {/* Deleted Sites */}
-      {deletedSites.length > 0 && (
-        <div className="mt-4">
-          {deletedSites.map((site) => (
+      {/* Inactive Sites */}
+      {inactiveSites.length > 0 && (
+        <div className="mt-4 opacity-60">
+          {inactiveSites.map((site) => (
             <div
               key={site.id}
-              className="flex items-baseline justify-between border-b border-border py-2 opacity-50"
+              className="flex items-baseline justify-between border-b border-border py-2"
             >
               <div>
                 <span className="text-sm font-medium">{site.name}</span>
                 <span className="ml-2 text-xs text-muted">
-                  Deleted {new Date(site.deleted_at!).toLocaleDateString()}
+                  {site.business_type || "—"} · {site.location || "—"}
                 </span>
               </div>
-              <span className="rounded bg-danger/10 px-2 py-0.5 text-[10px] text-danger">deleted</span>
+              <span className="rounded bg-muted/10 px-2 py-0.5 text-[10px] text-muted">inactive</span>
             </div>
           ))}
         </div>

@@ -1,7 +1,7 @@
 /**
  * Email OTP — 6-digit verification codes for sensitive actions.
  *
- * Codes stored as HMAC hash in subscriber metadata.
+ * Codes stored as HMAC hash in subscriptions.metadata.
  * 10-minute TTL, one-time use.
  */
 import { randomInt, createHmac } from "node:crypto";
@@ -12,45 +12,49 @@ const SECRET = process.env.SESSION_TOKEN_SECRET || process.env.META_APP_SECRET |
 const TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Generate and send a 6-digit OTP to the subscriber's email.
+ * Generate and send a 6-digit OTP to the user's email.
  */
-export async function sendOtp(subscriberId: string, action: string): Promise<boolean> {
-  const [subscriber] = await sql`
-    SELECT email FROM subscribers WHERE id = ${subscriberId} AND is_active = true
+export async function sendOtp(userId: string, action: string): Promise<boolean> {
+  const [user] = await sql`
+    SELECT email, subscription_id FROM users WHERE id = ${userId} AND is_active = true
   `;
 
-  if (!subscriber?.email) return false;
+  if (!user?.email) return false;
 
   const code = String(randomInt(100000, 999999));
   const hash = createHmac("sha256", SECRET).update(code).digest("hex");
   const expiresAt = new Date(Date.now() + TTL_MS).toISOString();
 
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET metadata = jsonb_set(
       COALESCE(metadata, '{}'::jsonb),
       '{otp}',
       ${JSON.stringify({ hash, expires_at: expiresAt, action })}::jsonb
     ),
     updated_at = NOW()
-    WHERE id = ${subscriberId}
+    WHERE id = ${user.subscription_id}
   `;
 
-  return sendOtpEmail(subscriber.email as string, code, action);
+  return sendOtpEmail(user.email as string, code, action);
 }
 
 /**
  * Verify a 6-digit OTP code. Returns true if valid.
  * Clears the OTP on success (one-time use).
  */
-export async function verifyOtp(subscriberId: string, code: string, action: string): Promise<boolean> {
-  const [subscriber] = await sql`
-    SELECT metadata FROM subscribers WHERE id = ${subscriberId}
+export async function verifyOtp(userId: string, code: string, action: string): Promise<boolean> {
+  const [user] = await sql`
+    SELECT subscription_id FROM users WHERE id = ${userId}
   `;
+  if (!user) return false;
 
-  if (!subscriber) return false;
+  const [sub] = await sql`
+    SELECT metadata FROM subscriptions WHERE id = ${user.subscription_id}
+  `;
+  if (!sub) return false;
 
-  const meta = (subscriber.metadata || {}) as Record<string, unknown>;
+  const meta = (sub.metadata || {}) as Record<string, unknown>;
   const otp = meta.otp as { hash: string; expires_at: string; action: string } | undefined;
 
   if (!otp) return false;
@@ -62,9 +66,9 @@ export async function verifyOtp(subscriberId: string, code: string, action: stri
 
   // Clear OTP (one-time use)
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET metadata = metadata - 'otp', updated_at = NOW()
-    WHERE id = ${subscriberId}
+    WHERE id = ${user.subscription_id}
   `;
 
   return true;

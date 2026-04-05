@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(oauthErrorUrl(source, "missing_params"));
   }
 
-  let state: { subscriber_id: string; site_id?: string | null; source?: string; page_ids?: string[] };
+  let state: { subscription_id: string; site_id?: string | null; source?: string; page_ids?: string[] };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
   } catch {
@@ -61,18 +61,18 @@ export async function GET(req: NextRequest) {
     for (const ig of igAccounts) {
       await sql`
         INSERT INTO social_accounts (
-          subscriber_id, platform, account_name, account_id,
+          subscription_id, platform, account_name, account_id,
           access_token_encrypted, token_expires_at,
           scopes, status, metadata
         )
         VALUES (
-          ${state.subscriber_id}, 'instagram', ${ig.igUsername}, ${ig.igUserId},
+          ${state.subscription_id}, 'instagram', ${ig.igUsername}, ${ig.igUserId},
           ${encrypt(accessToken)}, ${expiresAt},
           ${'{instagram_basic,instagram_content_publish,pages_manage_posts,pages_read_engagement}'},
           'active',
           ${JSON.stringify({ page_id: ig.pageId, page_name: ig.pageName })}
         )
-        ON CONFLICT (subscriber_id, platform, account_id)
+        ON CONFLICT (subscription_id, platform, account_id)
         DO UPDATE SET
           account_name = EXCLUDED.account_name,
           access_token_encrypted = EXCLUDED.access_token_encrypted,
@@ -91,18 +91,18 @@ export async function GET(req: NextRequest) {
     for (const fb of fbPages) {
       await sql`
         INSERT INTO social_accounts (
-          subscriber_id, platform, account_name, account_id,
+          subscription_id, platform, account_name, account_id,
           access_token_encrypted, token_expires_at,
           scopes, status, metadata
         )
         VALUES (
-          ${state.subscriber_id}, 'facebook', ${fb.pageName}, ${fb.pageId},
+          ${state.subscription_id}, 'facebook', ${fb.pageName}, ${fb.pageId},
           ${encrypt(fb.pageAccessToken)}, ${expiresAt},
           ${'{pages_manage_posts,pages_show_list,pages_read_engagement}'},
           'active',
           ${JSON.stringify({ page_id: fb.pageId, page_name: fb.pageName })}
         )
-        ON CONFLICT (subscriber_id, platform, account_id)
+        ON CONFLICT (subscription_id, platform, account_id)
         DO UPDATE SET
           account_name = EXCLUDED.account_name,
           access_token_encrypted = EXCLUDED.access_token_encrypted,
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
       for (const ig of igAccounts) {
         const [acct] = await sql`
           SELECT id FROM social_accounts
-          WHERE subscriber_id = ${state.subscriber_id} AND platform = 'instagram' AND account_id = ${ig.igUserId}
+          WHERE subscription_id = ${state.subscription_id} AND platform = 'instagram' AND account_id = ${ig.igUserId}
         `;
         if (acct) {
           await sql`
@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
       for (const fb of fbPages) {
         const [acct] = await sql`
           SELECT id FROM social_accounts
-          WHERE subscriber_id = ${state.subscriber_id} AND platform = 'facebook' AND account_id = ${fb.pageId}
+          WHERE subscription_id = ${state.subscription_id} AND platform = 'facebook' AND account_id = ${fb.pageId}
         `;
         if (acct) {
           await sql`
@@ -146,8 +146,8 @@ export async function GET(req: NextRequest) {
 
     // Log usage
     await sql`
-      INSERT INTO usage_log (subscriber_id, action, metadata)
-      VALUES (${state.subscriber_id}, 'instagram_connect', ${JSON.stringify({
+      INSERT INTO usage_log (subscription_id, action, metadata)
+      VALUES (${state.subscription_id}, 'instagram_connect', ${JSON.stringify({
         accounts: igAccounts.map((a) => a.igUsername),
         facebook_pages: fbPages.map((p) => p.pageName),
       })})

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
  *
  * Body: { reason?: string, redirect_target?: string }
  *
- * Sets cancelled_at on subscriber. Grace period is 30 days.
+ * Sets cancelled_at on subscription. Grace period is 30 days.
  * If redirect_target is provided, sets up departure redirects for blog.
  */
 export async function POST(req: NextRequest) {
@@ -20,10 +20,10 @@ export async function POST(req: NextRequest) {
 
   // Check if already cancelled
   const [subscriber] = await sql`
-    SELECT id, cancelled_at FROM subscribers WHERE id = ${auth.subscriberId}
+    SELECT id, cancelled_at FROM subscriptions WHERE id = ${auth.subscriptionId}
   `;
   if (!subscriber) {
-    return NextResponse.json({ error: "Subscriber not found" }, { status: 404 });
+    return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
   }
   if (subscriber.cancelled_at) {
     return NextResponse.json({
@@ -35,17 +35,17 @@ export async function POST(req: NextRequest) {
 
   // Set cancellation
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET cancelled_at = NOW(),
         cancel_reason = ${reason || null},
         updated_at = NOW()
-    WHERE id = ${auth.subscriberId}
+    WHERE id = ${auth.subscriptionId}
   `;
 
   // Disable autopilot on all sites
   await sql`
     UPDATE sites SET autopilot_enabled = false
-    WHERE subscriber_id = ${auth.subscriberId}
+    WHERE subscription_id = ${auth.subscriptionId}
   `;
 
   // Set up departure redirects if target provided
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       SELECT s.id, bs.subdomain, bs.custom_domain
       FROM sites s
       LEFT JOIN blog_settings bs ON bs.site_id = s.id
-      WHERE s.subscriber_id = ${auth.subscriberId}
+      WHERE s.subscription_id = ${auth.subscriptionId}
         AND bs.blog_enabled = true
     `;
 
@@ -90,10 +90,10 @@ export async function DELETE(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const [subscriber] = await sql`
-    SELECT id, cancelled_at, is_active FROM subscribers WHERE id = ${auth.subscriberId}
+    SELECT id, cancelled_at, is_active FROM subscriptions WHERE id = ${auth.subscriptionId}
   `;
   if (!subscriber) {
-    return NextResponse.json({ error: "Subscriber not found" }, { status: 404 });
+    return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
   }
   if (!subscriber.cancelled_at) {
     return NextResponse.json({ error: "Account is not cancelled" }, { status: 400 });
@@ -106,14 +106,14 @@ export async function DELETE(req: NextRequest) {
 
   // Revoke cancellation
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET cancelled_at = NULL, cancel_reason = NULL, updated_at = NOW()
-    WHERE id = ${auth.subscriberId}
+    WHERE id = ${auth.subscriptionId}
   `;
 
   // Remove departure redirects
   const siteIds = await sql`
-    SELECT id FROM sites WHERE subscriber_id = ${auth.subscriberId}
+    SELECT id FROM sites WHERE subscription_id = ${auth.subscriptionId}
   `;
   for (const site of siteIds) {
     await sql`

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     SELECT sa.id, sa.platform, sa.account_name, sa.status, sa.token_expires_at
     FROM social_accounts sa
     JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-    WHERE ssl.site_id = ${siteId} AND sa.subscriber_id = ${auth.subscriberId}
+    WHERE ssl.site_id = ${siteId} AND sa.subscription_id = ${auth.subscriptionId}
     ORDER BY sa.platform ASC
   `;
 

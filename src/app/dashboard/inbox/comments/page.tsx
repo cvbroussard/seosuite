@@ -26,7 +26,7 @@ export default async function CommentsPage() {
     FROM inbox_comments ic
     LEFT JOIN social_posts sp ON sp.platform_post_id = ic.platform_post_id
     WHERE ic.site_id = ${siteId}
-      AND ic.subscriber_id = ${session.subscriberId}
+      AND ic.subscription_id = ${session.subscriptionId}
       AND ic.is_hidden = false
     GROUP BY ic.platform_post_id, ic.platform, sp.id, sp.caption, sp.media_urls, sp.platform_post_url
     ORDER BY MAX(ic.commented_at) DESC

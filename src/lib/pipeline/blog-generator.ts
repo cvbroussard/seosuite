@@ -175,24 +175,24 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     }
   }
 
-  // Research entities — pass source vendor IDs for editorial image inheritance
-  const srcVendorIds = await sql`
-    SELECT vendor_id FROM asset_vendors WHERE asset_id = ${assetId}
+  // Research brands — pass source brand IDs for editorial image inheritance
+  const srcBrandIds = await sql`
+    SELECT brand_id FROM asset_brands WHERE asset_id = ${assetId}
   `;
-  const srcVendorIdList = srcVendorIds.map((r: Record<string, unknown>) => r.vendor_id as string);
+  const srcBrandIdList = srcBrandIds.map((r: Record<string, unknown>) => r.brand_id as string);
 
-  const researchResult = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string, srcVendorIdList);
+  const researchResult = await researchContextNote((asset.context_note as string) || "", usedImageUrls, asset.site_id as string, srcBrandIdList);
   const research = researchResult.text;
 
-  // Fetch vendor URLs linked to this asset (from vendor table)
-  const assetVendors = await sql`
-    SELECT v.name, v.url
-    FROM asset_vendors av
-    JOIN vendors v ON v.id = av.vendor_id
-    WHERE av.asset_id = ${assetId}
+  // Fetch vendor URLs linked to this asset (from brands table)
+  const assetBrands = await sql`
+    SELECT b.name, b.url
+    FROM asset_brands ab
+    JOIN brands b ON b.id = ab.brand_id
+    WHERE ab.asset_id = ${assetId}
   `;
   const vendorLinks: string[] = [];
-  for (const v of assetVendors) {
+  for (const v of assetBrands) {
     if (v.url) vendorLinks.push(`${v.name}: ${v.url}`);
   }
 
@@ -206,11 +206,11 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
       // Try to match URL domain to a tagged vendor
       try {
         const domain = new URL(url).hostname.replace(/^www\./, "");
-        const matchedVendor = assetVendors.find((v: Record<string, unknown>) =>
+        const matchedEntity = assetBrands.find((v: Record<string, unknown>) =>
           v.url && (v.url as string).includes(domain)
         );
-        if (matchedVendor) {
-          vendorLinks.push(`${matchedVendor.name}: ${url}`);
+        if (matchedEntity) {
+          vendorLinks.push(`${matchedEntity.name}: ${url}`);
         } else {
           vendorLinks.push(url);
         }
@@ -1128,17 +1128,17 @@ export async function generateFromPairing(
   `;
   const existingTitles = existingPosts.map((p: Record<string, unknown>) => p.title as string);
 
-  // Research — pass source vendor IDs for editorial image inheritance
-  const sourceVendorIds = await sql`
-    SELECT vendor_id FROM asset_vendors WHERE asset_id = ${asset.id}
+  // Research — pass source brand IDs for editorial image inheritance
+  const sourceBrandIds = await sql`
+    SELECT brand_id FROM asset_brands WHERE asset_id = ${asset.id}
   `;
-  const vendorIdList = sourceVendorIds.map((r: Record<string, unknown>) => r.vendor_id as string);
+  const brandIdList = sourceBrandIds.map((r: Record<string, unknown>) => r.brand_id as string);
 
   const researchResult = await researchContextNote(
     asset.contextNote || asset.description || "",
     [],
     siteData.site_id as string,
-    vendorIdList
+    brandIdList
   );
   const research = researchResult.text;
 
@@ -1336,15 +1336,15 @@ ${existingTitles.length > 0
                 )
                 RETURNING id
               `;
-              // Inherit vendor associations from source asset
+              // Inherit brand associations from source asset
               if (videoAsset) {
-                const srcVendors = await sql`
-                  SELECT vendor_id FROM asset_vendors WHERE asset_id = ${asset.id}
+                const srcBrands = await sql`
+                  SELECT brand_id FROM asset_brands WHERE asset_id = ${asset.id}
                 `;
-                for (const v of srcVendors) {
+                for (const b of srcBrands) {
                   await sql`
-                    INSERT INTO asset_vendors (asset_id, vendor_id)
-                    VALUES (${videoAsset.id}, ${v.vendor_id})
+                    INSERT INTO asset_brands (asset_id, brand_id)
+                    VALUES (${videoAsset.id}, ${b.brand_id})
                     ON CONFLICT DO NOTHING
                   `;
                 }

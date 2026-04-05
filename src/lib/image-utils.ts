@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import exifReader from "exif-reader";
 
 /**
  * Convert an image buffer to JPEG if it's HEIC/HEIF or other non-web format.
@@ -72,6 +73,63 @@ async function convertViaGemini(
     data: Buffer.from(imgPart.inlineData.data, "base64"),
     mimeType: imgPart.inlineData.mimeType || "image/png",
   };
+}
+
+export interface ExifData {
+  dateTaken: string | null;
+  lat: number | null;
+  lng: number | null;
+  camera: string | null;
+}
+
+/**
+ * Extract EXIF metadata from an image URL.
+ * Returns date taken, GPS coordinates, and camera info.
+ */
+export async function extractExif(url: string): Promise<ExifData> {
+  const result: ExifData = { dateTaken: null, lat: null, lng: null, camera: null };
+
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return result;
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const metadata = await sharp(buffer).metadata();
+    if (!metadata.exif) return result;
+
+    const exif = exifReader(metadata.exif) as unknown as Record<string, Record<string, unknown>>;
+
+    // Date taken
+    const dateOriginal = exif.exif?.DateTimeOriginal as Date | undefined;
+    const dateDigitized = exif.exif?.DateTimeDigitized as Date | undefined;
+    const dateTime = exif.image?.DateTime as Date | undefined;
+    const date = dateOriginal || dateDigitized || dateTime;
+    if (date && date instanceof Date && date.getFullYear() >= 2000 && date <= new Date()) {
+      result.dateTaken = date.toISOString();
+    }
+
+    // GPS coordinates
+    const gps = exif.gps as Record<string, unknown> | undefined;
+    if (gps?.GPSLatitude && gps?.GPSLongitude) {
+      const lat = gps.GPSLatitude as number;
+      const lng = gps.GPSLongitude as number;
+      const latRef = (gps.GPSLatitudeRef as string) || "N";
+      const lngRef = (gps.GPSLongitudeRef as string) || "E";
+      result.lat = latRef === "S" ? -lat : lat;
+      result.lng = lngRef === "W" ? -lng : lng;
+    }
+
+    // Camera
+    const make = (exif.image?.Make as string) || "";
+    const model = (exif.image?.Model as string) || "";
+    if (make || model) {
+      result.camera = [make, model].filter(Boolean).join(" ").trim();
+    }
+
+    return result;
+  } catch {
+    return result;
+  }
 }
 
 /**

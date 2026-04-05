@@ -544,12 +544,12 @@ Content note: "${contextNote}"
                 )
                 RETURNING id
               `;
-              // Inherit vendor associations only for vendors mentioned in this image's prompt
+              // Inherit brand associations only for brands mentioned in this image's prompt
               if (newAsset && sourceVendorIds && sourceVendorIds.length > 0) {
-                for (const vendorId of sourceVendorIds) {
+                for (const brandId of sourceVendorIds) {
                   await sql`
-                    INSERT INTO asset_vendors (asset_id, vendor_id)
-                    VALUES (${newAsset.id}, ${vendorId})
+                    INSERT INTO asset_brands (asset_id, brand_id)
+                    VALUES (${newAsset.id}, ${brandId})
                     ON CONFLICT DO NOTHING
                   `;
                 }

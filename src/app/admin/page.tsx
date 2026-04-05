@@ -4,8 +4,8 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverview() {
-  const [subscribers, sites, accounts, posts, assets] = await Promise.all([
-    sql`SELECT COUNT(*)::int AS count, COUNT(*) FILTER (WHERE is_active) ::int AS active FROM subscribers`,
+  const [subscriptions, sites, accounts, posts, assets] = await Promise.all([
+    sql`SELECT COUNT(*)::int AS count, COUNT(*) FILTER (WHERE is_active) ::int AS active FROM subscriptions`,
     sql`SELECT COUNT(*)::int AS count FROM sites`,
     sql`SELECT COUNT(*)::int AS count, COUNT(*) FILTER (WHERE status = 'active')::int AS active FROM social_accounts`,
     sql`
@@ -26,7 +26,7 @@ export default async function AdminOverview() {
   ]);
 
   const stats = [
-    { label: "Subscribers", value: subscribers[0].active, sub: `${subscribers[0].count} total`, href: "/admin/subscribers" },
+    { label: "Subscriptions", value: subscriptions[0].active, sub: `${subscriptions[0].count} total`, href: "/admin/subscribers" },
     { label: "Sites", value: sites[0].count, href: "/admin/subscribers" },
     { label: "Connections", value: accounts[0].active, sub: `${accounts[0].count} total`, href: "/admin/social" },
     { label: "Scheduled Posts", value: posts[0].scheduled, href: "/admin/content" },
@@ -44,7 +44,7 @@ export default async function AdminOverview() {
   return (
     <div className="mx-auto max-w-5xl">
       <h1>Platform Overview</h1>
-      <p className="mt-2 mb-8 text-muted">Cross-subscriber health at a glance</p>
+      <p className="mt-2 mb-8 text-muted">Cross-subscription health at a glance</p>
 
       <div className="mb-8 grid grid-cols-3 gap-8">
         {stats.map((s) => (

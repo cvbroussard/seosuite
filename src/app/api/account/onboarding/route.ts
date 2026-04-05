@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
   const { status } = await req.json();
 
   await sql`
-    UPDATE subscribers
+    UPDATE subscriptions
     SET metadata = jsonb_set(
       COALESCE(metadata, '{}'::jsonb),
       '{onboarding_status}',
       ${JSON.stringify(status)}::jsonb
     ),
     updated_at = NOW()
-    WHERE id = ${auth.subscriberId}
+    WHERE id = ${auth.subscriptionId}
   `;
 
   return NextResponse.json({ ok: true });

@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
   const [site] = await sql`
     SELECT id, metadata FROM sites
     WHERE id = ${siteId}
-      AND subscriber_id = ${session.subscriberId}
+      AND subscription_id = ${session.subscriptionId}
       AND provisioning_status = 'requested'
-      AND deleted_at IS NULL
+      AND is_active = true
   `;
 
   if (!site) {

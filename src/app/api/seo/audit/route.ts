@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   // Verify site belongs to subscriber
   const siteRows = await sql`
     SELECT id, url FROM sites
-    WHERE id = ${siteId} AND subscriber_id = ${auth.subscriberId}
+    WHERE id = ${siteId} AND subscription_id = ${auth.subscriptionId}
   `;
 
   if (siteRows.length === 0) {
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
   // Verify site belongs to subscriber
   const siteRows = await sql`
     SELECT id FROM sites
-    WHERE id = ${siteId} AND subscriber_id = ${auth.subscriberId}
+    WHERE id = ${siteId} AND subscription_id = ${auth.subscriptionId}
   `;
 
   if (siteRows.length === 0) {
