@@ -90,6 +90,25 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Process upload queue
+  // Trigger server processing when batch completes
+  const prevUploading = useRef(false);
+  useEffect(() => {
+    const isUploading = items.some((i) => i.status === "pending" || i.status === "uploading");
+    if (prevUploading.current && !isUploading && items.length > 0) {
+      // Batch just finished — trigger server-side processing
+      const siteId = items.find((i) => i.siteId)?.siteId;
+      if (siteId) {
+        fetch("/api/pipeline/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ site_id: siteId }),
+        }).catch(() => {});
+      }
+    }
+    prevUploading.current = isUploading;
+  }, [items]);
+
+  // Process upload queue
   useEffect(() => {
     if (processing.current) return;
     const next = items.find((i) => i.status === "pending");
