@@ -8,6 +8,8 @@ import { MobileNav } from "@/components/mobile-nav";
 import { OnboardingChecklist, type ChecklistState } from "@/components/onboarding-checklist";
 import { ActivityFeed } from "@/components/activity-feed";
 import { ContextualHelp } from "@/components/contextual-help";
+import { UploadProvider } from "@/components/upload-provider";
+import { UploadStatus } from "@/components/upload-status";
 
 const ALL_PLATFORMS = [
   "instagram", "tiktok", "facebook", "gbp",
@@ -91,6 +93,7 @@ export default async function DashboardLayout({
   const prefix = "/dashboard"; // Layout always uses /dashboard prefix; sidebar handles subdomain rewriting
 
   return (
+    <UploadProvider>
     <div className="flex h-screen flex-col overflow-hidden">
       <div className="hidden md:block">
         <TopBar userName={session.userName} />
@@ -115,6 +118,7 @@ export default async function DashboardLayout({
         {checklistState && (
           <div className="hidden lg:block">
             <div className="flex h-full w-72 flex-col border-l border-border bg-surface">
+              <UploadStatus />
               <OnboardingChecklist state={checklistState} prefix={prefix} defaultCollapsed={setupComplete} />
               <ActivityFeed items={activityItems} />
               <ContextualHelp />
@@ -123,6 +127,7 @@ export default async function DashboardLayout({
         )}
       </div>
     </div>
+    </UploadProvider>
   );
 }
 

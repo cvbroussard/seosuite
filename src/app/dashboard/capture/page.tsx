@@ -4,15 +4,14 @@ import { useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { OnboardingTip } from "@/components/onboarding-tip";
+import { useUpload } from "@/components/upload-provider";
 
-interface UploadItem {
+interface StagedItem {
   id: string;
   file?: File;
   sourceUrl?: string;
   preview: string;
   contextNote: string;
-  status: "pending" | "uploading" | "done" | "error";
-  error?: string;
 }
 
 export default function CapturePage() {
@@ -27,8 +26,9 @@ function CaptureForm() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("project");
   const projectName = searchParams.get("projectName");
+  const { enqueue, activeCount } = useUpload();
 
-  const [items, setItems] = useState<UploadItem[]>([]);
+  const [items, setItems] = useState<StagedItem[]>([]);
   const [siteId, setSiteId] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -37,16 +37,14 @@ function CaptureForm() {
   const fileRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
-  // Resolve site from session — no manual picker needed
+  // Resolve site from session
   const loadSite = useCallback(async () => {
     if (loaded) return;
     try {
       const res = await fetch("/api/auth/session");
       if (res.ok) {
         const data = await res.json();
-        if (data.activeSiteId) {
-          setSiteId(data.activeSiteId);
-        }
+        if (data.activeSiteId) setSiteId(data.activeSiteId);
       }
     } catch { /* ignore */ }
     setLoaded(true);
@@ -56,14 +54,11 @@ function CaptureForm() {
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList) return;
-    const newItems: UploadItem[] = Array.from(fileList).map((file) => ({
+    const newItems: StagedItem[] = Array.from(fileList).map((file) => ({
       id: crypto.randomUUID(),
       file,
-      preview: file.type.startsWith("image/")
-        ? URL.createObjectURL(file)
-        : "",
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
       contextNote: "",
-      status: "pending" as const,
     }));
     setItems((prev) => [...prev, ...newItems]);
   }
@@ -103,16 +98,13 @@ function CaptureForm() {
       sourceUrl: url,
       preview: url,
       contextNote: "",
-      status: "pending",
     }]);
     setUrlInput("");
     setShowUrlInput(false);
   }
 
   function updateNote(id: string, note: string) {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, contextNote: note } : item))
-    );
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, contextNote: note } : item)));
   }
 
   function removeItem(id: string) {
@@ -123,117 +115,28 @@ function CaptureForm() {
     });
   }
 
-  async function uploadItem(item: UploadItem) {
-    setItems((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, status: "uploading" } : i))
+  function uploadAll() {
+    if (!siteId || items.length === 0) return;
+
+    // Enqueue to global background upload queue
+    enqueue(
+      items.map((item) => ({
+        file: item.file,
+        sourceUrl: item.sourceUrl,
+        contextNote: item.contextNote,
+        siteId,
+        projectId: projectId || null,
+        fileName: item.file?.name || item.sourceUrl || "Unknown",
+      }))
     );
 
-    try {
-      if (item.sourceUrl) {
-        // URL-based upload — send URL directly to the asset API
-        const assetRes = await fetch("/api/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_id: siteId,
-            storage_url: item.sourceUrl,
-            media_type: guessMediaType(item.sourceUrl),
-            context_note: item.contextNote || null,
-            source: "url",
-          }),
-        });
-
-        const urlData = await assetRes.json();
-        if (!assetRes.ok) {
-          throw new Error(urlData.error || "Failed to register asset");
-        }
-
-        // Auto-tag to project if uploading from project context
-        if (projectId && urlData.asset?.id) {
-          await fetch(`/api/assets/${urlData.asset.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project_ids: [projectId] }),
-          }).catch(() => {});
-        }
-      } else if (item.file) {
-        // File-based upload — presign + upload to R2 + register
-        const presignRes = await fetch("/api/upload/presign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_id: siteId,
-            content_type: item.file.type
-              || (item.file.name.toLowerCase().endsWith(".heic") ? "image/heic" : "")
-              || (item.file.name.toLowerCase().endsWith(".heif") ? "image/heic" : ""),
-            filename: item.file.name,
-          }),
-        });
-
-        if (!presignRes.ok) {
-          const err = await presignRes.json();
-          throw new Error(err.error || "Failed to get upload URL");
-        }
-
-        const { upload_url, public_url, media_type } = await presignRes.json();
-
-        const uploadRes = await fetch(upload_url, {
-          method: "PUT",
-          headers: { "Content-Type": item.file.type },
-          body: item.file,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`Upload failed: ${uploadRes.status}`);
-        }
-
-        const assetRes = await fetch("/api/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_id: siteId,
-            storage_url: public_url,
-            media_type,
-            context_note: item.contextNote || null,
-          }),
-        });
-
-        const fileData = await assetRes.json();
-        if (!assetRes.ok) {
-          throw new Error(fileData.error || "Failed to register asset");
-        }
-
-        // Auto-tag to project if uploading from project context
-        if (projectId && fileData.asset?.id) {
-          await fetch(`/api/assets/${fileData.asset.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project_ids: [projectId] }),
-          }).catch(() => {});
-        }
-      }
-
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, status: "done" } : i))
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed";
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === item.id ? { ...i, status: "error", error: message } : i
-        )
-      );
+    // Clear staged items — revoke object URLs
+    for (const item of items) {
+      if (item.file && item.preview) URL.revokeObjectURL(item.preview);
     }
+    setItems([]);
   }
 
-  async function uploadAll() {
-    const pending = items.filter((i) => i.status === "pending");
-    for (const item of pending) {
-      await uploadItem(item);
-    }
-  }
-
-  const pending = items.filter((i) => i.status === "pending");
   const hasItems = items.length > 0;
 
   return (
@@ -258,6 +161,13 @@ function CaptureForm() {
             Uploading to <strong>{projectName || "project"}</strong> — assets will be auto-tagged
           </p>
           <a href="/dashboard/capture" className="text-xs text-muted hover:text-foreground">Clear</a>
+        </div>
+      )}
+
+      {activeCount > 0 && (
+        <div className="mb-4 flex items-center gap-2 rounded bg-surface-hover px-4 py-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          <p className="text-xs text-muted">{activeCount} file{activeCount !== 1 ? "s" : ""} uploading in background</p>
         </div>
       )}
 
@@ -343,20 +253,11 @@ function CaptureForm() {
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      {/* Upload queue */}
+      {/* Staging queue */}
       {hasItems && (
         <div className="space-y-3">
           {items.map((item) => (
-            <div
-              key={item.id}
-              className={`border p-3 ${
-                item.status === "done"
-                  ? "border-success/30 bg-success/5"
-                  : item.status === "error"
-                  ? "border-danger/30 bg-danger/5"
-                  : "border-border bg-surface"
-              }`}
-            >
+            <div key={item.id} className="border border-border bg-surface p-3">
               <div className="mb-2 flex items-start gap-3">
                 {item.preview ? (
                   <img
@@ -376,44 +277,37 @@ function CaptureForm() {
                   </p>
                   <p className="text-xs text-muted">
                     {item.file ? `${(item.file.size / 1024 / 1024).toFixed(1)} MB` : "URL import"}
-                    {item.status === "uploading" && " — uploading..."}
-                    {item.status === "done" && " — uploaded"}
-                    {item.status === "error" && ` — ${item.error}`}
                   </p>
                 </div>
-                {item.status === "pending" && (
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="text-xs text-muted hover:text-foreground"
-                  >
-                    ✕
-                  </button>
-                )}
+                <button
+                  onClick={() => removeItem(item.id)}
+                  className="text-xs text-muted hover:text-foreground"
+                >
+                  ✕
+                </button>
               </div>
-              {item.status === "pending" && (
-                <input
-                  type="text"
-                  value={item.contextNote}
-                  onChange={(e) => updateNote(item.id, e.target.value)}
-                  placeholder="Context note — e.g. 'Custom walnut island with knife storage'"
-                  className="w-full text-xs"
-                />
-              )}
+              <input
+                type="text"
+                value={item.contextNote}
+                onChange={(e) => updateNote(item.id, e.target.value)}
+                placeholder="Context note — e.g. 'Custom walnut island with knife storage'"
+                className="w-full text-xs"
+              />
             </div>
           ))}
 
-          {pending.length > 0 && siteId && (
+          {siteId && (
             <div className="sticky bottom-4 pt-2">
               <button
                 onClick={uploadAll}
                 className="w-full bg-accent px-4 py-4 text-base font-medium text-white transition-colors hover:bg-accent-hover active:bg-accent-hover"
               >
-                Upload {pending.length} {pending.length === 1 ? "file" : "files"}
+                Upload {items.length} {items.length === 1 ? "file" : "files"}
               </button>
             </div>
           )}
 
-          {pending.length > 0 && !siteId && (
+          {!siteId && (
             <p className="text-center text-xs text-warning">Select a site first from the header</p>
           )}
         </div>
@@ -423,9 +317,7 @@ function CaptureForm() {
       {!hasItems && (
         <div
           className={`flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center transition-colors ${
-            dragging
-              ? "border-accent bg-accent/5"
-              : "border-border"
+            dragging ? "border-accent bg-accent/5" : "border-border"
           }`}
         >
           <span className="mb-3 text-3xl">{dragging ? "◎" : "◉"}</span>
@@ -440,9 +332,7 @@ function CaptureForm() {
 
       {/* Drag overlay when items exist */}
       {hasItems && dragging && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80"
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
           <div className="border-2 border-dashed border-accent p-12 text-center">
             <span className="mb-3 block text-4xl">◎</span>
             <p className="text-sm font-medium">Drop files to add to queue</p>
@@ -451,13 +341,4 @@ function CaptureForm() {
       )}
     </div>
   );
-}
-
-function guessMediaType(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.match(/\.(mp4|mov|avi|webm|mkv)/)) return "video/mp4";
-  if (lower.match(/\.(gif)/)) return "image/gif";
-  if (lower.match(/\.(png)/)) return "image/png";
-  if (lower.match(/\.(webp)/)) return "image/webp";
-  return "image/jpeg";
 }
