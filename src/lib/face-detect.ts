@@ -55,13 +55,13 @@ export interface FaceMatch {
  * Detect faces in an image and return embeddings.
  * Uses sharp for image decoding (works on Vercel, no canvas needed).
  */
-export async function detectFaces(imageUrl: string): Promise<DetectedFace[]> {
+export async function detectFaces(imageUrl: string): Promise<{ faces: DetectedFace[]; detectionWidth: number; detectionHeight: number }> {
   const api = await ensureLoaded();
 
   try {
     // Fetch image
     const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) return [];
+    if (!res.ok) return { faces: [], detectionWidth: 0, detectionHeight: 0 };
     const buffer = Buffer.from(await res.arrayBuffer());
 
     // Decode with sharp to get raw pixel data
@@ -86,20 +86,23 @@ export async function detectFaces(imageUrl: string): Promise<DetectedFace[]> {
 
     tensor.dispose();
 
-    return detections.map((d) => ({
-      embedding: Array.from(d.descriptor),
-      box: {
-        // Scale boxes back to original image coordinates
-        x: Math.round(d.detection.box.x),
-        y: Math.round(d.detection.box.y),
-        width: Math.round(d.detection.box.width),
-        height: Math.round(d.detection.box.height),
-      },
-      score: d.detection.score,
-    }));
+    return {
+      faces: detections.map((d) => ({
+        embedding: Array.from(d.descriptor),
+        box: {
+          x: Math.round(d.detection.box.x),
+          y: Math.round(d.detection.box.y),
+          width: Math.round(d.detection.box.width),
+          height: Math.round(d.detection.box.height),
+        },
+        score: d.detection.score,
+      })),
+      detectionWidth: info.width,
+      detectionHeight: info.height,
+    };
   } catch (err) {
     console.error("Face detection error:", err instanceof Error ? err.message : err);
-    return [];
+    return { faces: [], detectionWidth: 0, detectionHeight: 0 };
   }
 }
 
@@ -178,10 +181,10 @@ export async function processFaces(
   siteId: string,
   imageUrl: string
 ): Promise<{ matched: number; unmatched: number }> {
-  const faces = await detectFaces(imageUrl);
-  if (faces.length === 0) return { matched: 0, unmatched: 0 };
+  const result = await detectFaces(imageUrl);
+  if (result.faces.length === 0) return { matched: 0, unmatched: 0 };
 
-  const { matched, unmatched } = await matchFaces(siteId, faces);
+  const { matched, unmatched } = await matchFaces(siteId, result.faces);
 
   // Auto-tag matched personas
   for (const m of matched) {
@@ -192,9 +195,11 @@ export async function processFaces(
     `;
   }
 
-  // Store face data on the asset
+  // Store face data on the asset — include detection dimensions for UI scaling
   const faceData = {
-    faces: faces.map((f, i) => {
+    detectionWidth: result.detectionWidth,
+    detectionHeight: result.detectionHeight,
+    faces: result.faces.map((f, i) => {
       const match = matched.find((m) => m.face === f);
       return {
         box: f.box,

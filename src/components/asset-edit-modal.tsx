@@ -46,6 +46,8 @@ interface AssetEditModalProps {
     embedding: number[];
     index: number;
   }> | null;
+  faceDetectionWidth?: number;
+  faceDetectionHeight?: number;
   personas?: Array<{ id: string; name: string; type: string }>;
   onClose: () => void;
   onSaved: (note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[]) => void;
@@ -78,6 +80,8 @@ export function AssetEditModal({
   sceneType,
   captionSource,
   faces: initialFaces = null,
+  faceDetectionWidth,
+  faceDetectionHeight,
   personas: personaList = [],
   onClose,
   onSaved,
@@ -322,6 +326,8 @@ export function AssetEditModal({
             <FaceOverlay
               imageUrl={imageUrl}
               faces={faceData}
+              detectionWidth={faceDetectionWidth}
+              detectionHeight={faceDetectionHeight}
               personas={personaList}
               assetId={assetId}
               onFaceNamed={(faceIndex, personaId, personaName) => {

@@ -12,6 +12,12 @@ interface FaceData {
   index: number;
 }
 
+interface FacesWrapper {
+  faces: FaceData[];
+  detectionWidth?: number;
+  detectionHeight?: number;
+}
+
 interface Persona {
   id: string;
   name: string;
@@ -21,12 +27,14 @@ interface Persona {
 interface FaceOverlayProps {
   imageUrl: string;
   faces: FaceData[];
+  detectionWidth?: number;
+  detectionHeight?: number;
   personas: Persona[];
   assetId: string;
   onFaceNamed: (faceIndex: number, personaId: string, personaName: string) => void;
 }
 
-export function FaceOverlay({ imageUrl, faces, personas, assetId, onFaceNamed }: FaceOverlayProps) {
+export function FaceOverlay({ imageUrl, faces, detectionWidth, detectionHeight, personas, assetId, onFaceNamed }: FaceOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 });
@@ -72,25 +80,21 @@ export function FaceOverlay({ imageUrl, faces, personas, assetId, onFaceNamed }:
     };
   }, []);
 
-  // Scale face boxes to displayed image coordinates.
-  // Boxes are stored relative to the detection image (800px wide).
-  // We scale from natural image dimensions to displayed dimensions.
-  // Since detection downscales proportionally, natural coords work if
-  // face coordinates are stored relative to the original image.
-  // For pipeline-detected faces (800px width), we scale from natural image.
+  // Scale face box from detection coordinates to displayed image coordinates.
+  // Detection coordinates are relative to the resized image (e.g. 800x600).
+  // Display coordinates are the rendered image size on screen.
   function scaleBox(box: FaceData["box"]) {
-    if (!imgSize.width || !imgSize.naturalWidth) return { left: 0, top: 0, width: 0, height: 0 };
-    // Detection runs on an 800px-wide resize. Scale box coords from
-    // the 800px detection space to the original natural image, then to display.
-    const detectionWidth = Math.min(800, imgSize.naturalWidth);
-    const detectionScale = imgSize.naturalWidth / detectionWidth;
-    const displayScaleX = imgSize.width / imgSize.naturalWidth;
-    const displayScaleY = imgSize.height / imgSize.naturalHeight;
+    if (!imgSize.width || !imgSize.height) return { left: 0, top: 0, width: 0, height: 0 };
+    // Use detection dimensions if available, otherwise fall back to natural
+    const srcW = detectionWidth || imgSize.naturalWidth || imgSize.width;
+    const srcH = detectionHeight || imgSize.naturalHeight || imgSize.height;
+    const scaleX = imgSize.width / srcW;
+    const scaleY = imgSize.height / srcH;
     return {
-      left: box.x * detectionScale * displayScaleX,
-      top: box.y * detectionScale * displayScaleY,
-      width: box.width * detectionScale * displayScaleX,
-      height: box.height * detectionScale * displayScaleY,
+      left: box.x * scaleX,
+      top: box.y * scaleY,
+      width: box.width * scaleX,
+      height: box.height * scaleY,
     };
   }
 

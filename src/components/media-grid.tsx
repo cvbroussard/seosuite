@@ -213,8 +213,18 @@ export function MediaGrid({
           captionSource={((editing.metadata as Record<string, unknown>)?.caption_source as string) || null}
           faces={(() => {
             const meta = (editing.metadata || {}) as Record<string, unknown>;
-            const fd = meta.faces as { faces: Array<Record<string, unknown>> } | undefined;
+            const fd = meta.faces as { faces: Array<Record<string, unknown>>; detectionWidth?: number; detectionHeight?: number } | undefined;
             return (fd?.faces || null) as Array<{ box: { x: number; y: number; width: number; height: number }; score: number; personaId: string | null; personaName: string | null; distance: number | null; embedding: number[]; index: number }> | null;
+          })()}
+          faceDetectionWidth={(() => {
+            const meta = (editing.metadata || {}) as Record<string, unknown>;
+            const fd = meta.faces as { detectionWidth?: number } | undefined;
+            return fd?.detectionWidth;
+          })()}
+          faceDetectionHeight={(() => {
+            const meta = (editing.metadata || {}) as Record<string, unknown>;
+            const fd = meta.faces as { detectionHeight?: number } | undefined;
+            return fd?.detectionHeight;
           })()}
           personas={personaList}
           source={editing.source}
