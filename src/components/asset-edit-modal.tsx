@@ -309,47 +309,45 @@ export function AssetEditModal({
         className="flex w-full max-w-4xl max-h-[90vh] flex-col border border-border bg-surface overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Row 1: Image + Context Note side by side */}
-        <div className="flex">
-          {/* Left: Image with face overlay */}
-          <div className="hidden sm:flex w-1/2 shrink-0 items-center justify-center bg-background">
-            {mediaType?.startsWith("video") || mediaType === "video" ? (
-              <video
-                src={imageUrl}
-                controls
-                className="h-full w-full object-contain"
-                style={{ maxHeight: "65vh" }}
-              />
-            ) : faceData && faceData.length > 0 ? (
-              <FaceOverlay
-                imageUrl={imageUrl}
-                faces={faceData}
-                personas={personaList}
-                assetId={assetId}
-                onFaceNamed={(faceIndex, personaId, personaName) => {
-                  setFaceData((prev) =>
-                    prev ? prev.map((f, i) =>
-                      i === faceIndex ? { ...f, personaId, personaName } : f
-                    ) : prev
-                  );
-                }}
-              />
-            ) : (
-              <img
-                src={imageUrl}
-                alt=""
-                className="h-full w-full object-contain"
-                style={{ maxHeight: "65vh" }}
-              />
-            )}
-          </div>
+        {/* Image — full width */}
+        <div className="relative flex items-center justify-center bg-background">
+          {mediaType?.startsWith("video") || mediaType === "video" ? (
+            <video
+              src={imageUrl}
+              controls
+              className="w-full object-contain"
+              style={{ maxHeight: "45vh" }}
+            />
+          ) : faceData && faceData.length > 0 ? (
+            <FaceOverlay
+              imageUrl={imageUrl}
+              faces={faceData}
+              personas={personaList}
+              assetId={assetId}
+              onFaceNamed={(faceIndex, personaId, personaName) => {
+                setFaceData((prev) =>
+                  prev ? prev.map((f, i) =>
+                    i === faceIndex ? { ...f, personaId, personaName } : f
+                  ) : prev
+                );
+              }}
+            />
+          ) : (
+            <img
+              src={imageUrl}
+              alt=""
+              className="w-full object-contain"
+              style={{ maxHeight: "45vh" }}
+            />
+          )}
+          <button onClick={onClose} className="absolute right-3 top-3 rounded bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70">✕</button>
+        </div>
 
-          {/* Right: Context Note */}
-          <div className="flex flex-1 flex-col p-6">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Edit Asset</h3>
-              <button onClick={onClose} className="text-muted hover:text-foreground">✕</button>
-            </div>
+        {/* Content */}
+        <div className="px-6 pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Edit Asset</h3>
+          </div>
 
             {/* Asset metadata */}
             <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -425,10 +423,9 @@ export function AssetEditModal({
                 </div>
               )}
             </div>
-          </div>
         </div>
 
-        {/* Row 2: Tags full width */}
+        {/* Tags */}
         {pillarConfig.length > 0 && (
           <div className="border-t border-border px-6 py-4">
             <div className="mb-2 flex items-center justify-between">

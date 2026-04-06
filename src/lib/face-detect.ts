@@ -16,22 +16,27 @@ let modelsLoaded = false;
 async function ensureLoaded() {
   if (modelsLoaded) return faceapi!;
 
-  // Import pure JS TensorFlow (no native bindings)
-  tf = await import("@tensorflow/tfjs");
+  try {
+    // Import pure JS TensorFlow (no native bindings)
+    tf = await import("@tensorflow/tfjs");
 
-  // Import face-api
-  faceapi = await import("@vladmandic/face-api");
+    // Import face-api
+    faceapi = await import("@vladmandic/face-api");
 
-  // Load models from node_modules
-  const path = await import("path");
-  const modelPath = path.join(process.cwd(), "node_modules/@vladmandic/face-api/model");
+    // Load models from node_modules
+    const path = await import("path");
+    const modelPath = path.join(process.cwd(), "node_modules/@vladmandic/face-api/model");
 
-  await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
-  await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
-  await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
+    await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
+    await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
+    await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
 
-  modelsLoaded = true;
-  return faceapi;
+    modelsLoaded = true;
+    return faceapi;
+  } catch (err) {
+    console.warn("Face detection unavailable:", err instanceof Error ? err.message : err);
+    throw new Error("Face detection models could not be loaded");
+  }
 }
 
 export interface DetectedFace {
