@@ -11,45 +11,60 @@ interface Counts {
   low_quality: number;
 }
 
+interface ProjectOption {
+  id: string;
+  name: string;
+}
+
 export function MediaFilters({
   sourceFilter,
   mediaTypeFilter,
   sceneFilter,
   qualityFilter,
   sortOrder,
+  projectFilter,
   counts,
+  projects = [],
 }: {
   sourceFilter: string;
   mediaTypeFilter: string;
   sceneFilter: string;
   qualityFilter: string;
   sortOrder: string;
+  projectFilter: string;
   counts: Counts;
+  projects?: ProjectOption[];
 }) {
   const router = useRouter();
 
-  // On mount: if no explicit sort param, redirect to persisted preference
-  if (typeof window !== "undefined" && sortOrder === "newest") {
+  // On mount: restore persisted preferences if no explicit URL params
+  if (typeof window !== "undefined") {
     try {
-      const persisted = localStorage.getItem("tp_media_sort");
-      if (persisted && persisted !== "newest" && persisted !== sortOrder) {
-        // Check URL doesn't already have sort param
-        const url = new URL(window.location.href);
-        if (!url.searchParams.has("sort")) {
-          url.searchParams.set("sort", persisted);
-          window.location.href = url.toString();
-        }
+      const url = new URL(window.location.href);
+      let needsRedirect = false;
+      const persistedSort = localStorage.getItem("tp_media_sort");
+      if (persistedSort && !url.searchParams.has("sort") && persistedSort !== "newest") {
+        url.searchParams.set("sort", persistedSort);
+        needsRedirect = true;
+      }
+      const persistedProject = localStorage.getItem("tp_media_project");
+      if (persistedProject && !url.searchParams.has("project")) {
+        url.searchParams.set("project", persistedProject);
+        needsRedirect = true;
+      }
+      if (needsRedirect) {
+        window.location.href = url.toString();
       }
     } catch { /* ignore */ }
   }
 
-  // Persist sort preference
-  function persistSort(sort: string) {
-    try { localStorage.setItem("tp_media_sort", sort); } catch { /* ignore */ }
+  function persist(key: string, value: string) {
+    try { localStorage.setItem(`tp_media_${key}`, value); } catch { /* ignore */ }
   }
 
   function updateParams(updates: Record<string, string>) {
-    if (updates.sort) persistSort(updates.sort);
+    if (updates.sort) persist("sort", updates.sort);
+    if (updates.project !== undefined) persist("project", updates.project);
     const params = new URLSearchParams();
     const merged = {
       source: sourceFilter,
@@ -57,6 +72,7 @@ export function MediaFilters({
       scene: sceneFilter,
       quality: qualityFilter,
       sort: sortOrder,
+      project: projectFilter,
       ...updates,
     };
     for (const [k, v] of Object.entries(merged)) {
@@ -149,6 +165,21 @@ export function MediaFilters({
         <option value="quality">Quality</option>
         <option value="least_used">Least used</option>
       </select>
+
+      {/* Project filter */}
+      {projects.length > 0 && (
+        <select
+          key="project"
+          value={projectFilter}
+          onChange={(e) => updateParams({ project: e.target.value })}
+          className="bg-surface-hover px-2 py-1 text-[10px] text-muted"
+        >
+          <option value="all">All projects</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

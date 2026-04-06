@@ -7,7 +7,7 @@ import { MediaFilters } from "./media-filters";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ source?: string; type?: string; scene?: string; quality?: string; sort?: string }>;
+  searchParams: Promise<{ source?: string; type?: string; scene?: string; quality?: string; sort?: string; project?: string }>;
 }
 
 export default async function MediaPage({ searchParams }: Props) {
@@ -29,6 +29,7 @@ export default async function MediaPage({ searchParams }: Props) {
   const sceneFilter = params.scene || "all";
   const qualityFilter = params.quality || "all";
   const sortOrder = params.sort || "newest";
+  const projectFilter = params.project || "all";
 
   // Build WHERE conditions
   const conditions: string[] = [`site_id = '${siteId}'`];
@@ -110,7 +111,7 @@ export default async function MediaPage({ searchParams }: Props) {
     });
   }
 
-  const filteredAssets = filtered.slice(0, 200);
+  let filteredAssets = filtered.slice(0, 200);
 
   // Counts for filter badges
   const counts = await sql`
@@ -165,6 +166,16 @@ export default async function MediaPage({ searchParams }: Props) {
   const brandLabel = (siteData[0]?.brand_label as string) || null;
   const projectLabel = (siteData[0]?.project_label as string) || null;
 
+  // Apply project filter (after project map is built)
+  if (projectFilter !== "all") {
+    const projectAssetIds = new Set(
+      assetProjectRows
+        .filter((r) => r.project_id === projectFilter)
+        .map((r) => r.asset_id as string)
+    );
+    filteredAssets = filteredAssets.filter(a => projectAssetIds.has(a.id as string));
+  }
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-baseline justify-between">
@@ -182,7 +193,9 @@ export default async function MediaPage({ searchParams }: Props) {
         sceneFilter={sceneFilter}
         qualityFilter={qualityFilter}
         sortOrder={sortOrder}
+        projectFilter={projectFilter}
         counts={counts[0] as { total: number; uploads: number; ai_generated: number; high_quality: number; medium_quality: number; low_quality: number }}
+        projects={allProjects.map((p) => ({ id: p.id as string, name: p.name as string }))}
       />
 
       {filteredAssets.length > 0 ? (
