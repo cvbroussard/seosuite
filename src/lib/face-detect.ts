@@ -85,26 +85,35 @@ export async function detectFaces(imageUrl: string): Promise<{ faces: DetectedFa
     if (!res.ok) return { faces: [], detectionWidth: 0, detectionHeight: 0 };
     const buffer = Buffer.from(await res.arrayBuffer());
 
-    // Decode with sharp to get raw pixel data
+    // Decode with sharp to get raw RGBA pixel data
     const sharp = (await import("sharp")).default;
     const { data, info } = await sharp(buffer)
-      .resize({ width: 800, withoutEnlargement: true }) // Downscale for speed
-      .removeAlpha()
+      .resize({ width: 800, withoutEnlargement: true })
+      .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    // Create a tensor from raw pixels
-    const tensor = tf!.tensor3d(
-      new Uint8Array(data),
-      [info.height, info.width, 3]
-    );
+    console.log(`Face detect: image ${info.width}x${info.height}, ${data.length} bytes`);
 
-    // Detect faces
+    // Create a tensor3d from RGBA data (4 channels → 3 channels)
+    const rgbaData = new Uint8ClampedArray(data);
+    const rgbData = new Uint8Array(info.width * info.height * 3);
+    for (let i = 0, j = 0; i < rgbaData.length; i += 4, j += 3) {
+      rgbData[j] = rgbaData[i];
+      rgbData[j + 1] = rgbaData[i + 1];
+      rgbData[j + 2] = rgbaData[i + 2];
+    }
+
+    const tensor = tf!.tensor3d(rgbData, [info.height, info.width, 3]);
+
+    // Detect faces with lower threshold for pure JS backend
+    const options = new api.SsdMobilenetv1Options({ minConfidence: 0.3 });
     const detections = await api
-      .detectAllFaces(tensor as unknown as HTMLCanvasElement)
+      .detectAllFaces(tensor as unknown as HTMLCanvasElement, options)
       .withFaceLandmarks()
       .withFaceDescriptors();
 
+    console.log(`Face detect: found ${detections.length} faces`);
     tensor.dispose();
 
     return {
