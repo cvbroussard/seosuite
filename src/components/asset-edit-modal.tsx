@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { TagPicker, type PillarGroup } from "./tag-picker";
 import { FaceOverlay } from "./face-overlay";
 
@@ -104,6 +104,17 @@ export function AssetEditModal({
   const [brandIds, setBrandIds] = useState<string[]>(initialBrandIds);
   const [projectIds, setProjectIds] = useState<string[]>(initialProjectIds);
   const [personaIds, setPersonaIds] = useState<string[]>(initialPersonaIds);
+
+  // Reset state when navigating to a different asset
+  useEffect(() => {
+    setFaceData(initialFaces);
+    setNote(initialNote);
+    setPillar(initialPillar);
+    setTags(initialTags || []);
+    setBrandIds(initialBrandIds);
+    setProjectIds(initialProjectIds);
+    setPersonaIds(initialPersonaIds);
+  }, [assetId]);
   const [localBrands, setLocalBrands] = useState(brands);
   const [localProjects, setLocalProjects] = useState(projects);
   const [newBrandName, setNewBrandName] = useState("");
