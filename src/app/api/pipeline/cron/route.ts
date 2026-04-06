@@ -159,6 +159,16 @@ export async function GET(req: NextRequest) {
         // ── Triage ──
         await triageAsset(assetId);
 
+        // ── Face detection + matching ──
+        if (mediaType?.startsWith("image") && !meta.faces) {
+          try {
+            const { processFaces } = await import("@/lib/face-detect");
+            await processFaces(assetId, siteId, currentUrl);
+          } catch (err) {
+            console.error(`Face detection failed for ${assetId}:`, err instanceof Error ? err.message : err);
+          }
+        }
+
         processed++;
       } catch (err) {
         processErrors++;
