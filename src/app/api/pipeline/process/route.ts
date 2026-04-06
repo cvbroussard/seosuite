@@ -145,10 +145,12 @@ export async function POST(req: NextRequest) {
       // Face detection + matching (images only, after conversion)
       if (mediaType?.startsWith("image") && !meta.faces) {
         try {
+          console.log(`Face detection starting for ${assetId}`);
           const { processFaces } = await import("@/lib/face-detect");
-          await processFaces(assetId, siteId, currentUrl);
+          const faceResult = await processFaces(assetId, siteId, currentUrl);
+          console.log(`Face detection complete for ${assetId}: ${faceResult.matched} matched, ${faceResult.unmatched} unmatched`);
         } catch (err) {
-          console.error(`Face detection failed for ${assetId}:`, err instanceof Error ? err.message : err);
+          console.error(`Face detection failed for ${assetId}:`, err instanceof Error ? err.stack || err.message : err);
         }
       }
 
