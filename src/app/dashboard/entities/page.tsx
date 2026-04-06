@@ -20,12 +20,12 @@ export default async function EntitiesPage() {
 
   const siteId = session.activeSiteId;
 
-  const [brands, projects, clients, locations, siteData] = await Promise.all([
+  const [brands, projects, personas, locations, siteData] = await Promise.all([
     sql`SELECT id, name, slug, url, description FROM brands WHERE site_id = ${siteId} ORDER BY name`,
     sql`SELECT id, name, slug, status, start_date, end_date, address, description, caption_mode, manual_caption_count FROM projects WHERE site_id = ${siteId} ORDER BY name`,
-    sql`SELECT id, name, slug, display_name, consent_given, description FROM clients WHERE site_id = ${siteId} ORDER BY name`,
+    sql`SELECT id, name, slug, display_name, type, consent_given, description FROM personas WHERE site_id = ${siteId} ORDER BY name`,
     sql`SELECT id, name, slug, address, city, state, description FROM locations WHERE site_id = ${siteId} ORDER BY name`,
-    sql`SELECT brand_label, project_label, client_label, location_label FROM sites WHERE id = ${siteId}`,
+    sql`SELECT brand_label, project_label, persona_label, location_label FROM sites WHERE id = ${siteId}`,
   ]);
 
   const site = siteData[0];
@@ -33,7 +33,7 @@ export default async function EntitiesPage() {
   const labels = {
     brand_label: (site?.brand_label as string) || null,
     project_label: (site?.project_label as string) || null,
-    client_label: (site?.client_label as string) || null,
+    persona_label: (site?.persona_label as string) || null,
     location_label: (site?.location_label as string) || null,
   };
 
@@ -60,11 +60,12 @@ export default async function EntitiesPage() {
         caption_mode: (p.caption_mode as string) || "seeding",
         manual_caption_count: (p.manual_caption_count as number) || 0,
       }))}
-      clients={clients.map((c) => ({
+      personas={personas.map((c) => ({
         id: c.id as string,
         name: c.name as string,
         slug: c.slug as string,
         display_name: (c.display_name as string) || null,
+        type: (c.type as string) || "person",
         consent_given: !!c.consent_given,
         description: (c.description as string) || null,
       }))}

@@ -30,7 +30,7 @@ interface Counts {
   draftPosts: number;
   vendors: number;
   projects: number;
-  clients: number;
+  personas: number;
   locations: number;
   corrections: number;
   rewardPrompts: number;

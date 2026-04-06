@@ -126,7 +126,7 @@ export default async function MediaPage({ searchParams }: Props) {
   `;
 
   const [siteData, allBrands, allProjects, assetBrandRows, assetProjectRows] = await Promise.all([
-    sql`SELECT content_pillars, pillar_config, brand_label, project_label, client_label, location_label FROM sites WHERE id = ${siteId}`,
+    sql`SELECT content_pillars, pillar_config, brand_label, project_label, persona_label, location_label FROM sites WHERE id = ${siteId}`,
     sql`SELECT id, name, slug, url FROM brands WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`SELECT id, name, slug FROM projects WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`

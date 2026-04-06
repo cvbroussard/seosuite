@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 
 /**
  * GET /api/clients?site_id=...
- * List clients for a site.
+ * List personas for a site.
  */
 export async function GET(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -15,18 +15,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ clients: [] });
   }
 
-  const clients = await sql`
-    SELECT id, name, slug, display_name, consent_given, description, created_at
-    FROM clients WHERE site_id = ${siteId}
+  const personas = await sql`
+    SELECT id, name, slug, display_name, type, consent_given, description, created_at
+    FROM personas WHERE site_id = ${siteId}
     ORDER BY name ASC
   `;
 
-  return NextResponse.json({ clients });
+  return NextResponse.json({ clients: personas });
 }
 
 /**
- * POST /api/clients — create a client
- * Body: { name, display_name?, consent_given?, description?, site_id }
+ * POST /api/clients — create a persona
+ * Body: { name, display_name?, type?, consent_given?, description?, site_id }
  */
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, display_name, consent_given, description, site_id } = body;
+  const { name, display_name, type, consent_given, description, site_id } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -56,12 +56,14 @@ export async function POST(req: NextRequest) {
     .replace(/^_|_$/g, "")
     .slice(0, 40);
 
-  const [client] = await sql`
-    INSERT INTO clients (site_id, name, slug, display_name, consent_given, description)
-    VALUES (${site_id}, ${name.trim()}, ${slug}, ${display_name || null}, ${consent_given ?? false}, ${description || null})
-    ON CONFLICT (site_id, slug) DO UPDATE SET name = ${name.trim()}, display_name = ${display_name || null}, consent_given = ${consent_given ?? false}, description = ${description || null}
-    RETURNING id, name, slug, display_name, consent_given, description
+  const personaType = type || "person";
+
+  const [persona] = await sql`
+    INSERT INTO personas (site_id, name, slug, display_name, type, consent_given, description)
+    VALUES (${site_id}, ${name.trim()}, ${slug}, ${display_name || null}, ${personaType}, ${consent_given ?? false}, ${description || null})
+    ON CONFLICT (site_id, slug) DO UPDATE SET name = ${name.trim()}, display_name = ${display_name || null}, type = ${personaType}, consent_given = ${consent_given ?? false}, description = ${description || null}
+    RETURNING id, name, slug, display_name, type, consent_given, description
   `;
 
-  return NextResponse.json({ client });
+  return NextResponse.json({ client: persona });
 }

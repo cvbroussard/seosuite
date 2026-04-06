@@ -19,9 +19,9 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { context_note, pillar, content_tags, vendor_ids, brand_ids, project_ids, client_ids, location_ids } = body;
+    const { context_note, pillar, content_tags, vendor_ids, brand_ids, project_ids, persona_ids, location_ids } = body;
 
-    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && client_ids === undefined && location_ids === undefined) {
+    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && persona_ids === undefined && location_ids === undefined) {
       return NextResponse.json(
         { error: "Nothing to update" },
         { status: 400 }
@@ -79,17 +79,17 @@ export async function PATCH(
       }
     }
 
-    // Project, client, location tagging (separate body fields)
+    // Project, persona, location tagging (separate body fields)
     if (Array.isArray(project_ids)) {
       await sql`DELETE FROM asset_projects WHERE asset_id = ${id}`;
       for (const projectId of project_ids) {
         await sql`INSERT INTO asset_projects (asset_id, project_id) VALUES (${id}, ${projectId}) ON CONFLICT DO NOTHING`;
       }
     }
-    if (Array.isArray(client_ids)) {
-      await sql`DELETE FROM asset_clients WHERE asset_id = ${id}`;
-      for (const clientId of client_ids) {
-        await sql`INSERT INTO asset_clients (asset_id, client_id) VALUES (${id}, ${clientId}) ON CONFLICT DO NOTHING`;
+    if (Array.isArray(persona_ids)) {
+      await sql`DELETE FROM asset_personas WHERE asset_id = ${id}`;
+      for (const personaId of persona_ids) {
+        await sql`INSERT INTO asset_personas (asset_id, persona_id) VALUES (${id}, ${personaId}) ON CONFLICT DO NOTHING`;
       }
     }
     if (Array.isArray(location_ids)) {
@@ -197,7 +197,7 @@ export async function DELETE(
   await sql`UPDATE blog_posts SET source_asset_id = NULL WHERE source_asset_id = ${id}`;
   await sql`DELETE FROM asset_brands WHERE asset_id = ${id}`;
   await sql`DELETE FROM asset_projects WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_clients WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_personas WHERE asset_id = ${id}`;
   await sql`DELETE FROM asset_locations WHERE asset_id = ${id}`;
   await sql`DELETE FROM media_assets WHERE id = ${id}`;
 

@@ -32,11 +32,12 @@ interface CaptionStatus {
   uncaptioned: number;
 }
 
-interface Client {
+interface Persona {
   id: string;
   name: string;
   slug: string;
   display_name: string | null;
+  type: string;
   consent_given: boolean;
   description: string | null;
 }
@@ -54,16 +55,16 @@ interface Location {
 interface Labels {
   brand_label: string | null;
   project_label: string | null;
-  client_label: string | null;
+  persona_label: string | null;
   location_label: string | null;
 }
 
-type EntityType = "brands" | "projects" | "clients" | "locations";
+type EntityType = "brands" | "projects" | "personas" | "locations";
 
 const SECTIONS: { key: EntityType; labelKey: keyof Labels }[] = [
   { key: "brands", labelKey: "brand_label" },
   { key: "projects", labelKey: "project_label" },
-  { key: "clients", labelKey: "client_label" },
+  { key: "personas", labelKey: "persona_label" },
   { key: "locations", labelKey: "location_label" },
 ];
 
@@ -72,20 +73,20 @@ export function EntitiesManager({
   labels: initialLabels,
   brands: initialBrands,
   projects: initialProjects,
-  clients: initialClients,
+  personas: initialPersonas,
   locations: initialLocations,
 }: {
   siteId: string;
   labels: Labels;
   brands: Brand[];
   projects: Project[];
-  clients: Client[];
+  personas: Persona[];
   locations: Location[];
 }) {
   const [labels, setLabels] = useState(initialLabels);
   const [brands, setBrands] = useState(initialBrands);
   const [projects, setProjects] = useState(initialProjects);
-  const [clients, setClients] = useState(initialClients);
+  const [personas, setPersonas] = useState(initialPersonas);
   const [locations, setLocations] = useState(initialLocations);
   const [showConfig, setShowConfig] = useState(false);
 
@@ -147,11 +148,12 @@ export function EntitiesManager({
   const [newProjectAddress, setNewProjectAddress] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
 
-  // Client form
-  const [newClientName, setNewClientName] = useState("");
-  const [newClientDisplay, setNewClientDisplay] = useState("");
-  const [newClientConsent, setNewClientConsent] = useState(false);
-  const [newClientDesc, setNewClientDesc] = useState("");
+  // Persona form
+  const [newPersonaName, setNewPersonaName] = useState("");
+  const [newPersonaDisplay, setNewPersonaDisplay] = useState("");
+  const [newPersonaType, setNewPersonaType] = useState("person");
+  const [newPersonaConsent, setNewPersonaConsent] = useState(false);
+  const [newPersonaDesc, setNewPersonaDesc] = useState("");
 
   // Location form
   const [newLocName, setNewLocName] = useState("");
@@ -174,7 +176,7 @@ export function EntitiesManager({
           site_id: siteId,
           brand_label: configLabels.brand_label?.trim() || null,
           project_label: configLabels.project_label?.trim() || null,
-          client_label: configLabels.client_label?.trim() || null,
+          persona_label: configLabels.persona_label?.trim() || null,
           location_label: configLabels.location_label?.trim() || null,
         }),
       });
@@ -182,7 +184,7 @@ export function EntitiesManager({
         const newLabels = {
           brand_label: configLabels.brand_label?.trim() || null,
           project_label: configLabels.project_label?.trim() || null,
-          client_label: configLabels.client_label?.trim() || null,
+          persona_label: configLabels.persona_label?.trim() || null,
           location_label: configLabels.location_label?.trim() || null,
         };
         setLabels(newLabels);
@@ -248,28 +250,30 @@ export function EntitiesManager({
     setAdding(false);
   }
 
-  async function addClient() {
-    if (!newClientName.trim()) return;
+  async function addPersona() {
+    if (!newPersonaName.trim()) return;
     setAdding(true);
     try {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: newClientName.trim(),
-          display_name: newClientDisplay.trim() || null,
-          consent_given: newClientConsent,
-          description: newClientDesc.trim() || null,
+          name: newPersonaName.trim(),
+          display_name: newPersonaDisplay.trim() || null,
+          type: newPersonaType,
+          consent_given: newPersonaConsent,
+          description: newPersonaDesc.trim() || null,
           site_id: siteId,
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        setClients((prev) => [...prev, data.client].sort((a, b) => a.name.localeCompare(b.name)));
-        setNewClientName("");
-        setNewClientDisplay("");
-        setNewClientConsent(false);
-        setNewClientDesc("");
+        setPersonas((prev) => [...prev, data.client].sort((a: Persona, b: Persona) => a.name.localeCompare(b.name)));
+        setNewPersonaName("");
+        setNewPersonaDisplay("");
+        setNewPersonaType("person");
+        setNewPersonaConsent(false);
+        setNewPersonaDesc("");
       }
     } catch { /* ignore */ }
     setAdding(false);
@@ -305,18 +309,19 @@ export function EntitiesManager({
   }
 
   async function updateItem(type: EntityType, id: string) {
+    const apiPath = type === "personas" ? "clients" : type;
     try {
-      const res = await fetch(`/api/${type}/${id}`, {
+      const res = await fetch(`/api/${apiPath}/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editFields),
       });
       if (res.ok) {
         const data = await res.json();
-        const updated = data[type === "brands" ? "brand" : type === "projects" ? "project" : type === "clients" ? "client" : "location"];
+        const updated = data[type === "brands" ? "brand" : type === "projects" ? "project" : type === "personas" ? "client" : "location"];
         if (type === "brands") setBrands((prev) => prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.name.localeCompare(b.name)));
         if (type === "projects") setProjects((prev) => prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.name.localeCompare(b.name)));
-        if (type === "clients") setClients((prev) => prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.name.localeCompare(b.name)));
+        if (type === "personas") setPersonas((prev) => prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.name.localeCompare(b.name)));
         if (type === "locations") setLocations((prev) => prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.name.localeCompare(b.name)));
         setEditing(null);
       }
@@ -324,11 +329,12 @@ export function EntitiesManager({
   }
 
   async function deleteItem(type: EntityType, id: string) {
+    const apiPath = type === "personas" ? "clients" : type;
     try {
-      await fetch(`/api/${type}/${id}`, { method: "DELETE" });
+      await fetch(`/api/${apiPath}/${id}`, { method: "DELETE" });
       if (type === "brands") setBrands((prev) => prev.filter((e) => e.id !== id));
       if (type === "projects") setProjects((prev) => prev.filter((e) => e.id !== id));
-      if (type === "clients") setClients((prev) => prev.filter((e) => e.id !== id));
+      if (type === "personas") setPersonas((prev) => prev.filter((e) => e.id !== id));
       if (type === "locations") setLocations((prev) => prev.filter((e) => e.id !== id));
     } catch { /* ignore */ }
   }
@@ -336,7 +342,7 @@ export function EntitiesManager({
   function getItemCount(key: EntityType) {
     if (key === "brands") return brands.length;
     if (key === "projects") return projects.length;
-    if (key === "clients") return clients.length;
+    if (key === "personas") return personas.length;
     if (key === "locations") return locations.length;
     return 0;
   }
@@ -364,13 +370,13 @@ export function EntitiesManager({
           <h3 className="mb-4 text-sm font-medium">Label Configuration</h3>
           <p className="mb-4 text-xs text-muted">Set a label to enable the section. Clear it to disable.</p>
           <div className="space-y-3">
-            {(["brand_label", "project_label", "client_label", "location_label"] as const).map((key) => (
+            {(["brand_label", "project_label", "persona_label", "location_label"] as const).map((key) => (
               <div key={key} className="flex items-center gap-3">
                 <span className="w-20 text-xs text-dim capitalize">{key.replace("_label", "")}</span>
                 <input
                   value={configLabels[key] || ""}
                   onChange={(e) => setConfigLabels((prev) => ({ ...prev, [key]: e.target.value }))}
-                  placeholder={`Label (e.g. ${key === "brand_label" ? "Vendors" : key === "project_label" ? "Projects" : key === "client_label" ? "Clients" : "Locations"})`}
+                  placeholder={`Label (e.g. ${key === "brand_label" ? "Vendors" : key === "project_label" ? "Projects" : key === "persona_label" ? "People" : "Locations"})`}
                   className="flex-1 text-sm"
                 />
               </div>
@@ -455,25 +461,31 @@ export function EntitiesManager({
             </>
           )}
 
-          {activeTab === "clients" && (
+          {activeTab === "personas" && (
             <>
               <div className="mb-6 space-y-2">
                 <div className="flex gap-2">
-                  <input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} className="flex-1 text-sm" placeholder="Client name" />
-                  <input value={newClientDisplay} onChange={(e) => setNewClientDisplay(e.target.value)} className="flex-1 text-sm" placeholder="Display name (optional)" />
-                  <button onClick={addClient} disabled={adding || !newClientName.trim()} className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50">
+                  <input value={newPersonaName} onChange={(e) => setNewPersonaName(e.target.value)} className="flex-1 text-sm" placeholder="Name" />
+                  <input value={newPersonaDisplay} onChange={(e) => setNewPersonaDisplay(e.target.value)} className="flex-1 text-sm" placeholder="Display name (optional)" />
+                  <select value={newPersonaType} onChange={(e) => setNewPersonaType(e.target.value)} className="text-sm">
+                    <option value="person">Person</option>
+                    <option value="group">Group</option>
+                    <option value="role">Role</option>
+                    <option value="pet">Pet</option>
+                  </select>
+                  <button onClick={addPersona} disabled={adding || !newPersonaName.trim()} className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50">
                     {adding ? "..." : "Add"}
                   </button>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
-                    <input type="checkbox" checked={newClientConsent} onChange={(e) => setNewClientConsent(e.target.checked)} className="accent-accent" />
+                    <input type="checkbox" checked={newPersonaConsent} onChange={(e) => setNewPersonaConsent(e.target.checked)} className="accent-accent" />
                     Consent given to name in content
                   </label>
-                  <input value={newClientDesc} onChange={(e) => setNewClientDesc(e.target.value)} className="flex-1 text-sm" placeholder="Description (optional)" />
+                  <input value={newPersonaDesc} onChange={(e) => setNewPersonaDesc(e.target.value)} className="flex-1 text-sm" placeholder="Description (optional)" />
                 </div>
               </div>
-              {renderClientList()}
+              {renderPersonaList()}
             </>
           )}
 
@@ -690,47 +702,62 @@ export function EntitiesManager({
     );
   }
 
-  function renderClientList() {
-    if (clients.length === 0) {
+  function renderPersonaList() {
+    if (personas.length === 0) {
       return (
         <div className="rounded-lg border border-dashed border-border px-8 py-12 text-center">
           <p className="text-sm text-muted">No {currentLabel.toLowerCase()} yet. Add one above.</p>
         </div>
       );
     }
+    const typeColors: Record<string, string> = {
+      person: "bg-accent/20 text-accent",
+      group: "bg-success/20 text-success",
+      role: "bg-warning/20 text-warning",
+      pet: "bg-muted/20 text-muted",
+    };
     return (
       <div className="space-y-1">
-        {clients.map((client) => (
-          <div key={client.id} className={`border-b border-border py-3 last:border-0 ${editing === client.id ? "" : "flex items-center gap-4"}`}>
-            {editing === client.id ? (
+        {personas.map((persona) => (
+          <div key={persona.id} className={`border-b border-border py-3 last:border-0 ${editing === persona.id ? "" : "flex items-center gap-4"}`}>
+            {editing === persona.id ? (
               <div className="flex-1 space-y-2">
                 <div className="flex gap-2">
-                  <input id={`edit-client-name-${client.id}`} value={(editFields.name as string) ?? ""} onChange={(e) => setEditFields((f) => ({ ...f, name: e.target.value }))} className="flex-1 text-sm" placeholder="Name" autoFocus />
-                  <input id={`edit-client-display-${client.id}`} value={(editFields.display_name as string) ?? ""} onChange={(e) => setEditFields((f) => ({ ...f, display_name: e.target.value }))} className="flex-1 text-sm" placeholder="Display name (alias if no consent)" />
+                  <input id={`edit-persona-name-${persona.id}`} value={(editFields.name as string) ?? ""} onChange={(e) => setEditFields((f) => ({ ...f, name: e.target.value }))} className="flex-1 text-sm" placeholder="Name" autoFocus />
+                  <input id={`edit-persona-display-${persona.id}`} value={(editFields.display_name as string) ?? ""} onChange={(e) => setEditFields((f) => ({ ...f, display_name: e.target.value }))} className="flex-1 text-sm" placeholder="Display name (alias if no consent)" />
+                  <select id={`edit-persona-type-${persona.id}`} value={(editFields.type as string) ?? "person"} onChange={(e) => setEditFields((f) => ({ ...f, type: e.target.value }))} className="text-sm">
+                    <option value="person">Person</option>
+                    <option value="group">Group</option>
+                    <option value="role">Role</option>
+                    <option value="pet">Pet</option>
+                  </select>
                   <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer whitespace-nowrap">
-                    <input id={`edit-client-consent-${client.id}`} type="checkbox" checked={!!editFields.consent_given} onChange={(e) => setEditFields((f) => ({ ...f, consent_given: e.target.checked }))} className="accent-accent" />
+                    <input id={`edit-persona-consent-${persona.id}`} type="checkbox" checked={!!editFields.consent_given} onChange={(e) => setEditFields((f) => ({ ...f, consent_given: e.target.checked }))} className="accent-accent" />
                     Consent given
                   </label>
                 </div>
                 <div className="flex gap-2">
-                  <input id={`edit-client-desc-${client.id}`} value={(editFields.description as string) ?? ""} onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))} className="flex-1 text-sm" placeholder="Description (optional)" />
-                  <button onClick={() => updateItem("clients", client.id)} className="text-xs text-accent hover:underline">Save</button>
+                  <input id={`edit-persona-desc-${persona.id}`} value={(editFields.description as string) ?? ""} onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))} className="flex-1 text-sm" placeholder="Description (optional)" />
+                  <button onClick={() => updateItem("personas", persona.id)} className="text-xs text-accent hover:underline">Save</button>
                   <button onClick={() => setEditing(null)} className="text-xs text-muted hover:text-foreground">Cancel</button>
                 </div>
               </div>
             ) : (
               <>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{client.name}</p>
-                  {client.display_name && <p className="text-xs text-muted">Display: {client.display_name}</p>}
-                  {client.description && <p className="text-xs text-dim">{client.description}</p>}
+                  <p className="text-sm font-medium">{persona.name}</p>
+                  {persona.display_name && <p className="text-xs text-muted">Display: {persona.display_name}</p>}
+                  {persona.description && <p className="text-xs text-dim">{persona.description}</p>}
                 </div>
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${client.consent_given ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}>
-                  {client.consent_given ? "consent" : "no consent"}
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${typeColors[persona.type] || ""}`}>
+                  {persona.type}
                 </span>
-                <span className="text-xs text-muted">{client.slug}</span>
-                <button onClick={() => { setEditing(client.id); setEditFields({ name: client.name, display_name: client.display_name || "", consent_given: client.consent_given, description: client.description || "" }); }} className="text-xs text-muted hover:text-foreground">Edit</button>
-                <button onClick={() => deleteItem("clients", client.id)} className="text-xs text-muted hover:text-danger">Delete</button>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${persona.consent_given ? "bg-success/20 text-success" : "bg-warning/20 text-warning"}`}>
+                  {persona.consent_given ? "consent" : "no consent"}
+                </span>
+                <span className="text-xs text-muted">{persona.slug}</span>
+                <button onClick={() => { setEditing(persona.id); setEditFields({ name: persona.name, display_name: persona.display_name || "", type: persona.type || "person", consent_given: persona.consent_given, description: persona.description || "" }); }} className="text-xs text-muted hover:text-foreground">Edit</button>
+                <button onClick={() => deleteItem("personas", persona.id)} className="text-xs text-muted hover:text-danger">Delete</button>
               </>
             )}
           </div>
