@@ -19,6 +19,17 @@ interface Project {
   end_date: string | null;
   address: string | null;
   description: string | null;
+  caption_mode?: string;
+  manual_caption_count?: number;
+}
+
+interface CaptionStatus {
+  caption_mode: string;
+  manual_caption_count: number;
+  seed_threshold: number;
+  total_assets: number;
+  captioned: number;
+  uncaptioned: number;
 }
 
 interface Client {
@@ -77,6 +88,41 @@ export function EntitiesManager({
   const [clients, setClients] = useState(initialClients);
   const [locations, setLocations] = useState(initialLocations);
   const [showConfig, setShowConfig] = useState(false);
+
+  // Caption status per project
+  const [captionStatuses, setCaptionStatuses] = useState<Record<string, CaptionStatus>>({});
+  const [togglingAutopilot, setTogglingAutopilot] = useState<string | null>(null);
+
+  // Fetch caption statuses for all projects on mount
+  useState(() => {
+    for (const p of initialProjects) {
+      fetch(`/api/projects/${p.id}/captions`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data) setCaptionStatuses((prev) => ({ ...prev, [p.id]: data }));
+        })
+        .catch(() => {});
+    }
+  });
+
+  async function toggleAutopilot(projectId: string) {
+    setTogglingAutopilot(projectId);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/captions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "autopilot" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCaptionStatuses((prev) => ({
+          ...prev,
+          [projectId]: { ...prev[projectId], caption_mode: "autopilot", uncaptioned: (prev[projectId]?.uncaptioned || 0) - (data.generated || 0), captioned: (prev[projectId]?.captioned || 0) + (data.generated || 0) },
+        }));
+      }
+    } catch { /* ignore */ }
+    setTogglingAutopilot(null);
+  }
 
   // Config state
   const [configLabels, setConfigLabels] = useState({ ...initialLabels });
@@ -583,7 +629,10 @@ export function EntitiesManager({
             ) : (
               <>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{project.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">{project.name}</p>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColors[project.status] || ""}`}>{project.status}</span>
+                  </div>
                   {project.description && <p className="text-xs text-muted">{project.description}</p>}
                   {(project.start_date || project.end_date) && (
                     <p className="text-[10px] text-dim">
@@ -592,16 +641,47 @@ export function EntitiesManager({
                       {project.end_date && new Date(project.end_date).toLocaleDateString()}
                     </p>
                   )}
+                  {/* Caption status */}
+                  {captionStatuses[project.id] && (() => {
+                    const cs = captionStatuses[project.id];
+                    if (cs.total_assets === 0) return null;
+                    return (
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-[10px] text-dim">
+                          {cs.captioned}/{cs.total_assets} captioned
+                        </span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                          cs.caption_mode === "autopilot" ? "bg-success/20 text-success"
+                            : cs.caption_mode === "supervised" ? "bg-accent/20 text-accent"
+                            : "bg-muted/20 text-muted"
+                        }`}>
+                          {cs.caption_mode === "autopilot" ? "autopilot"
+                            : cs.caption_mode === "supervised" ? "supervised"
+                            : `seeding ${cs.manual_caption_count}/${cs.seed_threshold}`}
+                        </span>
+                        {cs.caption_mode === "supervised" && cs.uncaptioned > 0 && (
+                          <button
+                            onClick={() => toggleAutopilot(project.id)}
+                            disabled={togglingAutopilot === project.id}
+                            className="text-[10px] text-accent hover:underline disabled:opacity-50"
+                          >
+                            {togglingAutopilot === project.id ? "generating..." : "switch to autopilot"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColors[project.status] || ""}`}>{project.status}</span>
-                <a
-                  href={`/dashboard/capture?project=${project.id}&projectName=${encodeURIComponent(project.name)}`}
-                  className="text-xs text-accent hover:underline"
-                >
-                  Upload
-                </a>
-                <button onClick={() => { setEditing(project.id); setEditFields({ name: project.name, status: project.status, start_date: project.start_date || "", end_date: project.end_date || "", address: project.address || "", description: project.description || "" }); }} className="text-xs text-muted hover:text-foreground">Edit</button>
-                <button onClick={() => deleteItem("projects", project.id)} className="text-xs text-muted hover:text-danger">Delete</button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={`/dashboard/capture?project=${project.id}&projectName=${encodeURIComponent(project.name)}`}
+                    className="text-xs text-accent hover:underline"
+                  >
+                    Upload
+                  </a>
+                  <button onClick={() => { setEditing(project.id); setEditFields({ name: project.name, status: project.status, start_date: project.start_date || "", end_date: project.end_date || "", address: project.address || "", description: project.description || "" }); }} className="text-xs text-muted hover:text-foreground">Edit</button>
+                  <button onClick={() => deleteItem("projects", project.id)} className="text-xs text-muted hover:text-danger">Delete</button>
+                </div>
               </>
             )}
           </div>
