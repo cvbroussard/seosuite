@@ -36,39 +36,61 @@ export function FaceOverlay({ imageUrl, faces, personas, assetId, onFaceNamed }:
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  function updateSize() {
+    if (imgRef.current && imgRef.current.naturalWidth > 0) {
+      setImgSize({
+        width: imgRef.current.clientWidth,
+        height: imgRef.current.clientHeight,
+        naturalWidth: imgRef.current.naturalWidth,
+        naturalHeight: imgRef.current.naturalHeight,
+      });
+    }
+  }
+
   useEffect(() => {
-    function updateSize() {
-      if (imgRef.current) {
-        setImgSize({
-          width: imgRef.current.clientWidth,
-          height: imgRef.current.clientHeight,
-          naturalWidth: imgRef.current.naturalWidth,
-          naturalHeight: imgRef.current.naturalHeight,
-        });
-      }
-    }
     const img = imgRef.current;
-    if (img) {
-      if (img.complete) updateSize();
-      img.addEventListener("load", updateSize);
-      window.addEventListener("resize", updateSize);
-      return () => {
-        img.removeEventListener("load", updateSize);
-        window.removeEventListener("resize", updateSize);
-      };
+    if (!img) return;
+
+    if (img.complete && img.naturalWidth > 0) {
+      updateSize();
     }
+    img.addEventListener("load", updateSize);
+    window.addEventListener("resize", updateSize);
+
+    // Fallback: poll until dimensions are available
+    const poll = setInterval(() => {
+      if (img.naturalWidth > 0 && imgSize.naturalWidth === 0) {
+        updateSize();
+        clearInterval(poll);
+      }
+    }, 100);
+
+    return () => {
+      img.removeEventListener("load", updateSize);
+      window.removeEventListener("resize", updateSize);
+      clearInterval(poll);
+    };
   }, []);
 
-  // Scale face boxes from natural image coordinates to displayed coordinates
+  // Scale face boxes to displayed image coordinates.
+  // Boxes are stored relative to the detection image (800px wide).
+  // We scale from natural image dimensions to displayed dimensions.
+  // Since detection downscales proportionally, natural coords work if
+  // face coordinates are stored relative to the original image.
+  // For pipeline-detected faces (800px width), we scale from natural image.
   function scaleBox(box: FaceData["box"]) {
-    if (!imgSize.naturalWidth || !imgSize.width) return { left: 0, top: 0, width: 0, height: 0 };
-    const scaleX = imgSize.width / imgSize.naturalWidth;
-    const scaleY = imgSize.height / imgSize.naturalHeight;
+    if (!imgSize.width || !imgSize.naturalWidth) return { left: 0, top: 0, width: 0, height: 0 };
+    // Detection runs on an 800px-wide resize. Scale box coords from
+    // the 800px detection space to the original natural image, then to display.
+    const detectionWidth = Math.min(800, imgSize.naturalWidth);
+    const detectionScale = imgSize.naturalWidth / detectionWidth;
+    const displayScaleX = imgSize.width / imgSize.naturalWidth;
+    const displayScaleY = imgSize.height / imgSize.naturalHeight;
     return {
-      left: box.x * scaleX,
-      top: box.y * scaleY,
-      width: box.width * scaleX,
-      height: box.height * scaleY,
+      left: box.x * detectionScale * displayScaleX,
+      top: box.y * detectionScale * displayScaleY,
+      width: box.width * detectionScale * displayScaleX,
+      height: box.height * detectionScale * displayScaleY,
     };
   }
 
