@@ -84,14 +84,22 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
   `;
 
   // Auto-generate context note if the asset doesn't have one
+  // Skip for project-tagged assets — those use the progressive caption pipeline
   const autoContext = result.ai_analysis?.context_note as string | undefined;
   if (autoContext && !(asset.context_note as string)) {
-    await sql`
-      UPDATE media_assets
-      SET context_note = ${autoContext},
-          metadata = COALESCE(metadata, '{}'::jsonb) || '{"context_auto_generated": true}'::jsonb
-      WHERE id = ${assetId}
+    const [projectLink] = await sql`
+      SELECT 1 FROM asset_projects WHERE asset_id = ${assetId} LIMIT 1
     `;
+    const meta = (asset.metadata || {}) as Record<string, unknown>;
+    const hasPendingProject = !!meta.pending_project_id;
+    if (!projectLink && !hasPendingProject) {
+      await sql`
+        UPDATE media_assets
+        SET context_note = ${autoContext},
+            metadata = COALESCE(metadata, '{}'::jsonb) || '{"context_auto_generated": true}'::jsonb
+        WHERE id = ${assetId}
+      `;
+    }
   }
 
   // Log triage in history
