@@ -16,6 +16,7 @@ interface Asset {
   content_tags: string[] | null;
   source: string | null;
   ai_analysis: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
   flag_reason: string | null;
   created_at: string;
 }
@@ -69,10 +70,13 @@ export function MediaGrid({
 }) {
   const [assets, setAssets] = useState(initialAssets);
   const [editing, setEditing] = useState<Asset | null>(null);
+  const [lastEdited, setLastEdited] = useState<string | null>(null);
   const [liveBrands, setLiveBrands] = useState(brands);
   const [liveProjects, setLiveProjects] = useState(projects);
+  const [liveBrandMap, setLiveBrandMap] = useState(assetBrandMap);
+  const [liveProjectMap, setLiveProjectMap] = useState(assetProjectMap);
 
-  function handleSaved(note: string, pillar: string, tags: string[]) {
+  function handleSaved(note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[]) {
     if (!editing) return;
     setAssets((prev) =>
       prev.map((a) =>
@@ -81,6 +85,12 @@ export function MediaGrid({
           : a
       )
     );
+    if (brandIds) {
+      setLiveBrandMap((prev) => ({ ...prev, [editing.id]: brandIds }));
+    }
+    if (projectIds) {
+      setLiveProjectMap((prev) => ({ ...prev, [editing.id]: projectIds }));
+    }
   }
 
   return (
@@ -89,8 +99,10 @@ export function MediaGrid({
         {assets.map((a) => (
           <button
             key={a.id}
-            onClick={() => setEditing(a)}
-            className="group relative overflow-hidden rounded-lg border border-border bg-surface text-left transition-colors hover:border-accent/40"
+            onClick={() => { setEditing(a); setLastEdited(a.id); }}
+            className={`group relative overflow-hidden rounded-lg border bg-surface text-left transition-colors ${
+              lastEdited === a.id ? "border-accent ring-1 ring-accent" : "border-border hover:border-accent/40"
+            }`}
           >
             <div className="relative aspect-square bg-background">
               {a.media_type === "video" ? (
@@ -153,6 +165,22 @@ export function MediaGrid({
                     {(a.quality_score * 100).toFixed(0)}%
                   </span>
                 )}
+                {(liveBrandMap[a.id] || []).map((bid) => {
+                  const brand = liveBrands.find((b) => b.id === bid);
+                  return brand ? (
+                    <span key={bid} className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent">
+                      {brand.name}
+                    </span>
+                  ) : null;
+                })}
+                {(liveProjectMap[a.id] || []).map((pid) => {
+                  const project = liveProjects.find((p) => p.id === pid);
+                  return project ? (
+                    <span key={pid} className="rounded bg-success/15 px-1.5 py-0.5 text-[10px] text-success">
+                      {project.name}
+                    </span>
+                  ) : null;
+                })}
               </div>
               {a.flag_reason && (
                 <p className="mt-1 text-[10px] text-danger">{a.flag_reason}</p>
@@ -176,15 +204,32 @@ export function MediaGrid({
           projects={liveProjects}
           brandLabel={brandLabel}
           projectLabel={projectLabel}
-          initialBrandIds={assetBrandMap[editing.id] || []}
-          initialProjectIds={assetProjectMap[editing.id] || []}
+          initialBrandIds={liveBrandMap[editing.id] || []}
+          initialProjectIds={liveProjectMap[editing.id] || []}
           onBrandCreated={(brand) => setLiveBrands((prev) => [...prev, brand].sort((a, b) => a.name.localeCompare(b.name)))}
           onProjectCreated={(project) => setLiveProjects((prev) => [...prev, project].sort((a, b) => a.name.localeCompare(b.name)))}
+          captionSource={((editing.metadata as Record<string, unknown>)?.caption_source as string) || null}
           source={editing.source}
           qualityScore={Number(editing.quality_score) || null}
           sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+          onNext={() => {
+            const idx = assets.findIndex((a) => a.id === editing.id);
+            if (idx < assets.length - 1) {
+              setLastEdited(assets[idx + 1].id);
+              setEditing(assets[idx + 1]);
+            }
+          }}
+          onPrev={() => {
+            const idx = assets.findIndex((a) => a.id === editing.id);
+            if (idx > 0) {
+              setLastEdited(assets[idx - 1].id);
+              setEditing(assets[idx - 1]);
+            }
+          }}
+          hasNext={assets.findIndex((a) => a.id === editing.id) < assets.length - 1}
+          hasPrev={assets.findIndex((a) => a.id === editing.id) > 0}
           onDeleted={() => {
             setAssets((prev) => prev.filter((a) => a.id !== editing.id));
             setEditing(null);

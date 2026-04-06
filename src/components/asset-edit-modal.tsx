@@ -35,11 +35,16 @@ interface AssetEditModalProps {
   source?: string | null;
   qualityScore?: number | null;
   sceneType?: string | null;
+  captionSource?: string | null;
   onClose: () => void;
-  onSaved: (note: string, pillar: string, tags: string[]) => void;
+  onSaved: (note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[]) => void;
   onDeleted?: () => void;
   onBrandCreated?: (brand: Brand) => void;
   onProjectCreated?: (project: Project) => void;
+  onNext?: () => void;
+  onPrev?: () => void;
+  hasNext?: boolean;
+  hasPrev?: boolean;
 }
 
 export function AssetEditModal({
@@ -60,11 +65,16 @@ export function AssetEditModal({
   source,
   qualityScore,
   sceneType,
+  captionSource,
   onClose,
   onSaved,
   onDeleted,
   onBrandCreated,
   onProjectCreated,
+  onNext,
+  onPrev,
+  hasNext = false,
+  hasPrev = false,
 }: AssetEditModalProps) {
   const [note, setNote] = useState(initialNote);
   const [pillar, setPillar] = useState(initialPillar);
@@ -226,31 +236,47 @@ export function AssetEditModal({
     setCreatingProject(false);
   }
 
+  async function doSave(): Promise<boolean> {
+    const body: Record<string, unknown> = {};
+    if (note !== initialNote) body.context_note = note;
+    if (pillar !== initialPillar) body.pillar = pillar;
+    if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
+    if (JSON.stringify(brandIds.sort()) !== JSON.stringify(initialBrandIds.sort())) body.brand_ids = brandIds;
+    if (JSON.stringify(projectIds.sort()) !== JSON.stringify(initialProjectIds.sort())) body.project_ids = projectIds;
+
+    if (Object.keys(body).length === 0) return true;
+
+    const res = await fetch(`/api/assets/${assetId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) return false;
+
+    onSaved(note, pillar, tags, brandIds, projectIds);
+    return true;
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
-      const body: Record<string, unknown> = {};
-      if (note !== initialNote) body.context_note = note;
-      if (pillar !== initialPillar) body.pillar = pillar;
-      if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
-      if (JSON.stringify(brandIds.sort()) !== JSON.stringify(initialBrandIds.sort())) body.brand_ids = brandIds;
-      if (JSON.stringify(projectIds.sort()) !== JSON.stringify(initialProjectIds.sort())) body.project_ids = projectIds;
+      const ok = await doSave();
+      if (ok) onClose();
+      else alert("Failed to save changes");
+    } catch {
+      alert("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  }
 
-      if (Object.keys(body).length === 0) {
-        onClose();
-        return;
-      }
-
-      const res = await fetch(`/api/assets/${assetId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) throw new Error("Save failed");
-
-      onSaved(note, pillar, tags);
-      onClose();
+  async function handleSaveAndNext() {
+    if (!onNext) return;
+    setSaving(true);
+    try {
+      await doSave();
+      onNext();
     } catch {
       alert("Failed to save changes");
     } finally {
@@ -316,6 +342,15 @@ export function AssetEditModal({
                     : "bg-danger/20 text-danger"
                 }`}>
                   {(qualityScore * 100).toFixed(0)}%
+                </span>
+              )}
+              {captionSource && (
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  captionSource === "ai" ? "bg-accent/20 text-accent"
+                    : captionSource === "corrected" ? "bg-warning/20 text-warning"
+                    : "bg-success/20 text-success"
+                }`}>
+                  {captionSource === "ai" ? "AI caption" : captionSource === "corrected" ? "corrected" : "manual"}
                 </span>
               )}
               {totalTagged > 0 && (
@@ -556,7 +591,15 @@ export function AssetEditModal({
               Delete
             </button>
           )}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {hasPrev && (
+              <button
+                onClick={onPrev}
+                className="px-3 py-2 text-xs text-muted hover:text-foreground"
+              >
+                Prev
+              </button>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 text-xs text-muted hover:text-foreground"
@@ -566,10 +609,19 @@ export function AssetEditModal({
             <button
               onClick={handleSave}
               disabled={saving}
-              className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              className="border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
+            {hasNext && (
+              <button
+                onClick={handleSaveAndNext}
+                disabled={saving}
+                className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {saving ? "..." : "Save & Next >>"}
+              </button>
+            )}
           </div>
         </div>
       </div>
