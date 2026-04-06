@@ -125,10 +125,11 @@ export default async function MediaPage({ searchParams }: Props) {
     FROM media_assets WHERE site_id = ${siteId}
   `;
 
-  const [siteData, allBrands, allProjects, assetBrandRows, assetProjectRows] = await Promise.all([
+  const [siteData, allBrands, allProjects, allPersonas, assetBrandRows, assetProjectRows] = await Promise.all([
     sql`SELECT content_pillars, pillar_config, brand_label, project_label, persona_label, location_label FROM sites WHERE id = ${siteId}`,
     sql`SELECT id, name, slug, url FROM brands WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`SELECT id, name, slug FROM projects WHERE site_id = ${siteId} ORDER BY name ASC`,
+    sql`SELECT id, name, type FROM personas WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`
       SELECT ab.asset_id, ab.brand_id
       FROM asset_brands ab
@@ -210,6 +211,7 @@ export default async function MediaPage({ searchParams }: Props) {
           projectLabel={projectLabel}
           assetBrandMap={assetBrandMap}
           assetProjectMap={assetProjectMap}
+          personaList={allPersonas.map((p) => ({ id: p.id as string, name: p.name as string, type: (p.type as string) || "person" }))}
         />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-8 py-16 text-center">

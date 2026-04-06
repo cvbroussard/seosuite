@@ -56,6 +56,7 @@ export function MediaGrid({
   projectLabel = null,
   assetBrandMap = {},
   assetProjectMap = {},
+  personaList = [],
 }: {
   initialAssets: Asset[];
   availablePillars: string[];
@@ -67,6 +68,7 @@ export function MediaGrid({
   projectLabel?: string | null;
   assetBrandMap?: Record<string, string[]>;
   assetProjectMap?: Record<string, string[]>;
+  personaList?: Array<{ id: string; name: string; type: string }>;
 }) {
   const [assets, setAssets] = useState(initialAssets);
   const [editing, setEditing] = useState<Asset | null>(null);
@@ -209,6 +211,12 @@ export function MediaGrid({
           onBrandCreated={(brand) => setLiveBrands((prev) => [...prev, brand].sort((a, b) => a.name.localeCompare(b.name)))}
           onProjectCreated={(project) => setLiveProjects((prev) => [...prev, project].sort((a, b) => a.name.localeCompare(b.name)))}
           captionSource={((editing.metadata as Record<string, unknown>)?.caption_source as string) || null}
+          faces={(() => {
+            const meta = (editing.metadata || {}) as Record<string, unknown>;
+            const fd = meta.faces as { faces: Array<Record<string, unknown>> } | undefined;
+            return (fd?.faces || null) as Array<{ box: { x: number; y: number; width: number; height: number }; score: number; personaId: string | null; personaName: string | null; distance: number | null; embedding: number[]; index: number }> | null;
+          })()}
+          personas={personaList}
           source={editing.source}
           qualityScore={Number(editing.quality_score) || null}
           sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { TagPicker, type PillarGroup } from "./tag-picker";
+import { FaceOverlay } from "./face-overlay";
 
 interface Brand {
   id: string;
@@ -36,6 +37,16 @@ interface AssetEditModalProps {
   qualityScore?: number | null;
   sceneType?: string | null;
   captionSource?: string | null;
+  faces?: Array<{
+    box: { x: number; y: number; width: number; height: number };
+    score: number;
+    personaId: string | null;
+    personaName: string | null;
+    distance: number | null;
+    embedding: number[];
+    index: number;
+  }> | null;
+  personas?: Array<{ id: string; name: string; type: string }>;
   onClose: () => void;
   onSaved: (note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[]) => void;
   onDeleted?: () => void;
@@ -66,6 +77,8 @@ export function AssetEditModal({
   qualityScore,
   sceneType,
   captionSource,
+  faces: initialFaces = null,
+  personas: personaList = [],
   onClose,
   onSaved,
   onDeleted,
@@ -76,6 +89,7 @@ export function AssetEditModal({
   hasNext = false,
   hasPrev = false,
 }: AssetEditModalProps) {
+  const [faceData, setFaceData] = useState(initialFaces);
   const [note, setNote] = useState(initialNote);
   const [pillar, setPillar] = useState(initialPillar);
   const [tags, setTags] = useState<string[]>(initialTags || []);
@@ -297,7 +311,7 @@ export function AssetEditModal({
       >
         {/* Row 1: Image + Context Note side by side */}
         <div className="flex">
-          {/* Left: Image */}
+          {/* Left: Image with face overlay */}
           <div className="hidden sm:flex w-2/5 shrink-0 items-center justify-center bg-background">
             {mediaType?.startsWith("video") || mediaType === "video" ? (
               <video
@@ -305,6 +319,20 @@ export function AssetEditModal({
                 controls
                 className="h-full w-full object-contain"
                 style={{ maxHeight: "50vh" }}
+              />
+            ) : faceData && faceData.length > 0 ? (
+              <FaceOverlay
+                imageUrl={imageUrl}
+                faces={faceData}
+                personas={personaList}
+                assetId={assetId}
+                onFaceNamed={(faceIndex, personaId, personaName) => {
+                  setFaceData((prev) =>
+                    prev ? prev.map((f, i) =>
+                      i === faceIndex ? { ...f, personaId, personaName } : f
+                    ) : prev
+                  );
+                }}
               />
             ) : (
               <img
