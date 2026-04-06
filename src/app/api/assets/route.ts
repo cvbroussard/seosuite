@@ -1,7 +1,6 @@
 import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAndConvert } from "@/lib/image-utils";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { seoFilename } from "@/lib/seo-filename";
 
@@ -56,29 +55,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Convert HEIC/HEIF to web format (needed for browser display)
-    // Store original URL for EXIF extraction by the cron
-    let originalUrl: string | null = null;
-    if (finalUrl && media_type === "image" && (
-      finalUrl.endsWith(".heic") || finalUrl.endsWith(".heif")
-    )) {
-      originalUrl = finalUrl;
-      try {
-        const { data, mimeType } = await fetchAndConvert(finalUrl);
-        const date = new Date().toISOString().slice(0, 10);
-        const fname = seoFilename(context_note || "upload", "jpg");
-        const key = `sites/${site_id}/${date}/${fname}`;
-        finalUrl = await uploadBufferToR2(key, data, mimeType);
-      } catch (err) {
-        console.warn("HEIC conversion failed, using original:", err instanceof Error ? err.message : err);
-        originalUrl = null;
-      }
-    }
+    // Flag HEIC/HEIF for deferred conversion by the cron
+    const isHeic = finalUrl && (finalUrl.endsWith(".heic") || finalUrl.endsWith(".heif"));
 
     // Build metadata — include deferred processing hints
     const assetMeta: Record<string, unknown> = {
       ...(body.metadata || {}),
-      ...(originalUrl && { original_url: originalUrl }),
+      ...(isHeic && { needs_conversion: true }),
       ...(project_id && { pending_project_id: project_id }),
       original_filename: storage_url.split("/").pop()?.split("?")[0] || null,
     };

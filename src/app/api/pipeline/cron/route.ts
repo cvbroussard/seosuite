@@ -3,8 +3,10 @@ import { sql } from "@/lib/db";
 import { triageAsset } from "@/lib/pipeline/triage";
 import { runAllPipelines } from "@/lib/pipeline/orchestrator";
 import { refreshExpiringTokens } from "@/lib/pipeline/token-refresh";
-import { extractExif } from "@/lib/image-utils";
+import { extractExif, fetchAndConvert } from "@/lib/image-utils";
 import { matchAssetToEntities } from "@/lib/geo-match";
+import { uploadBufferToR2 } from "@/lib/r2";
+import { seoFilename } from "@/lib/seo-filename";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -70,10 +72,30 @@ export async function GET(req: NextRequest) {
         const mediaType = asset.media_type as string;
         const storageUrl = asset.storage_url as string;
 
+        // ── HEIC conversion ──
+        let currentUrl = storageUrl;
+        if (meta.needs_conversion && (storageUrl.endsWith(".heic") || storageUrl.endsWith(".heif"))) {
+          try {
+            const { data, mimeType } = await fetchAndConvert(storageUrl);
+            const date = new Date().toISOString().slice(0, 10);
+            const fname = seoFilename("upload", "jpg");
+            const key = `sites/${siteId}/${date}/${fname}`;
+            currentUrl = await uploadBufferToR2(key, data, mimeType);
+            await sql`
+              UPDATE media_assets
+              SET storage_url = ${currentUrl},
+                  metadata = (COALESCE(metadata, '{}'::jsonb) - 'needs_conversion') || '{"converted": true}'::jsonb
+              WHERE id = ${assetId}
+            `;
+          } catch (err) {
+            console.error(`HEIC conversion failed for ${assetId}:`, err instanceof Error ? err.message : err);
+          }
+        }
+
         // ── EXIF extraction ──
         if (mediaType?.startsWith("image") && !meta.date_taken) {
-          // Try original URL first (for HEIC that was converted)
-          const exifUrl = (meta.original_url as string) || storageUrl;
+          // For HEIC: extract from original URL (before conversion stripped EXIF)
+          const exifUrl = (storageUrl.endsWith(".heic") || storageUrl.endsWith(".heif")) ? storageUrl : currentUrl;
           let exif = await extractExif(exifUrl);
 
           // Fallback: filename date parsing
