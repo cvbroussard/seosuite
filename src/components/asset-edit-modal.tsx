@@ -312,13 +312,13 @@ export function AssetEditModal({
         {/* Row 1: Image + Context Note side by side */}
         <div className="flex">
           {/* Left: Image with face overlay */}
-          <div className="hidden sm:flex w-2/5 shrink-0 items-center justify-center bg-background">
+          <div className="hidden sm:flex w-1/2 shrink-0 items-center justify-center bg-background">
             {mediaType?.startsWith("video") || mediaType === "video" ? (
               <video
                 src={imageUrl}
                 controls
                 className="h-full w-full object-contain"
-                style={{ maxHeight: "50vh" }}
+                style={{ maxHeight: "65vh" }}
               />
             ) : faceData && faceData.length > 0 ? (
               <FaceOverlay
@@ -339,7 +339,7 @@ export function AssetEditModal({
                 src={imageUrl}
                 alt=""
                 className="h-full w-full object-contain"
-                style={{ maxHeight: "50vh" }}
+                style={{ maxHeight: "65vh" }}
               />
             )}
           </div>

@@ -1,32 +1,37 @@
 /**
  * Face detection and embedding service using @vladmandic/face-api.
  *
- * Detects faces in images, generates 128-dimensional embeddings for matching.
- * Runs in Node.js using the canvas package for image decoding.
+ * Optimized for Vercel serverless — uses sharp for image decoding
+ * and the WASM/JS TensorFlow backend (no native bindings).
  */
-import * as faceapi from "@vladmandic/face-api";
-import canvas from "canvas";
 import { sql } from "@/lib/db";
-import path from "path";
 
-const { Canvas, Image, ImageData } = canvas;
-
-// Patch face-api to use node-canvas
-// @ts-expect-error — face-api expects browser Canvas types
-faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
-
+let faceapi: typeof import("@vladmandic/face-api") | null = null;
+let tf: typeof import("@tensorflow/tfjs") | null = null;
 let modelsLoaded = false;
 
 /**
- * Load face detection models from node_modules.
+ * Lazy-load face-api and TensorFlow to avoid import errors on Edge runtime.
  */
-async function ensureModels() {
-  if (modelsLoaded) return;
+async function ensureLoaded() {
+  if (modelsLoaded) return faceapi!;
+
+  // Import pure JS TensorFlow (no native bindings)
+  tf = await import("@tensorflow/tfjs");
+
+  // Import face-api
+  faceapi = await import("@vladmandic/face-api");
+
+  // Load models from node_modules
+  const path = await import("path");
   const modelPath = path.join(process.cwd(), "node_modules/@vladmandic/face-api/model");
+
   await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
   await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
   await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
+
   modelsLoaded = true;
+  return faceapi;
 }
 
 export interface DetectedFace {
@@ -43,53 +48,58 @@ export interface FaceMatch {
 
 /**
  * Detect faces in an image and return embeddings.
+ * Uses sharp for image decoding (works on Vercel, no canvas needed).
  */
 export async function detectFaces(imageUrl: string): Promise<DetectedFace[]> {
-  await ensureModels();
+  const api = await ensureLoaded();
 
-  // Fetch and decode image
-  const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) return [];
-  const buffer = Buffer.from(await res.arrayBuffer());
+  try {
+    // Fetch image
+    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return [];
+    const buffer = Buffer.from(await res.arrayBuffer());
 
-  const img = await canvas.loadImage(buffer);
-  const cvs = canvas.createCanvas(img.width, img.height);
-  const ctx = cvs.getContext("2d");
-  ctx.drawImage(img, 0, 0);
+    // Decode with sharp to get raw pixel data
+    const sharp = (await import("sharp")).default;
+    const { data, info } = await sharp(buffer)
+      .resize({ width: 800, withoutEnlargement: true }) // Downscale for speed
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-  // Detect all faces with landmarks and embeddings
-  const detections = await faceapi
-    .detectAllFaces(cvs as unknown as HTMLCanvasElement)
-    .withFaceLandmarks()
-    .withFaceDescriptors();
+    // Create a tensor from raw pixels
+    const tensor = tf!.tensor3d(
+      new Uint8Array(data),
+      [info.height, info.width, 3]
+    );
 
-  return detections.map((d) => ({
-    embedding: Array.from(d.descriptor),
-    box: {
-      x: Math.round(d.detection.box.x),
-      y: Math.round(d.detection.box.y),
-      width: Math.round(d.detection.box.width),
-      height: Math.round(d.detection.box.height),
-    },
-    score: d.detection.score,
-  }));
-}
+    // Detect faces
+    const detections = await api
+      .detectAllFaces(tensor as unknown as HTMLCanvasElement)
+      .withFaceLandmarks()
+      .withFaceDescriptors();
 
-/**
- * Cosine similarity between two embedding vectors.
- */
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+    tensor.dispose();
+
+    return detections.map((d) => ({
+      embedding: Array.from(d.descriptor),
+      box: {
+        // Scale boxes back to original image coordinates
+        x: Math.round(d.detection.box.x),
+        y: Math.round(d.detection.box.y),
+        width: Math.round(d.detection.box.width),
+        height: Math.round(d.detection.box.height),
+      },
+      score: d.detection.score,
+    }));
+  } catch (err) {
+    console.error("Face detection error:", err instanceof Error ? err.message : err);
+    return [];
   }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 /**
- * Euclidean distance between two embeddings (face-api standard).
+ * Euclidean distance between two embeddings.
  */
 function euclideanDistance(a: number[], b: number[]): number {
   let sum = 0;
@@ -99,11 +109,10 @@ function euclideanDistance(a: number[], b: number[]): number {
   return Math.sqrt(sum);
 }
 
-const MATCH_THRESHOLD = 0.6; // face-api uses euclidean distance — lower = closer match
+const MATCH_THRESHOLD = 0.6;
 
 /**
  * Match detected faces against known personas for a site.
- * Returns matched persona IDs and unmatched face embeddings.
  */
 export async function matchFaces(
   siteId: string,
@@ -114,7 +123,6 @@ export async function matchFaces(
 }> {
   if (detectedFaces.length === 0) return { matched: [], unmatched: [] };
 
-  // Fetch all personas with stored embeddings for this site
   const personas = await sql`
     SELECT id, name, metadata
     FROM personas
@@ -158,8 +166,7 @@ export async function matchFaces(
 }
 
 /**
- * Process faces for an asset: detect, match, auto-tag, store unknowns.
- * Called during triage/processing pipeline.
+ * Process faces for an asset: detect, match, auto-tag, store data.
  */
 export async function processFaces(
   assetId: string,
@@ -180,7 +187,7 @@ export async function processFaces(
     `;
   }
 
-  // Store face data on the asset for UI (naming unknowns, reviewing matches)
+  // Store face data on the asset
   const faceData = {
     faces: faces.map((f, i) => {
       const match = matched.find((m) => m.face === f);
@@ -208,7 +215,6 @@ export async function processFaces(
 
 /**
  * Store a face embedding on a persona record.
- * Called when a tenant names an unknown face.
  */
 export async function setPersonaEmbedding(
   personaId: string,

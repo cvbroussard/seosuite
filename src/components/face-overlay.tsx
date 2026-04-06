@@ -121,7 +121,7 @@ export function FaceOverlay({ imageUrl, faces, personas, assetId, onFaceNamed }:
         src={imageUrl}
         alt=""
         className="h-full w-full object-contain"
-        style={{ maxHeight: "50vh" }}
+        style={{ maxHeight: "65vh" }}
       />
 
       {/* Face bounding boxes */}
