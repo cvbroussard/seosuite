@@ -23,13 +23,20 @@ async function ensureLoaded() {
     // Import face-api
     faceapi = await import("@vladmandic/face-api");
 
-    // Load models from node_modules
-    const path = await import("path");
-    const modelPath = path.join(process.cwd(), "node_modules/@vladmandic/face-api/model");
-
-    await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
-    await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
-    await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
+    // Load models — try disk first (local dev), fall back to URL (Vercel)
+    const modelUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://tracpost.com") + "/face-models";
+    try {
+      const path = await import("path");
+      const modelPath = path.join(process.cwd(), "node_modules/@vladmandic/face-api/model");
+      await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
+      await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
+      await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
+    } catch {
+      // Disk load failed (Vercel) — load via HTTP from public/face-models
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(modelUrl);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
+    }
 
     modelsLoaded = true;
     return faceapi;
