@@ -63,6 +63,10 @@ export function middleware(req: NextRequest) {
     if (pathname.startsWith("/admin")) {
       return new NextResponse("Not Found", { status: 404 });
     }
+    // Static files from /public — pass through without rewriting
+    if (pathname.match(/\.(js|json|xml|txt|ico|svg|png|jpg|webp|woff2?)$/)) {
+      return NextResponse.next();
+    }
     // /login serves the subscriber login page directly
     if (pathname === "/login") {
       return NextResponse.next();
