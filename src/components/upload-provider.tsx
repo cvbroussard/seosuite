@@ -9,140 +9,191 @@ export interface UploadItem {
   contextNote: string;
   siteId: string;
   projectId?: string | null;
-  status: "queued" | "uploading" | "done" | "error";
-  error?: string;
   fileName: string;
-}
-
-interface WorkerItem {
-  id: string;
-  fileName: string;
-  status: "queued" | "uploading" | "done" | "error";
+  status: "pending" | "uploading" | "done" | "error";
   error?: string;
 }
 
 interface UploadContextType {
-  items: WorkerItem[];
+  /** Items being uploaded (browser-side R2 PUT + asset POST) */
+  items: UploadItem[];
+  /** Enqueue files — starts uploading immediately, shows overlay */
   enqueue: (items: Omit<UploadItem, "id" | "status">[]) => void;
-  clear: () => void;
-  activeCount: number;
-  doneCount: number;
-  errorCount: number;
+  /** Number of assets waiting for server-side processing (triage, EXIF, etc.) */
+  pendingProcessing: number;
+  /** Whether browser uploads are in progress */
+  uploading: boolean;
 }
 
 const UploadContext = createContext<UploadContextType>({
   items: [],
   enqueue: () => {},
-  clear: () => {},
-  activeCount: 0,
-  doneCount: 0,
-  errorCount: 0,
+  pendingProcessing: 0,
+  uploading: false,
 });
 
 export function useUpload() {
   return useContext(UploadContext);
 }
 
+function guessMediaType(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.match(/\.(mp4|mov|avi|webm|mkv)/)) return "video/mp4";
+  if (lower.match(/\.(gif)/)) return "image/gif";
+  if (lower.match(/\.(png)/)) return "image/png";
+  if (lower.match(/\.(webp)/)) return "image/webp";
+  return "image/jpeg";
+}
+
+const POLL_KEY = "tp_upload_poll";
+
 export function UploadProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<WorkerItem[]>([]);
-  const [activeCount, setActiveCount] = useState(0);
-  const [doneCount, setDoneCount] = useState(0);
-  const [errorCount, setErrorCount] = useState(0);
-  const swReady = useRef(false);
+  const [items, setItems] = useState<UploadItem[]>([]);
+  const [pendingProcessing, setPendingProcessing] = useState(0);
+  const processing = useRef(false);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Poll for server-side processing status (assets at 'received')
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-
-    // Register the upload service worker
-    navigator.serviceWorker.register("/upload-sw.js", { scope: "/" }).then((reg) => {
-      swReady.current = true;
-
-      // Request status once active
-      const sw = reg.active || reg.installing || reg.waiting;
-      if (sw?.state === "activated") {
-        sw.postMessage({ type: "upload-status" });
-      } else {
-        sw?.addEventListener("statechange", function handler() {
-          if (sw.state === "activated") {
-            sw.postMessage({ type: "upload-status" });
-            sw.removeEventListener("statechange", handler);
-          }
-        });
-      }
-    }).catch((err) => {
-      console.warn("Upload service worker registration failed:", err);
-    });
-
-    // Listen for messages from the service worker
-    function handleMessage(event: MessageEvent) {
-      const msg = event.data;
-      if (msg.type === "upload-progress") {
-        setItems(msg.items);
-        setActiveCount(msg.activeCount);
-        setDoneCount(msg.doneCount);
-        setErrorCount(msg.errorCount);
-      }
+    const siteId = localStorage.getItem(POLL_KEY);
+    if (siteId) {
+      startPolling(siteId);
     }
-
-    navigator.serviceWorker.addEventListener("message", handleMessage);
-
-    // Request status on mount (reconnect after navigation)
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: "upload-status" });
-    }
-
     return () => {
-      navigator.serviceWorker.removeEventListener("message", handleMessage);
+      if (pollTimer.current) clearInterval(pollTimer.current);
     };
   }, []);
 
-  const enqueue = useCallback(async (newItems: Omit<UploadItem, "id" | "status">[]) => {
-    const sw = navigator.serviceWorker?.controller;
-    if (!sw) return;
+  function startPolling(siteId: string) {
+    if (pollTimer.current) clearInterval(pollTimer.current);
+    localStorage.setItem(POLL_KEY, siteId);
 
-    // Convert File objects to ArrayBuffers
-    const prepared = await Promise.all(
-      newItems.map(async (item) => {
-        const id = crypto.randomUUID();
-        if (item.file) {
-          const buffer = await item.file.arrayBuffer();
-          return {
-            id,
-            fileData: buffer,
-            fileType: item.file.type,
-            fileName: item.fileName,
-            contextNote: item.contextNote,
-            siteId: item.siteId,
-            projectId: item.projectId || null,
-          };
+    async function poll() {
+      try {
+        const res = await fetch(`/api/assets?site_id=${siteId}&status=received`);
+        if (res.ok) {
+          const data = await res.json();
+          const count = data.assets?.length || 0;
+          setPendingProcessing(count);
+          if (count === 0) {
+            // All processed — stop polling
+            localStorage.removeItem(POLL_KEY);
+            if (pollTimer.current) clearInterval(pollTimer.current);
+            pollTimer.current = null;
+          }
         }
-        return {
-          id,
-          sourceUrl: item.sourceUrl,
-          fileName: item.fileName,
-          contextNote: item.contextNote,
-          siteId: item.siteId,
-          projectId: item.projectId || null,
-        };
-      })
-    );
+      } catch { /* ignore */ }
+    }
 
-    const transferables = prepared
-      .filter((p): p is typeof p & { fileData: ArrayBuffer } => !!(p as Record<string, unknown>).fileData)
-      .map((p) => p.fileData);
+    poll(); // Immediate first check
+    pollTimer.current = setInterval(poll, 10000); // Every 10 seconds
+  }
 
-    sw.postMessage(
-      { type: "upload-enqueue", items: prepared },
-      transferables
-    );
+  // Process upload queue
+  useEffect(() => {
+    if (processing.current) return;
+    const next = items.find((i) => i.status === "pending");
+    if (!next) return;
+
+    processing.current = true;
+
+    (async () => {
+      setItems((prev) =>
+        prev.map((i) => (i.id === next.id ? { ...i, status: "uploading" as const } : i))
+      );
+
+      try {
+        if (next.sourceUrl) {
+          const res = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              site_id: next.siteId,
+              storage_url: next.sourceUrl,
+              media_type: guessMediaType(next.sourceUrl),
+              context_note: next.contextNote || null,
+              project_id: next.projectId || null,
+              source: "url",
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Failed");
+        } else if (next.file) {
+          const contentType = next.file.type
+            || (next.file.name.toLowerCase().endsWith(".heic") ? "image/heic" : "")
+            || (next.file.name.toLowerCase().endsWith(".heif") ? "image/heic" : "")
+            || "image/jpeg";
+
+          const presignRes = await fetch("/api/upload/presign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              site_id: next.siteId,
+              content_type: contentType,
+              filename: next.file.name,
+            }),
+          });
+          if (!presignRes.ok) {
+            const err = await presignRes.json();
+            throw new Error(err.error || "Presign failed");
+          }
+
+          const { upload_url, public_url, media_type } = await presignRes.json();
+
+          const uploadRes = await fetch(upload_url, {
+            method: "PUT",
+            headers: { "Content-Type": contentType },
+            body: next.file,
+          });
+          if (!uploadRes.ok) throw new Error(`R2 upload failed: ${uploadRes.status}`);
+
+          const assetRes = await fetch("/api/assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              site_id: next.siteId,
+              storage_url: public_url,
+              media_type,
+              context_note: next.contextNote || null,
+              project_id: next.projectId || null,
+            }),
+          });
+          const assetData = await assetRes.json();
+          if (!assetRes.ok) throw new Error(assetData.error || "Register failed");
+        }
+
+        setItems((prev) =>
+          prev.map((i) => (i.id === next.id ? { ...i, status: "done" as const } : i))
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Upload failed";
+        setItems((prev) =>
+          prev.map((i) => (i.id === next.id ? { ...i, status: "error" as const, error: message } : i))
+        );
+      }
+
+      processing.current = false;
+    })();
+  }, [items]);
+
+  const enqueue = useCallback((newItems: Omit<UploadItem, "id" | "status">[]) => {
+    const withIds: UploadItem[] = newItems.map((item) => ({
+      ...item,
+      id: crypto.randomUUID(),
+      status: "pending" as const,
+    }));
+    setItems((prev) => [...prev, ...withIds]);
+
+    // Start polling for server-side processing once uploads begin
+    if (newItems.length > 0 && newItems[0].siteId) {
+      startPolling(newItems[0].siteId);
+    }
   }, []);
 
-  const clear = useCallback(() => {
-    navigator.serviceWorker?.controller?.postMessage({ type: "upload-clear" });
-  }, []);
+  const uploading = items.some((i) => i.status === "pending" || i.status === "uploading");
 
   return (
-    <UploadContext.Provider value={{ items, enqueue, clear, activeCount, doneCount, errorCount }}>
+    <UploadContext.Provider value={{ items, enqueue, pendingProcessing, uploading }}>
       {children}
     </UploadContext.Provider>
   );

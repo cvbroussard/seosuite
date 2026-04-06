@@ -10,6 +10,7 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { ContextualHelp } from "@/components/contextual-help";
 import { UploadProvider } from "@/components/upload-provider";
 import { UploadStatus } from "@/components/upload-status";
+import { UploadOverlay } from "@/components/upload-overlay";
 
 const ALL_PLATFORMS = [
   "instagram", "tiktok", "facebook", "gbp",
@@ -94,6 +95,7 @@ export default async function DashboardLayout({
 
   return (
     <UploadProvider>
+    <UploadOverlay />
     <div className="flex h-screen flex-col overflow-hidden">
       <div className="hidden md:block">
         <TopBar userName={session.userName} />

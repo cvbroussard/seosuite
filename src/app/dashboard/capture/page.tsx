@@ -26,7 +26,7 @@ function CaptureForm() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("project");
   const projectName = searchParams.get("projectName");
-  const { enqueue, activeCount } = useUpload();
+  const { enqueue, uploading } = useUpload();
 
   const [items, setItems] = useState<StagedItem[]>([]);
   const [siteId, setSiteId] = useState<string>("");
@@ -164,10 +164,10 @@ function CaptureForm() {
         </div>
       )}
 
-      {activeCount > 0 && (
+      {uploading && (
         <div className="mb-4 flex items-center gap-2 rounded bg-surface-hover px-4 py-2">
           <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-          <p className="text-xs text-muted">{activeCount} file{activeCount !== 1 ? "s" : ""} uploading in background</p>
+          <p className="text-xs text-muted">Upload in progress</p>
         </div>
       )}
 
