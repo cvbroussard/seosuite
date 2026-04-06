@@ -94,6 +94,19 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // ── Filename date fallback for non-image assets (video, etc.) ──
+        if (!mediaType?.startsWith("image") && !meta.date_taken) {
+          const fileDate = parseDateFromFilename((meta.original_filename as string) || storageUrl);
+          if (fileDate) {
+            await sql`
+              UPDATE media_assets
+              SET date_taken = ${fileDate},
+                  metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ date_taken: fileDate })}::jsonb
+              WHERE id = ${assetId}
+            `;
+          }
+        }
+
         // ── EXIF extraction ──
         if (mediaType?.startsWith("image") && !meta.date_taken) {
           // For HEIC: extract from original URL (before conversion stripped EXIF)
