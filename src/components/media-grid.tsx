@@ -56,6 +56,8 @@ export function MediaGrid({
   projectLabel = null,
   assetBrandMap = {},
   assetProjectMap = {},
+  assetPersonaMap = {},
+  personaLabel = null,
   personaList = [],
 }: {
   initialAssets: Asset[];
@@ -68,6 +70,8 @@ export function MediaGrid({
   projectLabel?: string | null;
   assetBrandMap?: Record<string, string[]>;
   assetProjectMap?: Record<string, string[]>;
+  assetPersonaMap?: Record<string, string[]>;
+  personaLabel?: string | null;
   personaList?: Array<{ id: string; name: string; type: string }>;
 }) {
   const [assets, setAssets] = useState(initialAssets);
@@ -77,8 +81,9 @@ export function MediaGrid({
   const [liveProjects, setLiveProjects] = useState(projects);
   const [liveBrandMap, setLiveBrandMap] = useState(assetBrandMap);
   const [liveProjectMap, setLiveProjectMap] = useState(assetProjectMap);
+  const [livePersonaMap, setLivePersonaMap] = useState(assetPersonaMap);
 
-  function handleSaved(note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[]) {
+  function handleSaved(note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[], personaIds?: string[]) {
     if (!editing) return;
     setAssets((prev) =>
       prev.map((a) =>
@@ -92,6 +97,9 @@ export function MediaGrid({
     }
     if (projectIds) {
       setLiveProjectMap((prev) => ({ ...prev, [editing.id]: projectIds }));
+    }
+    if (personaIds) {
+      setLivePersonaMap((prev) => ({ ...prev, [editing.id]: personaIds }));
     }
   }
 
@@ -208,6 +216,8 @@ export function MediaGrid({
           projectLabel={projectLabel}
           initialBrandIds={liveBrandMap[editing.id] || []}
           initialProjectIds={liveProjectMap[editing.id] || []}
+          personaLabel={personaLabel}
+          initialPersonaIds={livePersonaMap[editing.id] || []}
           onBrandCreated={(brand) => setLiveBrands((prev) => [...prev, brand].sort((a, b) => a.name.localeCompare(b.name)))}
           onProjectCreated={(project) => setLiveProjects((prev) => [...prev, project].sort((a, b) => a.name.localeCompare(b.name)))}
           captionSource={((editing.metadata as Record<string, unknown>)?.caption_source as string) || null}

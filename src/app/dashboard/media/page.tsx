@@ -125,7 +125,7 @@ export default async function MediaPage({ searchParams }: Props) {
     FROM media_assets WHERE site_id = ${siteId}
   `;
 
-  const [siteData, allBrands, allProjects, allPersonas, assetBrandRows, assetProjectRows] = await Promise.all([
+  const [siteData, allBrands, allProjects, allPersonas, assetBrandRows, assetProjectRows, assetPersonaRows] = await Promise.all([
     sql`SELECT content_pillars, pillar_config, brand_label, project_label, persona_label, location_label FROM sites WHERE id = ${siteId}`,
     sql`SELECT id, name, slug, url FROM brands WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`SELECT id, name, slug FROM projects WHERE site_id = ${siteId} ORDER BY name ASC`,
@@ -139,6 +139,12 @@ export default async function MediaPage({ searchParams }: Props) {
     sql`
       SELECT ap.asset_id, ap.project_id
       FROM asset_projects ap
+      JOIN media_assets ma ON ma.id = ap.asset_id
+      WHERE ma.site_id = ${siteId}
+    `,
+    sql`
+      SELECT ap.asset_id, ap.persona_id
+      FROM asset_personas ap
       JOIN media_assets ma ON ma.id = ap.asset_id
       WHERE ma.site_id = ${siteId}
     `,
@@ -158,6 +164,13 @@ export default async function MediaPage({ searchParams }: Props) {
     assetProjectMap[aid].push(row.project_id as string);
   }
 
+  const assetPersonaMap: Record<string, string[]> = {};
+  for (const row of assetPersonaRows) {
+    const aid = row.asset_id as string;
+    if (!assetPersonaMap[aid]) assetPersonaMap[aid] = [];
+    assetPersonaMap[aid].push(row.persona_id as string);
+  }
+
   const pillars = (siteData[0]?.content_pillars || []) as string[];
   const pillarConfig = (siteData[0]?.pillar_config || []) as Array<{
     id: string; label: string; description: string;
@@ -166,6 +179,7 @@ export default async function MediaPage({ searchParams }: Props) {
 
   const brandLabel = (siteData[0]?.brand_label as string) || null;
   const projectLabel = (siteData[0]?.project_label as string) || null;
+  const personaLabel = (siteData[0]?.persona_label as string) || null;
 
   // Apply project filter (after project map is built)
   if (projectFilter !== "all") {
@@ -211,6 +225,8 @@ export default async function MediaPage({ searchParams }: Props) {
           projectLabel={projectLabel}
           assetBrandMap={assetBrandMap}
           assetProjectMap={assetProjectMap}
+          assetPersonaMap={assetPersonaMap}
+          personaLabel={personaLabel}
           personaList={allPersonas.map((p) => ({ id: p.id as string, name: p.name as string, type: (p.type as string) || "person" }))}
         />
       ) : (

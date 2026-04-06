@@ -33,6 +33,8 @@ interface AssetEditModalProps {
   projectLabel?: string | null;
   initialBrandIds?: string[];
   initialProjectIds?: string[];
+  personaLabel?: string | null;
+  initialPersonaIds?: string[];
   source?: string | null;
   qualityScore?: number | null;
   sceneType?: string | null;
@@ -50,7 +52,7 @@ interface AssetEditModalProps {
   faceDetectionHeight?: number;
   personas?: Array<{ id: string; name: string; type: string }>;
   onClose: () => void;
-  onSaved: (note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[]) => void;
+  onSaved: (note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[], personaIds?: string[]) => void;
   onDeleted?: () => void;
   onBrandCreated?: (brand: Brand) => void;
   onProjectCreated?: (project: Project) => void;
@@ -75,6 +77,8 @@ export function AssetEditModal({
   projectLabel,
   initialBrandIds = [],
   initialProjectIds = [],
+  personaLabel,
+  initialPersonaIds = [],
   source,
   qualityScore,
   sceneType,
@@ -99,6 +103,7 @@ export function AssetEditModal({
   const [tags, setTags] = useState<string[]>(initialTags || []);
   const [brandIds, setBrandIds] = useState<string[]>(initialBrandIds);
   const [projectIds, setProjectIds] = useState<string[]>(initialProjectIds);
+  const [personaIds, setPersonaIds] = useState<string[]>(initialPersonaIds);
   const [localBrands, setLocalBrands] = useState(brands);
   const [localProjects, setLocalProjects] = useState(projects);
   const [newBrandName, setNewBrandName] = useState("");
@@ -261,6 +266,7 @@ export function AssetEditModal({
     if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
     if (JSON.stringify(brandIds.sort()) !== JSON.stringify(initialBrandIds.sort())) body.brand_ids = brandIds;
     if (JSON.stringify(projectIds.sort()) !== JSON.stringify(initialProjectIds.sort())) body.project_ids = projectIds;
+    if (JSON.stringify(personaIds.sort()) !== JSON.stringify(initialPersonaIds.sort())) body.persona_ids = personaIds;
 
     if (Object.keys(body).length === 0) return true;
 
@@ -272,7 +278,7 @@ export function AssetEditModal({
 
     if (!res.ok) return false;
 
-    onSaved(note, pillar, tags, brandIds, projectIds);
+    onSaved(note, pillar, tags, brandIds, projectIds, personaIds);
     return true;
   }
 
@@ -573,6 +579,35 @@ export function AssetEditModal({
                   </button>
                 )}
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* Row 5: Personas */}
+        {personaLabel && personaList.length > 0 && (
+          <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{personaLabel}</label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {personaList.map((p) => {
+                const selected = personaIds.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      setPersonaIds((prev) =>
+                        selected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                      )
+                    }
+                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                      selected
+                        ? "bg-purple-500/20 text-purple-400"
+                        : "bg-surface-hover text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
