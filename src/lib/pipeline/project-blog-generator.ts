@@ -39,10 +39,11 @@ export async function generateProjectArticle(
     SELECT id, name, slug, description, address, start_date, end_date, status
     FROM projects WHERE id = ${projectId}
   `;
-  if (!project) return null;
+  if (!project) { console.error("Project not found:", projectId); return null; }
 
   // Build snapshot for context
   const snapshot = await buildProjectSnapshot(projectId);
+  console.log("Project snapshot built, brands:", snapshot.brands.length, "captions:", snapshot.sampleCaptions.length);
 
   // Fetch site for brand voice
   const [site] = await sql`
@@ -61,7 +62,8 @@ export async function generateProjectArticle(
     ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
   `;
 
-  if (assets.length < 3) return null; // Need at least 3 captioned assets for a story
+  console.log("Project assets found:", assets.length);
+  if (assets.length < 3) { console.error("Not enough captioned assets:", assets.length); return null; }
 
   // Select key assets for the article — first, middle highlights, last
   const selectedAssets = selectKeyAssets(assets as ProjectAsset[]);
