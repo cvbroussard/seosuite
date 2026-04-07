@@ -412,8 +412,7 @@ export function AssetEditModal({
 
             <div className="mb-1 flex items-center justify-between">
               <label className="text-xs text-muted">Context Note</label>
-              {projectIds.length > 0 && (
-                <button
+              <button
                   onClick={async () => {
                     setGenerating(true);
                     try {
@@ -433,7 +432,6 @@ export function AssetEditModal({
                 >
                   {generating ? "Generating..." : "Generate caption"}
                 </button>
-              )}
             </div>
             <div className="relative flex-1">
               <textarea

@@ -114,6 +114,85 @@ export async function buildProjectSnapshot(projectId: string): Promise<ProjectSn
 }
 
 /**
+ * Build a site-level context snapshot for assets not in a project.
+ * Uses site brand voice, all brands, and recent manual captions across the site.
+ */
+export async function buildSiteSnapshot(siteId: string): Promise<ProjectSnapshot> {
+  const [site] = await sql`
+    SELECT name, brand_voice, content_vibe, business_type, location
+    FROM sites WHERE id = ${siteId}
+  `;
+
+  if (!site) throw new Error("Site not found");
+
+  const brandRows = await sql`
+    SELECT DISTINCT b.name, b.url FROM brands b WHERE b.site_id = ${siteId}
+  `;
+
+  // Get recent manual/corrected captions (not AI-generated triage captions)
+  const captioned = await sql`
+    SELECT ma.context_note, ma.date_taken, ma.created_at, ma.metadata
+    FROM media_assets ma
+    WHERE ma.site_id = ${siteId}
+      AND ma.context_note IS NOT NULL
+      AND ma.context_note != ''
+      AND (ma.metadata->>'caption_source' IS NULL OR ma.metadata->>'caption_source' != 'ai')
+      AND ma.metadata->>'context_auto_generated' IS NULL
+    ORDER BY COALESCE(ma.date_taken, ma.created_at) DESC
+    LIMIT 20
+  `;
+
+  const sampleCaptions = captioned.map((a) => {
+    const meta = (a.metadata || {}) as Record<string, unknown>;
+    return {
+      note: a.context_note as string,
+      date: a.date_taken ? new Date(a.date_taken as string).toISOString().slice(0, 10) : undefined,
+      source: (meta.caption_source as string) || "manual",
+    };
+  });
+
+  const corrections: Array<{ ai: string; human: string }> = [];
+  for (const a of captioned) {
+    const meta = (a.metadata || {}) as Record<string, unknown>;
+    if (meta.caption_source === "corrected" && meta.ai_caption) {
+      corrections.push({ ai: meta.ai_caption as string, human: a.context_note as string });
+    }
+  }
+
+  const manualCaptions = sampleCaptions.map((c) => c.note);
+  const wordFreq = new Map<string, number>();
+  for (const caption of manualCaptions) {
+    const words = caption.toLowerCase().match(/[a-z][a-z'-]+/g) || [];
+    for (const w of words) {
+      if (w.length > 4) wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
+    }
+  }
+  const vocabulary = Array.from(wordFreq.entries())
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 30)
+    .map(([word]) => word);
+
+  const brandVoice = (site.brand_voice || {}) as Record<string, unknown>;
+  const description = [
+    site.name,
+    site.business_type,
+    site.location,
+    site.content_vibe,
+    brandVoice.tone ? `Tone: ${brandVoice.tone}` : null,
+  ].filter(Boolean).join(" — ");
+
+  return {
+    description,
+    brands: brandRows.map((b) => b.name as string),
+    sampleCaptions: sampleCaptions.slice(-10),
+    corrections,
+    vocabulary,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Called when a caption is saved on a project asset.
  * Rebuilds the snapshot so future generations improve.
  */

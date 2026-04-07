@@ -8,9 +8,11 @@ export const maxDuration = 30;
 /**
  * POST /api/assets/:id/generate-caption
  *
- * Generate an AI caption for this asset using its project's context snapshot.
- * Returns the caption as a draft — does NOT write to DB.
- * The user decides whether to keep, edit, or discard.
+ * Generate an AI caption using the best available context:
+ * - Project snapshot (if asset belongs to a project)
+ * - Site-level snapshot (fallback for non-project assets)
+ *
+ * Returns draft text — does NOT write to DB.
  */
 export async function POST(
   req: NextRequest,
@@ -21,7 +23,6 @@ export async function POST(
   const auth = authResult as AuthContext;
   const { id } = await params;
 
-  // Get asset + verify ownership
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type, ma.date_taken, ma.created_at, ma.metadata
     FROM media_assets ma
@@ -33,31 +34,19 @@ export async function POST(
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
 
-  // Find the project this asset belongs to
+  const { generateCaptionForAsset, buildProjectSnapshot, buildSiteSnapshot } = await import("@/lib/pipeline/project-captions");
+
+  // Try project context first, fall back to site context
   const [projectLink] = await sql`
-    SELECT p.id, p.caption_mode, p.context_snapshot
-    FROM projects p
+    SELECT p.id FROM projects p
     JOIN asset_projects ap ON ap.project_id = p.id
     WHERE ap.asset_id = ${id}
     LIMIT 1
   `;
 
-  if (!projectLink) {
-    return NextResponse.json({ error: "Asset is not assigned to a project" }, { status: 400 });
-  }
-
-  const mode = projectLink.caption_mode as string;
-  if (mode === "seeding") {
-    return NextResponse.json({
-      error: "Caption generation requires at least 3 manual captions in this project",
-    }, { status: 400 });
-  }
-
-  // Generate caption using project snapshot
-  const { generateCaptionForAsset, buildProjectSnapshot } = await import("@/lib/pipeline/project-captions");
-
-  // Rebuild snapshot to include latest captions
-  const snapshot = await buildProjectSnapshot(projectLink.id as string);
+  const snapshot = projectLink
+    ? await buildProjectSnapshot(projectLink.id as string)
+    : await buildSiteSnapshot(asset.site_id as string);
 
   const caption = await generateCaptionForAsset(asset, snapshot);
 
