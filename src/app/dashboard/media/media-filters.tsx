@@ -38,22 +38,26 @@ export function MediaFilters({
   const router = useRouter();
 
   // On mount: restore persisted preferences if no explicit URL params
+  // Only runs on the media page (check pathname to avoid redirecting wrong pages)
   if (typeof window !== "undefined") {
     try {
       const url = new URL(window.location.href);
-      let needsRedirect = false;
-      const persistedSort = localStorage.getItem("tp_media_sort");
-      if (persistedSort && !url.searchParams.has("sort") && persistedSort !== "newest") {
-        url.searchParams.set("sort", persistedSort);
-        needsRedirect = true;
-      }
-      const persistedProject = localStorage.getItem("tp_media_project");
-      if (persistedProject && !url.searchParams.has("project")) {
-        url.searchParams.set("project", persistedProject);
-        needsRedirect = true;
-      }
-      if (needsRedirect) {
-        window.location.href = url.toString();
+      const isMediaPage = url.pathname.includes("/media");
+      if (isMediaPage) {
+        let needsRedirect = false;
+        const persistedSort = localStorage.getItem("tp_media_sort");
+        if (persistedSort && !url.searchParams.has("sort") && persistedSort !== "newest") {
+          url.searchParams.set("sort", persistedSort);
+          needsRedirect = true;
+        }
+        const persistedProject = localStorage.getItem("tp_media_project");
+        if (persistedProject && !url.searchParams.has("project")) {
+          url.searchParams.set("project", persistedProject);
+          needsRedirect = true;
+        }
+        if (needsRedirect) {
+          window.location.href = url.toString();
+        }
       }
     } catch { /* ignore */ }
   }
