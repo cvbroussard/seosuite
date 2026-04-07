@@ -303,14 +303,21 @@ Respond with ONLY the caption text, nothing else.`;
     // Fetch image for vision
     const imgRes = await fetch(storageUrl, { signal: AbortSignal.timeout(10000) });
     if (!imgRes.ok) return null;
-    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+    let imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+
+    // Downscale if over 4MB (Claude API limit is 5MB)
+    if (imgBuffer.length > 4 * 1024 * 1024) {
+      const sharp = (await import("sharp")).default;
+      imgBuffer = Buffer.from(await sharp(imgBuffer)
+        .resize({ width: 1600, withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer());
+    }
+
     const base64 = imgBuffer.toString("base64");
-    // Detect actual content type — don't trust URL extension (HEIC→PNG conversion keeps .jpg name)
-    const contentType = imgRes.headers.get("content-type") || "";
-    const mediaType = contentType.includes("png") ? "image/png"
-      : contentType.includes("webp") ? "image/webp"
-      : contentType.includes("gif") ? "image/gif"
-      : "image/jpeg";
+    // Detect content type from buffer magic bytes
+    const isPng = imgBuffer[0] === 0x89 && imgBuffer[1] === 0x50;
+    const mediaType = isPng ? "image/png" : "image/jpeg";
 
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
