@@ -88,6 +88,7 @@ export function EntitiesManager({
   // Caption status per project
   const [captionStatuses, setCaptionStatuses] = useState<Record<string, CaptionStatus>>({});
   const [autoCaptioning, setAutoCaptioning] = useState<string | null>(null);
+  const [generatingArticle, setGeneratingArticle] = useState<string | null>(null);
 
   // Fetch caption statuses for all projects on mount
   useState(() => {
@@ -677,6 +678,25 @@ export function EntitiesManager({
                   >
                     Preview
                   </a>
+                  <button
+                    onClick={async () => {
+                      setGeneratingArticle(project.id);
+                      try {
+                        const res = await fetch(`/api/projects/${project.id}/generate-article`, { method: "POST" });
+                        const data = await res.json();
+                        if (res.ok) {
+                          alert(`Article created: "${data.article.title}" — check the Blog page`);
+                        } else {
+                          alert(data.error || "Generation failed");
+                        }
+                      } catch { /* ignore */ }
+                      setGeneratingArticle(null);
+                    }}
+                    disabled={generatingArticle === project.id}
+                    className="text-xs text-accent hover:underline disabled:opacity-50"
+                  >
+                    {generatingArticle === project.id ? "Writing..." : "Write article"}
+                  </button>
                   <a
                     href={`/dashboard/capture?project=${project.id}&projectName=${encodeURIComponent(project.name)}`}
                     className="text-xs text-accent hover:underline"
