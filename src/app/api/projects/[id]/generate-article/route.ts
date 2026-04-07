@@ -30,15 +30,16 @@ export async function POST(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const { generateProjectArticle } = await import("@/lib/pipeline/project-blog-generator");
-  const article = await generateProjectArticle(id, project.site_id as string);
+  try {
+    const { generateProjectArticle } = await import("@/lib/pipeline/project-blog-generator");
+    const article = await generateProjectArticle(id, project.site_id as string);
 
-  if (!article) {
-    return NextResponse.json(
-      { error: "Article generation failed — ensure the project has at least 3 captioned assets" },
-      { status: 400 }
-    );
-  }
+    if (!article) {
+      return NextResponse.json(
+        { error: "Article generation failed — ensure the project has at least 3 captioned assets" },
+        { status: 400 }
+      );
+    }
 
   // Save as draft blog post
   const slug = article.title
@@ -66,5 +67,12 @@ export async function POST(
     RETURNING id, title, slug, status
   `;
 
-  return NextResponse.json({ post, article: { title: article.title, excerpt: article.excerpt } });
+    return NextResponse.json({ post, article: { title: article.title, excerpt: article.excerpt } });
+  } catch (err) {
+    console.error("Project article generation error:", err instanceof Error ? err.stack || err.message : err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Article generation failed" },
+      { status: 500 }
+    );
+  }
 }
