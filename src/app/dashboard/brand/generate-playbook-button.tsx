@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function GeneratePlaybookButton({ siteId }: { siteId: string }) {
+export function GeneratePlaybookButton({ siteId, businessType, location, websiteUrl }: { siteId: string; businessType: string; location: string; websiteUrl: string }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,7 +13,7 @@ export function GeneratePlaybookButton({ siteId }: { siteId: string }) {
       const res = await fetch("/api/brand-intelligence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "auto_generate", site_id: siteId }),
+        body: JSON.stringify({ action: "auto_generate", site_id: siteId, business_type: businessType, location, website_url: websiteUrl }),
       });
       if (res.ok) {
         window.location.reload();

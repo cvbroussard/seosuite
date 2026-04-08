@@ -14,7 +14,7 @@ export default async function BrandPage() {
   const siteId = session.activeSiteId;
 
   const [site] = await sql`
-    SELECT brand_playbook, brand_voice, provisioning_status
+    SELECT brand_playbook, brand_voice, provisioning_status, business_type, location, url
     FROM sites
     WHERE id = ${siteId} AND subscription_id = ${session.subscriptionId}
   `;
@@ -40,7 +40,12 @@ export default async function BrandPage() {
       )}
 
       {!hasPlaybook && !isProvisioning && (
-        <GeneratePlaybookButton siteId={siteId} />
+        <GeneratePlaybookButton
+          siteId={siteId}
+          businessType={(site.business_type as string) || ""}
+          location={(site.location as string) || ""}
+          websiteUrl={(site.url as string) || ""}
+        />
       )}
 
       {hasPlaybook ? (
