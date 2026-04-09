@@ -34,6 +34,7 @@ interface Counts {
   locations: number;
   corrections: number;
   rewardPrompts: number;
+  projectPrompts: number;
 }
 
 interface Platform {
@@ -169,7 +170,10 @@ export function SiteControls({
             <ReadOnly label="Assets" value={`${counts.totalAssets} (${counts.uploads} uploads, ${counts.aiAssets} AI)`} />
             <ReadOnly label="Blog Posts" value={`${counts.totalPosts} (${counts.publishedPosts} published, ${counts.draftPosts} drafts)`} />
             <ReadOnly label="Vendors" value={counts.vendors} />
+            <ReadOnly label="Projects" value={counts.projects} />
+            <ReadOnly label="Personas" value={counts.personas} />
             <ReadOnly label="Reward Prompts" value={counts.rewardPrompts} />
+            <ReadOnly label="Project Prompts" value={counts.projectPrompts} />
             <ReadOnly label="Image Corrections" value={counts.corrections} />
           </div>
         </div>

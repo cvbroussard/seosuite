@@ -51,6 +51,13 @@ export default async function SiteControlPanel({ params }: Props) {
   const metadata = (site.metadata || {}) as Record<string, unknown>;
   const rewardPrompts = (metadata.reward_prompts as unknown[]) || [];
 
+  // Project prompts count (sum across all projects)
+  const [projectPromptCount] = await sql`
+    SELECT COALESCE(SUM(jsonb_array_length(metadata->'article_prompts')), 0)::int AS total
+    FROM projects
+    WHERE site_id = ${siteId} AND metadata->'article_prompts' IS NOT NULL
+  `;
+
   // Connected platforms
   const platforms = await sql`
     SELECT sa.platform, sa.account_name, sa.status
@@ -112,6 +119,7 @@ export default async function SiteControlPanel({ params }: Props) {
           locations: counts?.locations || 0,
           corrections: counts?.corrections || 0,
           rewardPrompts: rewardPrompts.length,
+          projectPrompts: (projectPromptCount?.total as number) || 0,
         }}
         platforms={platforms as Array<{ platform: string; account_name: string; status: string }>}
         rewardPrompts={rewardPrompts as Array<{ category: string; scene: string; prompt: string; visual: string }>}
