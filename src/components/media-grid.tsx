@@ -115,6 +115,11 @@ export function MediaGrid({
             }`}
           >
             <div className="relative aspect-square bg-background">
+              {a.source === "pdf" && (
+                <span className="absolute left-1.5 bottom-1.5 z-10 rounded bg-accent/70 px-1.5 py-0.5 text-[9px] text-white">
+                  PDF p.{((a.metadata as Record<string, unknown>)?.pdf_page as number) || "?"}
+                </span>
+              )}
               {a.media_type === "video" ? (
                 <video
                   src={a.storage_url}

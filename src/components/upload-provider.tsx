@@ -42,6 +42,7 @@ function guessMediaType(url: string): string {
   if (lower.match(/\.(gif)/)) return "image/gif";
   if (lower.match(/\.(png)/)) return "image/png";
   if (lower.match(/\.(webp)/)) return "image/webp";
+  if (lower.match(/\.(pdf)/)) return "application/pdf";
   return "image/jpeg";
 }
 

@@ -177,7 +177,7 @@ function CaptureForm() {
           onClick={() => {
             if (fileRef.current) {
               fileRef.current.removeAttribute("capture");
-              fileRef.current.setAttribute("accept", "image/*,video/*");
+              fileRef.current.setAttribute("accept", "image/*,video/*,.pdf");
               fileRef.current.click();
             }
           }}
@@ -247,7 +247,7 @@ function CaptureForm() {
       <input
         ref={fileRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*,video/*,.pdf"
         multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}

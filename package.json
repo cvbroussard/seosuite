@@ -24,6 +24,8 @@
     "heic-convert": "^2.1.0",
     "jsonwebtoken": "^9.0.3",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
+    "pdf-to-img": "^6.0.0",
     "qrcode.react": "^4.2.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",

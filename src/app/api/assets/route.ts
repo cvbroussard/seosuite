@@ -55,6 +55,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // PDF handling — extract page thumbnails, don't create a single asset
+    const isPdf = finalUrl && (finalUrl.endsWith(".pdf") || media_type === "application/pdf");
+    if (isPdf) {
+      try {
+        const { processPdf } = await import("@/lib/pdf-process");
+        const assetIds = await processPdf(finalUrl, site_id, project_id || null, context_note || null);
+
+        await sql`
+          INSERT INTO usage_log (subscription_id, site_id, action, metadata)
+          VALUES (${auth.subscriptionId}, ${site_id}, 'pdf_upload', ${JSON.stringify({
+            pdf_url: finalUrl,
+            pages: assetIds.length,
+          })})
+        `;
+
+        return NextResponse.json({
+          asset: { id: assetIds[0], site_id, storage_url: finalUrl, media_type: "application/pdf" },
+          pages: assetIds.length,
+          page_asset_ids: assetIds,
+        }, { status: 201 });
+      } catch (err) {
+        console.error("PDF processing failed:", err instanceof Error ? err.message : err);
+        return NextResponse.json({ error: "PDF processing failed" }, { status: 500 });
+      }
+    }
+
     // Flag HEIC/HEIF for deferred conversion by the cron
     const isHeic = finalUrl && (finalUrl.endsWith(".heic") || finalUrl.endsWith(".heif"));
 
