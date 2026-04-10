@@ -39,6 +39,25 @@ export function middleware(req: NextRequest) {
     return gateAdmin(req, pathname);
   }
 
+  // Custom blog domain proxied via Cloudflare Worker (x-custom-blog-host header)
+  const customBlogHost = req.headers.get("x-custom-blog-host");
+  if (customBlogHost) {
+    const host = customBlogHost.split(":")[0];
+    const siteSlug = customDomainMap[host];
+    if (siteSlug) {
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-blog-host", customBlogHost);
+      const rewritePath = pathname === "/" ? `/blog/${siteSlug}` : `/blog/${siteSlug}${pathname}`;
+      const url = req.nextUrl.clone();
+      url.pathname = rewritePath;
+      return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+    }
+    // Unknown custom domain — redirect to unauthorized
+    const url = req.nextUrl.clone();
+    url.pathname = "/unauthorized";
+    return NextResponse.redirect(url, 302);
+  }
+
   // API routes — shared across all subdomains, pass through
   if (pathname.startsWith("/api/") || pathname.startsWith("/api")) {
     return NextResponse.next();
