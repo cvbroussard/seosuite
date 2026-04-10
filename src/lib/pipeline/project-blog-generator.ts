@@ -66,7 +66,7 @@ export async function generateProjectArticle(
       AND ma.context_note IS NOT NULL
       AND ma.context_note != ''
       AND ma.triage_status = 'triaged'
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
+    ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
   console.log("Project assets found:", assets.length);
@@ -264,7 +264,7 @@ export async function generateArticlePrompts(
     JOIN asset_projects ap ON ap.asset_id = ma.id
     WHERE ap.project_id = ${projectId}
       AND ma.context_note IS NOT NULL AND ma.context_note != ''
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
+    ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
   const captionList = assets.map((a) => {
@@ -358,7 +358,7 @@ export async function generateProjectArticleFromPrompt(
     WHERE ap.project_id = ${projectId}
       AND ma.context_note IS NOT NULL AND ma.context_note != ''
       AND ma.triage_status = 'triaged'
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
+    ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
   if (allAssets.length < 3) return null;

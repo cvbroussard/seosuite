@@ -98,9 +98,11 @@ export async function GET(req: NextRequest) {
         if (!mediaType?.startsWith("image") && !meta.date_taken) {
           const fileDate = parseDateFromFilename((meta.original_filename as string) || storageUrl);
           if (fileDate) {
+            const sortOrder = new Date(fileDate).getTime() / 1000;
             await sql`
               UPDATE media_assets
               SET date_taken = ${fileDate},
+                  sort_order = ${sortOrder},
                   metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ date_taken: fileDate })}::jsonb
               WHERE id = ${assetId}
             `;
@@ -126,9 +128,11 @@ export async function GET(req: NextRequest) {
               ...(exif.lat !== null && { geo: { lat: exif.lat, lng: exif.lng } }),
               ...(exif.camera && { camera: exif.camera }),
             };
+            const sortOrder = exif.dateTaken ? new Date(exif.dateTaken).getTime() / 1000 : null;
             await sql`
               UPDATE media_assets
               SET date_taken = ${exif.dateTaken},
+                  sort_order = COALESCE(${sortOrder}, sort_order),
                   metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(exifMeta)}::jsonb
               WHERE id = ${assetId}
             `;

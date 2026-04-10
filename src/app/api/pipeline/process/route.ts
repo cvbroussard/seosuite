@@ -113,9 +113,12 @@ export async function POST(req: NextRequest) {
             ...(exif.lat !== null && { geo: { lat: exif.lat, lng: exif.lng } }),
             ...(exif.camera && { camera: exif.camera }),
           };
+          // Update date_taken and recalculate sort_order from the real photo date
+          const sortOrder = exif.dateTaken ? new Date(exif.dateTaken).getTime() / 1000 : null;
           await sql`
             UPDATE media_assets
             SET date_taken = ${exif.dateTaken},
+                sort_order = COALESCE(${sortOrder}, sort_order),
                 metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(exifMeta)}::jsonb
             WHERE id = ${assetId}
           `;

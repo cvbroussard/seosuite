@@ -48,7 +48,7 @@ export async function buildProjectSnapshot(projectId: string): Promise<ProjectSn
     WHERE ap.project_id = ${projectId}
       AND ma.context_note IS NOT NULL
       AND ma.context_note != ''
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
+    ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
   const sampleCaptions = captioned.map((a) => {
@@ -138,7 +138,7 @@ export async function buildSiteSnapshot(siteId: string): Promise<ProjectSnapshot
       AND ma.context_note != ''
       AND (ma.metadata->>'caption_source' IS NULL OR ma.metadata->>'caption_source' != 'ai')
       AND ma.metadata->>'context_auto_generated' IS NULL
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) DESC
+    ORDER BY ma.sort_order DESC NULLS LAST
     LIMIT 20
   `;
 
@@ -314,7 +314,7 @@ export async function generateAllCaptions(projectId: string): Promise<number> {
     WHERE ap.project_id = ${projectId}
       AND (ma.context_note IS NULL OR ma.context_note = '')
       AND ma.triage_status = 'triaged'
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
+    ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
   let generated = 0;

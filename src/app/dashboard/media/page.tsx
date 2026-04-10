@@ -52,19 +52,18 @@ export default async function MediaPage({ searchParams }: Props) {
   // while still supporting dynamic WHERE
   // Fetch all assets for the site, apply server-side sort
   const orderClause = sortOrder === "quality" ? "quality_score DESC"
-    : sortOrder === "least_used" ? "COALESCE((metadata->>'used_count')::int, 0) ASC, created_at DESC"
-    : sortOrder === "oldest" ? "COALESCE(date_taken, created_at) ASC"
-    : "COALESCE(date_taken, created_at) DESC";
+    : sortOrder === "least_used" ? "COALESCE((metadata->>'used_count')::int, 0) ASC, sort_order DESC"
+    : sortOrder === "oldest" ? "sort_order ASC"
+    : "sort_order DESC";
 
   // Single query — filter in JS for reliability with Neon tagged templates
-  // Note: SQL ORDER BY is always DESC here; JS re-sorts per orderClause
   const allAssets = await sql`
     SELECT id, storage_url, media_type, context_note, triage_status,
            quality_score, content_pillar, content_pillars, content_tags,
-           source, ai_analysis, metadata, date_taken,
+           source, ai_analysis, metadata, date_taken, sort_order,
            platform_fit, flag_reason, shelve_reason, created_at
     FROM media_assets WHERE site_id = ${siteId}
-    ORDER BY COALESCE(date_taken, created_at) DESC
+    ORDER BY sort_order DESC NULLS LAST
     LIMIT 500
   `;
 
@@ -96,11 +95,7 @@ export default async function MediaPage({ searchParams }: Props) {
 
   // Apply sort
   if (sortOrder === "oldest") {
-    filtered.sort((a, b) => {
-      const aDate = (a.date_taken || a.created_at) as string;
-      const bDate = (b.date_taken || b.created_at) as string;
-      return new Date(aDate).getTime() - new Date(bDate).getTime();
-    });
+    filtered.sort((a, b) => ((a.sort_order as number) || 0) - ((b.sort_order as number) || 0));
   } else if (sortOrder === "quality") {
     filtered.sort((a, b) => ((b.quality_score as number) || 0) - ((a.quality_score as number) || 0));
   } else if (sortOrder === "least_used") {

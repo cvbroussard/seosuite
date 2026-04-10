@@ -95,12 +95,12 @@ export async function POST(req: NextRequest) {
     const [asset] = await sql`
       INSERT INTO media_assets (
         site_id, storage_url, media_type, context_note,
-        source, triage_status, metadata
+        source, triage_status, metadata, sort_order
       )
       VALUES (
         ${site_id}, ${finalUrl}, ${media_type},
         ${context_note || null}, 'upload', 'received',
-        ${JSON.stringify(assetMeta)}
+        ${JSON.stringify(assetMeta)}, EXTRACT(EPOCH FROM NOW())
       )
       RETURNING id, site_id, storage_url, media_type, context_note, triage_status, created_at
     `;

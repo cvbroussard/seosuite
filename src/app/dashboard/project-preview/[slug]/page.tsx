@@ -34,7 +34,7 @@ export default async function ProjectPreviewPage({
     JOIN asset_projects ap ON ap.asset_id = ma.id
     WHERE ap.project_id = ${projectId}
       AND ma.triage_status = 'triaged'
-    ORDER BY COALESCE(ma.date_taken, ma.created_at) ASC
+    ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
   // Fetch brands used in this project
