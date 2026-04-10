@@ -125,6 +125,8 @@ export function SiteControls({
   const [generatingProject, setGeneratingProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState(projects[0]?.id || "");
   const [articleRatio, setArticleRatio] = useState("3:1"); // editorial:project
+  const [projectPrompts, setProjectPrompts] = useState<Array<{ title: string; angle: string; assetHint: string }> | null>(null);
+  const [loadingProjectPrompts, setLoadingProjectPrompts] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [promptFilter, setPromptFilter] = useState("all");
   const [saved, setSaved] = useState<string | null>(null);
@@ -482,6 +484,7 @@ export function SiteControls({
               Generate an article from a project&apos;s captioned assets ({counts.projects} projects).
             </p>
             {projects.length > 0 ? (
+            <>
               <div className="flex items-center gap-2">
                 <select
                   value={selectedProject}
@@ -520,7 +523,48 @@ export function SiteControls({
                 >
                   {generatingProject ? "Writing..." : "Write Project Article"}
                 </button>
+                <button
+                  onClick={async () => {
+                    if (!selectedProject) return;
+                    setLoadingProjectPrompts(true);
+                    try {
+                      const res = await fetch(`/api/projects/${selectedProject}/generate-article`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        setProjectPrompts(data.prompts || []);
+                      }
+                    } catch { /* ignore */ }
+                    setLoadingProjectPrompts(false);
+                  }}
+                  disabled={loadingProjectPrompts}
+                  className="text-[10px] text-accent hover:underline disabled:opacity-50"
+                >
+                  {loadingProjectPrompts ? "Loading..." : "View prompts"}
+                </button>
               </div>
+
+              {/* Project prompts list */}
+              {projectPrompts && (
+                <div className="mt-3 rounded border border-border bg-background p-2">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[10px] font-medium">{projectPrompts.length} article angles</span>
+                    <button onClick={() => setProjectPrompts(null)} className="text-[10px] text-muted hover:text-foreground">Close</button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {projectPrompts.map((p, i) => (
+                      <div key={i} className="border-b border-border pb-2 last:border-0">
+                        <p className="text-xs font-medium">{p.title}</p>
+                        <p className="text-[10px] text-muted">{p.angle}</p>
+                        <p className="text-[9px] text-dim">Hint: {p.assetHint}</p>
+                      </div>
+                    ))}
+                    {projectPrompts.length === 0 && (
+                      <p className="text-[10px] text-muted">No prompts generated yet — click Write Project Article to generate them.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
             ) : (
               <p className="text-[10px] text-dim">No projects configured for this site.</p>
             )}
