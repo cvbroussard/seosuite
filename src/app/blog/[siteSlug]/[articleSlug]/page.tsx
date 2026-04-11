@@ -129,6 +129,7 @@ export default async function ArticlePage({ params }: Props) {
     ? String((angles[0] as Record<string, unknown>).tagline || "")
     : "";
   const aboutText = site.blogDescription || tagline || "";
+  const customDomain = await getCustomDomain(site.siteId);
   const pillars = [...new Set(allPosts.map((p) => p.content_pillar as string).filter(Boolean))];
   const recentPosts = allPosts
     .filter((p) => String(p.slug) !== articleSlug)
@@ -156,6 +157,8 @@ export default async function ArticlePage({ params }: Props) {
   return (
     <BlogShell
       siteName={site.siteName}
+      siteSlug={siteSlug}
+      customDomain={customDomain}
       description={aboutText}
       tagline={tagline}
       navLinks={navLinks}

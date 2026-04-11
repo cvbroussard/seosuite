@@ -20,6 +20,8 @@ export interface NavLink {
 
 interface BlogShellProps {
   siteName: string;
+  siteSlug: string;
+  customDomain?: string | null;
   description?: string;
   tagline?: string;
   navLinks: NavLink[];
@@ -61,6 +63,8 @@ function googleFontsUrl(fonts: string[]): string | null {
 
 export default function BlogShell({
   siteName,
+  siteSlug,
+  customDomain,
   description,
   tagline,
   navLinks,
@@ -72,6 +76,26 @@ export default function BlogShell({
   aside,
   children,
 }: BlogShellProps) {
+  // Build final nav: tenant links (from DB) + platform links (Blog, Projects)
+  const blogUrl = customDomain
+    ? `https://${customDomain}`
+    : `/blog/${siteSlug}`;
+  const projectsUrl = customDomain
+    ? `https://${customDomain.replace("blog.", "projects.")}`
+    : `/projects/${siteSlug}`;
+
+  // Filter out any tenant-stored Blog/Projects links (we generate those)
+  const tenantLinks = navLinks.filter((l) => {
+    const lower = l.label.toLowerCase();
+    return lower !== "blog" && lower !== "projects";
+  });
+
+  const finalNav: NavLink[] = [
+    ...tenantLinks,
+    { label: "Blog", href: blogUrl },
+    { label: "Projects", href: projectsUrl },
+  ];
+
   // Collect Google Fonts to load
   const fontsToLoad = new Set<string>();
   if (theme.fontFamily) extractGoogleFonts(theme.fontFamily).forEach((f) => fontsToLoad.add(f));
@@ -109,7 +133,7 @@ export default function BlogShell({
             <span className="bs-site-name">{siteName}</span>
           </a>
           <nav className="bs-nav">
-            {navLinks.map((link) => (
+            {finalNav.map((link) => (
               <a
                 key={link.label}
                 href={link.href}

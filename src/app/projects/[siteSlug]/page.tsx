@@ -74,16 +74,11 @@ export default async function ProjectsIndexPage({ params }: Props) {
   const theme: BlogTheme = { ...rawTheme, logoUrl: logoUrl || rawTheme.logoUrl };
 
   const storedNavLinks = (settings.nav_links as NavLink[]) || [];
-  const baseLinks: NavLink[] = storedNavLinks.length > 0
+  const navLinks: NavLink[] = storedNavLinks.length > 0
     ? storedNavLinks
     : [
         ...(websiteUrl ? [{ label: "Home", href: websiteUrl }] : []),
       ];
-  // Ensure Projects link is present
-  const hasProjectsLink = baseLinks.some((l) => l.label.toLowerCase() === "projects");
-  const navLinks: NavLink[] = hasProjectsLink
-    ? baseLinks
-    : [...baseLinks, { label: "Projects", href: `/projects/${siteSlug}` }];
 
   const playbook = siteInfo.brand_playbook as Record<string, unknown> | null;
   const angles = (playbook?.brandPositioning as Record<string, unknown>)?.selectedAngles;
@@ -118,6 +113,8 @@ export default async function ProjectsIndexPage({ params }: Props) {
   return (
     <BlogShell
       siteName={site.siteName}
+      siteSlug={siteSlug}
+      customDomain={customDomainVal}
       tagline={tagline}
       navLinks={navLinks}
       theme={theme}

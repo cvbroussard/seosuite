@@ -108,12 +108,15 @@ export default async function HubPage({ params }: Props) {
     published_at: String(p.published_at),
   }));
 
-  // Location from site data
+  // Location + custom domain
   const siteLocation = (siteInfo.location as string) || null;
+  const customDomain = await getCustomDomain(site.siteId);
 
   return (
     <BlogShell
       siteName={site.siteName}
+      siteSlug={siteSlug}
+      customDomain={customDomain}
       description={aboutText}
       tagline={tagline}
       navLinks={navLinks}
