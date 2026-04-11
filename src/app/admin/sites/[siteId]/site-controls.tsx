@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface SiteData {
   name: string;
@@ -363,7 +363,7 @@ function DomainProvisioning({
   }
 }
 
-function WebsiteSpinner({ siteId }: { siteId: string }) {
+function WebsiteSpinner({ siteId, siteUrl }: { siteId: string; siteUrl: string | null }) {
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<{ success: boolean; url?: string; pages?: number; error?: string } | null>(null);
   const [domainInput, setDomainInput] = useState("");
@@ -378,6 +378,38 @@ function WebsiteSpinner({ siteId }: { siteId: string }) {
   const [verifying, setVerifying] = useState(false);
   const [sendingDns, setSendingDns] = useState(false);
   const [dnsSent, setDnsSent] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // Fetch domain status on mount (pane expand)
+  useEffect(() => {
+    if (loaded) return;
+    setLoaded(true);
+    if (!siteUrl) return;
+    const domain = (() => { try { return new URL(siteUrl).hostname; } catch { return null; } })();
+    if (!domain) return;
+
+    fetch("/api/admin/website", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: siteId, action: "verify-domain", domain }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.domain) {
+          // Domain exists on Vercel — show status
+          setDomainResult({
+            success: true,
+            domain: data.domain,
+            verified: data.verified && data.configured,
+            dnsRecords: [
+              { type: "A", name: "@", value: "76.76.21.21", purpose: "Root domain to Vercel" },
+            ],
+          });
+        }
+        // If domain not found, leave domainResult null → shows input
+      })
+      .catch(() => { /* silently fail — show input */ });
+  }, [loaded, siteId, siteUrl]);
   const [copied, setCopied] = useState<string | null>(null);
 
   function copyToClipboard(text: string, label: string) {
@@ -1203,7 +1235,7 @@ export function SiteControls({
             Generate a complete static website from the brand playbook, assets, and entities.
             Deploys as a separate Vercel project.
           </p>
-          <WebsiteSpinner siteId={siteId} />
+          <WebsiteSpinner siteId={siteId} siteUrl={site.url} />
         </div>
       </Section>
     </div>
