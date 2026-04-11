@@ -149,11 +149,17 @@ export async function POST(req: NextRequest) {
     const [siteRow] = await sql`SELECT name FROM sites WHERE id = ${site_id}`;
     const siteName = (siteRow?.name as string) || "Your site";
 
+    // Get the custom domain to derive the root domain for nav link instructions
+    const [blogSettings] = await sql`SELECT custom_domain FROM blog_settings WHERE site_id = ${site_id}`;
+    const customDomain = (blogSettings?.custom_domain as string) || "";
+    const rootDomain = customDomain.replace("blog.", "");
+
     const { sendDnsInstructionsEmail } = await import("@/lib/email");
     const sent = await sendDnsInstructionsEmail({
       to: owner.email as string,
       tenantName: (owner.name as string) || "there",
       siteName,
+      domain: rootDomain,
       dnsRecords,
     });
 

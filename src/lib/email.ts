@@ -77,11 +77,13 @@ export async function sendDnsInstructionsEmail({
   to,
   tenantName,
   siteName,
+  domain,
   dnsRecords,
 }: {
   to: string;
   tenantName: string;
   siteName: string;
+  domain: string;
   dnsRecords: Array<{ type: string; name: string; value: string; purpose: string }>;
 }): Promise<boolean> {
   const rows = dnsRecords.map((r) =>
@@ -120,6 +122,15 @@ export async function sendDnsInstructionsEmail({
           <p style="margin: 0 0 8px;">If you use Cloudflare, set CNAME records to <strong>DNS only</strong> (grey cloud, not proxied).</p>
           ${hasTxt ? '<p style="margin: 0 0 8px;">TXT records are for ownership verification and can be deleted once your domains are active.</p>' : ""}
           <p style="margin: 0;">Not sure how to do this? Forward this email to whoever manages your domain — they&apos;ll know what to do.</p>
+        </div>
+        <div style="margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 6px;">
+          <p style="font-size: 14px; font-weight: 600; color: #1a1a1a; margin: 0 0 8px;">Add these links to your website navigation:</p>
+          <p style="font-size: 14px; color: #4b5563; margin: 0 0 4px;">
+            Blog &rarr; <a href="https://blog.${domain}" style="color: #3b82f6;">https://blog.${domain}</a>
+          </p>
+          <p style="font-size: 14px; color: #4b5563; margin: 0;">
+            Projects &rarr; <a href="https://projects.${domain}" style="color: #3b82f6;">https://projects.${domain}</a>
+          </p>
         </div>
         <p style="font-size: 12px; color: #9ca3af;">
           — The ${siteName} content team, powered by TracPost
