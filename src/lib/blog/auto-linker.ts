@@ -28,27 +28,53 @@ async function getRelatedPosts(
   }));
 }
 
+interface LinkableBrand {
+  slug: string;
+  name: string;
+}
+
+/**
+ * Fetch all brands for a site (for auto-linking in articles).
+ */
+async function getSiteBrands(siteId: string): Promise<LinkableBrand[]> {
+  const rows = await sql`
+    SELECT slug, name FROM brands
+    WHERE site_id = ${siteId}
+      AND (SELECT COUNT(*) FROM asset_brands ab WHERE ab.brand_id = brands.id) >= 2
+  `;
+  return rows.map((r) => ({
+    slug: r.slug as string,
+    name: r.name as string,
+  }));
+}
+
 /**
  * Build a map of matchable phrases → link targets.
  * Longer phrases take priority to avoid partial matches.
+ * Includes both blog post titles/tags and brand names.
  */
 function buildPhraseMap(
   posts: LinkablePost[],
+  brands: LinkableBrand[],
   siteSlug: string
 ): Array<{ phrase: string; href: string; title: string }> {
   const entries: Array<{ phrase: string; href: string; title: string }> = [];
 
   for (const post of posts) {
     const href = `/blog/${siteSlug}/${post.slug}`;
-
-    // Add the title as a matchable phrase
     entries.push({ phrase: post.title, href, title: post.title });
-
-    // Add each tag as a matchable phrase
     for (const tag of post.tags) {
       if (tag.length >= 4) {
         entries.push({ phrase: tag, href, title: post.title });
       }
+    }
+  }
+
+  // Brand names → brand detail pages
+  for (const brand of brands) {
+    if (brand.name.length >= 3) {
+      const href = `/projects/${siteSlug}/brands/${brand.slug}`;
+      entries.push({ phrase: brand.name, href, title: brand.name });
     }
   }
 
@@ -71,10 +97,13 @@ export async function autoLinkEntities(
   siteSlug: string,
   currentSlug: string
 ): Promise<string> {
-  const posts = await getRelatedPosts(siteId, currentSlug);
-  if (posts.length === 0) return html;
+  const [posts, brands] = await Promise.all([
+    getRelatedPosts(siteId, currentSlug),
+    getSiteBrands(siteId),
+  ]);
+  if (posts.length === 0 && brands.length === 0) return html;
 
-  const phraseMap = buildPhraseMap(posts, siteSlug);
+  const phraseMap = buildPhraseMap(posts, brands, siteSlug);
   const linked = new Set<string>(); // track which hrefs we've already linked
   let result = html;
 
