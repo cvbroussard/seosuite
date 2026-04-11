@@ -152,5 +152,71 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (action === "send-dns") {
+    const { domain, dnsRecords } = body;
+    if (!domain || !dnsRecords || !Array.isArray(dnsRecords)) {
+      return NextResponse.json({ error: "domain and dnsRecords required" }, { status: 400 });
+    }
+
+    const [owner] = await sql`
+      SELECT u.email, u.name
+      FROM users u
+      JOIN subscriptions sub ON sub.id = u.subscription_id
+      JOIN sites s ON s.subscription_id = sub.id
+      WHERE s.id = ${site_id} AND u.role = 'owner'
+    `;
+    if (!owner?.email) {
+      return NextResponse.json({ error: "Tenant owner email not found" }, { status: 404 });
+    }
+
+    const [siteRow] = await sql`SELECT name FROM sites WHERE id = ${site_id}`;
+    const siteName = (siteRow?.name as string) || "Your site";
+
+    const { sendEmail } = await import("@/lib/email");
+
+    const rows = dnsRecords.map((r: { type: string; name: string; value: string }) =>
+      `<tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;">${r.type}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;">${r.name}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px; word-break: break-all;">${r.value}</td>
+      </tr>`
+    ).join("");
+
+    const sent = await sendEmail({
+      to: owner.email as string,
+      subject: `${siteName} — Connect your website domain`,
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+          <h1 style="font-size: 22px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a;">
+            Your website is ready
+          </h1>
+          <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 24px;">
+            Hi ${(owner.name as string) || "there"}, to connect your website to ${domain},
+            add these DNS records with your domain provider:
+          </p>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #e5e7eb;">
+            <thead>
+              <tr style="background: #f9fafb;">
+                <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Type</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Name</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Value</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div style="font-size: 13px; color: #6b7280; line-height: 1.6; margin-bottom: 24px;">
+            <p style="margin: 0 0 8px;">If you use Cloudflare, set records to <strong>DNS only</strong> (grey cloud, not proxied).</p>
+            <p style="margin: 0;">Not sure how? Forward this email to whoever manages your domain.</p>
+          </div>
+          <p style="font-size: 12px; color: #9ca3af;">
+            — The ${siteName} content team, powered by TracPost
+          </p>
+        </div>
+      `,
+    });
+
+    return NextResponse.json({ sent, to: owner.email });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

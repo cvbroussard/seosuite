@@ -376,6 +376,8 @@ function WebsiteSpinner({ siteId }: { siteId: string }) {
     error?: string;
   } | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [sendingDns, setSendingDns] = useState(false);
+  const [dnsSent, setDnsSent] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   function copyToClipboard(text: string, label: string) {
@@ -461,6 +463,34 @@ function WebsiteSpinner({ siteId }: { siteId: string }) {
               >
                 {verifying ? "Checking..." : "Verify"}
               </button>
+              <button
+                onClick={async () => {
+                  if (!domainResult.dnsRecords || !domainResult.domain) return;
+                  setSendingDns(true);
+                  setDnsSent(false);
+                  try {
+                    const res = await fetch("/api/admin/website", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "send-dns",
+                        site_id: siteId,
+                        domain: domainResult.domain,
+                        dnsRecords: domainResult.dnsRecords,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.sent) setDnsSent(true);
+                    else alert(data.error || "Failed to send");
+                  } catch { alert("Failed to send"); }
+                  setSendingDns(false);
+                }}
+                disabled={sendingDns || !domainResult.dnsRecords}
+                className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {sendingDns ? "Sending..." : "Send to Tenant"}
+              </button>
+              {dnsSent && <span className="text-[10px] text-success">Email sent</span>}
             </div>
             {domainResult.dnsRecords && domainResult.dnsRecords.length > 0 && (
               <div className="rounded border border-border bg-background p-3">
