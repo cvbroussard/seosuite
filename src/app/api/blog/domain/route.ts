@@ -76,35 +76,43 @@ export async function POST(req: NextRequest) {
       }, { status: 502 });
     }
 
-    // 4. Return DNS records for tenant
+    // 4. Build DNS records from actual Vercel response
     const dnsRecords: Array<{ type: string; name: string; value: string; purpose: string }> = [];
 
-    // Verification TXT records (if required)
-    for (const res of [blogResult, projectsResult]) {
-      if (res.verification && res.verification.length > 0) {
-        for (const v of res.verification) {
-          dnsRecords.push({
-            type: v.type.toUpperCase(),
-            name: v.domain,
-            value: v.value,
-            purpose: "Domain ownership verification",
-          });
-        }
+    // Blog verification + CNAME
+    if (blogResult.verification && blogResult.verification.length > 0) {
+      for (const v of blogResult.verification) {
+        dnsRecords.push({
+          type: v.type.toUpperCase(),
+          name: v.domain,
+          value: v.value,
+          purpose: `Verify ${blogDomain}`,
+        });
       }
     }
-
-    // CNAME records for both subdomains
     dnsRecords.push({
       type: "CNAME",
       name: "blog",
-      value: "cname.vercel-dns.com",
-      purpose: "Points blog subdomain to TracPost",
+      value: blogResult.cnameTarget || "cname.vercel-dns.com",
+      purpose: "Blog subdomain",
     });
+
+    // Projects verification + CNAME
+    if (projectsResult.verification && projectsResult.verification.length > 0) {
+      for (const v of projectsResult.verification) {
+        dnsRecords.push({
+          type: v.type.toUpperCase(),
+          name: v.domain,
+          value: v.value,
+          purpose: `Verify ${projectsDomain}`,
+        });
+      }
+    }
     dnsRecords.push({
       type: "CNAME",
       name: "projects",
-      value: "cname.vercel-dns.com",
-      purpose: "Points projects subdomain to TracPost",
+      value: projectsResult.cnameTarget || "cname.vercel-dns.com",
+      purpose: "Projects subdomain",
     });
 
     return NextResponse.json({
@@ -112,8 +120,10 @@ export async function POST(req: NextRequest) {
       siteSlug,
       blogDomain,
       projectsDomain,
+      blogStatus: blogResult.verified ? "active" : "pending",
+      projectsStatus: projectsResult.verified ? "active" : "pending",
       dnsRecords,
-      message: `Blog domain provisioned. Send these DNS records to the tenant.`,
+      message: "Domains provisioned. Send DNS records to the tenant.",
     });
   }
 
@@ -121,13 +131,24 @@ export async function POST(req: NextRequest) {
     const [settings] = await sql`
       SELECT custom_domain FROM blog_settings WHERE site_id = ${site_id}
     `;
-    const domain = settings?.custom_domain as string;
-    if (!domain) {
+    const blogDomain = settings?.custom_domain as string;
+    if (!blogDomain) {
       return NextResponse.json({ error: "No custom domain configured" }, { status: 400 });
     }
 
-    const status = await verifyDomain(domain);
-    return NextResponse.json({ domain, ...status });
+    const projectsDomain = blogDomain.replace("blog.", "projects.");
+
+    const [blogStatus, projectsStatus] = await Promise.all([
+      verifyDomain(blogDomain),
+      verifyDomain(projectsDomain),
+    ]);
+
+    return NextResponse.json({
+      blogDomain,
+      projectsDomain,
+      blog: blogStatus,
+      projects: projectsStatus,
+    });
   }
 
   if (action === "remove") {

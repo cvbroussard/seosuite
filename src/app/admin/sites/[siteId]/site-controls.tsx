@@ -139,8 +139,8 @@ function DomainProvisioning({
         setBlogDomain(data.blogDomain);
         setProjectsDomain(data.projectsDomain);
         setDnsRecords(data.dnsRecords);
-        setBlogStatus("pending");
-        setProjectsStatus("pending");
+        setBlogStatus(data.blogStatus === "active" ? "active" : "pending");
+        setProjectsStatus(data.projectsStatus === "active" ? "active" : "pending");
         onProvisioned(data.blogDomain, data.siteSlug, data.dnsRecords);
       } else {
         alert(data.error || data.message || "Provisioning failed");
@@ -161,9 +161,12 @@ function DomainProvisioning({
         body: JSON.stringify({ action: "verify", site_id: siteId }),
       });
       const data = await res.json();
-      setBlogStatus(data.verified && data.configured ? "active" : "pending");
-      // TODO: separate verify for projects domain when API supports it
-      setProjectsStatus(data.verified && data.configured ? "active" : "pending");
+      setBlogStatus(
+        data.blog?.verified && data.blog?.configured ? "active" : "pending"
+      );
+      setProjectsStatus(
+        data.projects?.verified && data.projects?.configured ? "active" : "pending"
+      );
     } catch {
       alert("Verification request failed");
     } finally {

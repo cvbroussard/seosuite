@@ -31,8 +31,8 @@ export async function addDomain(domain: string): Promise<{
   success: boolean;
   error?: string;
   verification?: Array<{ type: string; domain: string; value: string }>;
-  apexName?: string;
-  cnames?: Array<{ name: string; value: string }>;
+  cnameTarget?: string;
+  verified?: boolean;
 }> {
   if (!process.env.VERCEL_TOKEN || !process.env.VERCEL_PROJECT_ID) {
     console.warn("Vercel domain API not configured — skipping domain addition");
@@ -50,32 +50,38 @@ export async function addDomain(domain: string): Promise<{
 
   const data = await res.json();
 
-  if (!res.ok) {
+  // Domain may already exist — that's fine, fetch its current state
+  if (!res.ok && data.error?.code !== "domain_already_in_use") {
     return {
       success: false,
       error: data.error?.message || JSON.stringify(data),
     };
   }
 
-  // After adding, fetch domain config to get required DNS records
-  const configRes = await fetch(
-    `${API_BASE}/v6/domains/${domain}/config${teamQuery()}`,
-    { headers: headers() }
-  );
-  const config = configRes.ok ? await configRes.json() : null;
-
-  // Fetch verification records
+  // Fetch verification records + status
   const domainRes = await fetch(
     `${API_BASE}/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${domain}${teamQuery()}`,
     { headers: headers() }
   );
   const domainData = domainRes.ok ? await domainRes.json() : null;
 
+  // Fetch domain config to get the actual CNAME target Vercel expects
+  const configRes = await fetch(
+    `${API_BASE}/v6/domains/${domain}/config${teamQuery()}`,
+    { headers: headers() }
+  );
+  const config = configRes.ok ? await configRes.json() : null;
+
+  // Use the recommended CNAME if available, fall back to current cnames, then generic
+  const recommendedCname = config?.recommendedCNAME?.[0]?.value;
+  const currentCname = config?.cnames?.[0];
+  const cnameTarget = recommendedCname || currentCname || "cname.vercel-dns.com";
+
   return {
     success: true,
     verification: domainData?.verification || [],
-    apexName: domainData?.apexName,
-    cnames: config?.cnames || [],
+    cnameTarget: cnameTarget.replace(/\.$/, ""), // strip trailing dot
+    verified: domainData?.verified === true,
   };
 }
 
