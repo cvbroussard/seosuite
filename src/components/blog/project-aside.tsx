@@ -32,6 +32,7 @@ interface ProjectMeta {
 interface Brand {
   id: string;
   name: string;
+  slug: string;
   url: string | null;
 }
 
@@ -138,6 +139,7 @@ export function ProjectDetailAside({
   months,
   brands,
   personas,
+  brandsBaseUrl,
   prev,
   next,
 }: {
@@ -145,6 +147,7 @@ export function ProjectDetailAside({
   months: MonthNav[];
   brands: Brand[];
   personas: Persona[];
+  brandsBaseUrl: string;
   prev?: SiblingProject | null;
   next?: SiblingProject | null;
 }) {
@@ -241,11 +244,9 @@ export function ProjectDetailAside({
           <h3 className="bs-aside-title">Materials</h3>
           <div className="pj-aside-chips">
             {brands.map((b) => (
-              <span key={b.id} className="pj-aside-chip">
-                {b.url ? (
-                  <a href={b.url} target="_blank" rel="noopener noreferrer">{b.name}</a>
-                ) : b.name}
-              </span>
+              <a key={b.id} href={`${brandsBaseUrl}/${b.slug}`} className="pj-aside-chip pj-aside-chip-link">
+                {b.name}
+              </a>
             ))}
           </div>
         </div>
@@ -474,6 +475,16 @@ const detailAsideStyles = `
 
   .pj-aside-chip a:hover {
     text-decoration: underline;
+  }
+
+  .pj-aside-chip-link {
+    text-decoration: none;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .pj-aside-chip-link:hover {
+    border-color: var(--bs-accent);
+    color: var(--bs-accent);
   }
 
   .pj-aside-chip-role {

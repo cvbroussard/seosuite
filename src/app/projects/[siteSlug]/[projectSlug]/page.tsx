@@ -63,7 +63,7 @@ export default async function ProjectPage({ params }: Props) {
       ORDER BY ma.sort_order ASC NULLS LAST
     `,
     sql`
-      SELECT DISTINCT b.id, b.name, b.url
+      SELECT DISTINCT b.id, b.name, b.slug, b.url
       FROM brands b
       JOIN asset_brands ab ON ab.brand_id = b.id
       JOIN asset_projects ap ON ap.asset_id = ab.asset_id
@@ -176,6 +176,7 @@ export default async function ProjectPage({ params }: Props) {
   const asideBrands = brands.map((b: Record<string, unknown>) => ({
     id: String(b.id),
     name: String(b.name),
+    slug: String(b.slug),
     url: b.url ? String(b.url) : null,
   }));
 
@@ -223,6 +224,7 @@ export default async function ProjectPage({ params }: Props) {
           }}
           months={monthNav}
           brands={asideBrands}
+          brandsBaseUrl={`${projectsBase}/brands`}
           personas={asidePersonas}
           prev={prevProject ? { ...prevProject, slug: `${projectsBase}/${prevProject.slug}` } : null}
           next={nextProject ? { ...nextProject, slug: `${projectsBase}/${nextProject.slug}` } : null}
