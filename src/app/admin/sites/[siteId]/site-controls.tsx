@@ -21,6 +21,7 @@ interface SiteData {
   inlineAiCount: number;
   blogCadence: number;
   articleMix: string;
+  customDomain: string | null;
 }
 
 interface Counts {
@@ -142,6 +143,11 @@ export function SiteControls({
   const [autopilotEnabled, setAutopilotEnabled] = useState(site.autopilotEnabled);
   const [blogSlug, setBlogSlug] = useState(site.subdomain || "");
   const [navLinks, setNavLinks] = useState<NavLink[]>(initialNavLinks);
+  const [customDomain, setCustomDomain] = useState(site.customDomain || "");
+  const [domainInput, setDomainInput] = useState("");
+  const [domainProvisioning, setDomainProvisioning] = useState(false);
+  const [dnsRecords, setDnsRecords] = useState<Array<{ type: string; name: string; value: string; purpose: string }> | null>(null);
+  const [domainStatus, setDomainStatus] = useState<{ verified: boolean; configured: boolean } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
   async function saveSection(section: string, data: Record<string, unknown>) {
@@ -471,6 +477,109 @@ export function SiteControls({
                 <SaveButton section="navLinks" data={{ navLinks }} />
               </div>
             </div>
+          </Field>
+
+          <Field label="Custom Domain">
+            {customDomain ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://${customDomain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-accent hover:underline"
+                  >
+                    {customDomain}
+                  </a>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch("/api/blog/domain", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "verify", site_id: siteId }),
+                      });
+                      const data = await res.json();
+                      setDomainStatus({ verified: data.verified, configured: data.configured });
+                    }}
+                    className="text-[10px] text-muted hover:text-foreground"
+                  >
+                    Check DNS
+                  </button>
+                  {domainStatus && (
+                    <span className={`text-[10px] ${domainStatus.verified && domainStatus.configured ? "text-success" : "text-warning"}`}>
+                      {domainStatus.verified && domainStatus.configured ? "Active" : "Pending DNS"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={domainInput}
+                    onChange={(e) => setDomainInput(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ""))}
+                    className="bg-surface-hover px-2 py-1 text-xs text-foreground flex-1"
+                    placeholder="b2construct.com"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!domainInput) return;
+                      setDomainProvisioning(true);
+                      setDnsRecords(null);
+                      try {
+                        const res = await fetch("/api/blog/domain", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "provision", site_id: siteId, domain: domainInput }),
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          setCustomDomain(data.blogDomain);
+                          setBlogSlug(data.siteSlug);
+                          setDnsRecords(data.dnsRecords);
+                        } else {
+                          alert(data.error || data.message || "Provisioning failed");
+                        }
+                      } catch {
+                        alert("Provisioning request failed");
+                      } finally {
+                        setDomainProvisioning(false);
+                      }
+                    }}
+                    disabled={domainProvisioning || !domainInput}
+                    className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                  >
+                    {domainProvisioning ? "Provisioning..." : "Provision"}
+                  </button>
+                </div>
+                {dnsRecords && (
+                  <div className="rounded border border-border bg-background p-2 text-[10px]">
+                    <div className="mb-1 font-medium">Send these DNS records to the tenant:</div>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-muted">
+                          <th className="text-left py-0.5 pr-2">Type</th>
+                          <th className="text-left py-0.5 pr-2">Name</th>
+                          <th className="text-left py-0.5 pr-2">Value</th>
+                          <th className="text-left py-0.5">Purpose</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dnsRecords.map((r, i) => (
+                          <tr key={i}>
+                            <td className="py-0.5 pr-2 font-mono">{r.type}</td>
+                            <td className="py-0.5 pr-2 font-mono">{r.name}</td>
+                            <td className="py-0.5 pr-2 font-mono break-all">{r.value}</td>
+                            <td className="py-0.5 text-muted">{r.purpose}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </Field>
 
           <Field label="Video Ratio — 1 video post per N posts">

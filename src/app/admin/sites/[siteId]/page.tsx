@@ -107,6 +107,7 @@ export default async function SiteControlPanel({ params }: Props) {
           inlineAiCount: (site.inline_ai_count as number) ?? 3,
           blogCadence: (site.blog_cadence as number) || 0,
           articleMix: (site.article_mix as string) || "3:1",
+          customDomain: (site.custom_domain as string) || null,
         }}
         counts={{
           totalAssets: counts?.total_assets || 0,

@@ -25,8 +25,15 @@ function teamQuery(): string {
 
 /**
  * Add a custom domain to the Vercel project.
+ * Returns the domain config including any required DNS records for verification.
  */
-export async function addDomain(domain: string): Promise<{ success: boolean; error?: string }> {
+export async function addDomain(domain: string): Promise<{
+  success: boolean;
+  error?: string;
+  verification?: Array<{ type: string; domain: string; value: string }>;
+  apexName?: string;
+  cnames?: Array<{ name: string; value: string }>;
+}> {
   if (!process.env.VERCEL_TOKEN || !process.env.VERCEL_PROJECT_ID) {
     console.warn("Vercel domain API not configured — skipping domain addition");
     return { success: false, error: "Vercel API not configured" };
@@ -50,7 +57,26 @@ export async function addDomain(domain: string): Promise<{ success: boolean; err
     };
   }
 
-  return { success: true };
+  // After adding, fetch domain config to get required DNS records
+  const configRes = await fetch(
+    `${API_BASE}/v6/domains/${domain}/config${teamQuery()}`,
+    { headers: headers() }
+  );
+  const config = configRes.ok ? await configRes.json() : null;
+
+  // Fetch verification records
+  const domainRes = await fetch(
+    `${API_BASE}/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${domain}${teamQuery()}`,
+    { headers: headers() }
+  );
+  const domainData = domainRes.ok ? await domainRes.json() : null;
+
+  return {
+    success: true,
+    verification: domainData?.verification || [],
+    apexName: domainData?.apexName,
+    cnames: config?.cnames || [],
+  };
 }
 
 /**

@@ -1,104 +1,139 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { addCustomHostname, removeCustomHostname, verifyCustomHostname } from "@/lib/cloudflare-domains";
+import { addDomain, removeDomain, verifyDomain } from "@/lib/vercel-domains";
 
 /**
- * POST /api/blog/domain
+ * POST /api/blog/domain — Custom domain provisioning for blogs.
  *
  * Actions:
- * - { action: "set", site_id, subdomain } — set custom domain, add to Cloudflare
- * - { action: "verify", site_id } — check TLS/DNS status
- * - { action: "remove", site_id } — remove custom domain
+ * - { action: "provision", site_id, domain }
+ *     1. Derives siteSlug from domain (e.g., b2construct.com → b2construct)
+ *     2. Updates blog_settings with slug + custom_domain
+ *     3. Adds blog.[domain] to Vercel
+ *     4. Returns DNS records tenant needs to add
+ *
+ * - { action: "verify", site_id }
+ *     Checks if DNS is configured and domain is active
+ *
+ * - { action: "remove", site_id }
+ *     Removes custom domain from Vercel + clears blog_settings
  */
 export async function POST(req: NextRequest) {
-  const authResult = await authenticateRequest(req);
-  if (authResult instanceof NextResponse) return authResult;
-  const auth = authResult as AuthContext;
+  // Admin-only — check tp_admin cookie
+  const adminCookie = req.cookies.get("tp_admin")?.value;
+  if (adminCookie !== "authenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
   const { action, site_id } = body;
 
-  if (!site_id) return NextResponse.json({ error: "site_id required" }, { status: 400 });
+  if (!site_id || !action) {
+    return NextResponse.json({ error: "site_id and action required" }, { status: 400 });
+  }
 
-  // Verify ownership
-  const [site] = await sql`
-    SELECT s.id, s.url, bs.subdomain, bs.custom_domain,
-           bs.metadata->>'cf_hostname_id' AS cf_hostname_id
-    FROM sites s
-    LEFT JOIN blog_settings bs ON bs.site_id = s.id
-    WHERE s.id = ${site_id} AND s.subscription_id = ${auth.subscriptionId}
-  `;
-  if (!site) return NextResponse.json({ error: "Site not found" }, { status: 404 });
+  if (action === "provision") {
+    const { domain } = body;
+    if (!domain) {
+      return NextResponse.json({ error: "domain required (e.g., b2construct.com)" }, { status: 400 });
+    }
 
-  if (action === "set") {
-    const { subdomain } = body;
-    if (!subdomain) return NextResponse.json({ error: "subdomain required" }, { status: 400 });
+    // 1. Derive siteSlug from domain — strip TLD
+    const domainClean = domain.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+    const lastDot = domainClean.lastIndexOf(".");
+    const siteSlug = lastDot > 0 ? domainClean.slice(0, lastDot).replace(/[^a-z0-9-]/g, "") : domainClean;
+    const blogDomain = `blog.${domainClean}`;
 
-    // Build the full domain: "blog" → blog.b2construct.com, or full domain passed
-    const siteHost = site.url ? new URL(site.url as string).hostname : null;
-    const fullDomain = subdomain.includes(".")
-      ? subdomain
-      : siteHost
-        ? `${subdomain}.${siteHost}`
-        : `${subdomain}.tracpost.com`;
-
-    // Add to Cloudflare Custom Hostnames
-    const result = await addCustomHostname(fullDomain);
-
-    // Store in blog_settings
-    const cfMeta = result.id ? { cf_hostname_id: result.id } : {};
+    // 2. Update blog_settings — set slug + custom_domain
     await sql`
       UPDATE blog_settings
-      SET custom_domain = ${fullDomain},
-          metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(cfMeta)}::jsonb,
+      SET subdomain = ${siteSlug},
+          custom_domain = ${blogDomain},
           updated_at = NOW()
       WHERE site_id = ${site_id}
     `;
 
-    // Get siteSlug for CUSTOM_DOMAIN_MAP instruction
-    const siteSlug = (site.subdomain as string) || site_id;
+    // Also set blog_slug on sites table
+    await sql`
+      UPDATE sites SET blog_slug = ${siteSlug}, updated_at = NOW()
+      WHERE id = ${site_id}
+    `;
+
+    // 3. Add blog.[domain] to Vercel
+    const result = await addDomain(blogDomain);
+
+    if (!result.success) {
+      return NextResponse.json({
+        step: "vercel",
+        error: result.error,
+        siteSlug,
+        blogDomain,
+        message: "Slug updated in DB but Vercel domain add failed. Add manually in Vercel dashboard.",
+      }, { status: 502 });
+    }
+
+    // 4. Return DNS records for tenant
+    const dnsRecords: Array<{ type: string; name: string; value: string; purpose: string }> = [];
+
+    // Verification TXT record (if required)
+    if (result.verification && result.verification.length > 0) {
+      for (const v of result.verification) {
+        dnsRecords.push({
+          type: v.type.toUpperCase(),
+          name: v.domain,
+          value: v.value,
+          purpose: "Domain ownership verification",
+        });
+      }
+    }
+
+    // CNAME record for the blog subdomain
+    dnsRecords.push({
+      type: "CNAME",
+      name: "blog",
+      value: "cname.vercel-dns.com",
+      purpose: "Points blog subdomain to TracPost",
+    });
 
     return NextResponse.json({
-      domain: fullDomain,
+      success: true,
       siteSlug,
-      added: result.success,
-      status: result.status || "pending",
-      error: result.error,
-      cname_target: "blogs.tracpost.com",
-      instructions: `Add a CNAME record: ${subdomain.includes(".") ? subdomain.split(".")[0] : subdomain} → blogs.tracpost.com`,
-      env_update: `Add to CUSTOM_DOMAIN_MAP: {"${fullDomain}":"${siteSlug}"}`,
+      blogDomain,
+      dnsRecords,
+      message: `Blog domain provisioned. Send these DNS records to the tenant.`,
     });
   }
 
   if (action === "verify") {
-    const hostnameId = site.cf_hostname_id as string;
-    if (!hostnameId) {
-      return NextResponse.json({ error: "No custom hostname configured" }, { status: 400 });
+    const [settings] = await sql`
+      SELECT custom_domain FROM blog_settings WHERE site_id = ${site_id}
+    `;
+    const domain = settings?.custom_domain as string;
+    if (!domain) {
+      return NextResponse.json({ error: "No custom domain configured" }, { status: 400 });
     }
 
-    const status = await verifyCustomHostname(hostnameId);
-    return NextResponse.json(status);
+    const status = await verifyDomain(domain);
+    return NextResponse.json({ domain, ...status });
   }
 
   if (action === "remove") {
-    const domain = site.custom_domain as string;
-    const hostnameId = site.cf_hostname_id as string;
-
-    if (hostnameId) {
-      await removeCustomHostname(hostnameId);
+    const [settings] = await sql`
+      SELECT custom_domain FROM blog_settings WHERE site_id = ${site_id}
+    `;
+    const domain = settings?.custom_domain as string;
+    if (!domain) {
+      return NextResponse.json({ error: "No custom domain to remove" }, { status: 400 });
     }
 
+    await removeDomain(domain);
     await sql`
-      UPDATE blog_settings
-      SET custom_domain = NULL,
-          metadata = COALESCE(metadata, '{}'::jsonb) - 'cf_hostname_id',
-          updated_at = NOW()
+      UPDATE blog_settings SET custom_domain = NULL, updated_at = NOW()
       WHERE site_id = ${site_id}
     `;
 
     return NextResponse.json({ removed: true, domain });
   }
 
-  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  return NextResponse.json({ error: "Unknown action. Use 'provision', 'verify', or 'remove'" }, { status: 400 });
 }
