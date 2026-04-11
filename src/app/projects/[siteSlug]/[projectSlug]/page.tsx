@@ -53,7 +53,7 @@ export default async function ProjectPage({ params }: Props) {
 
   const projectId = project.id as string;
 
-  const [assets, brands, personas, locationRows, blogSettings, siteRow, logoAsset] = await Promise.all([
+  const [assets, brands, personas, locationRows, blogSettings, siteRow, logoAsset, siblingProjects] = await Promise.all([
     sql`
       SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note,
              ma.date_taken, ma.created_at, ma.quality_score
@@ -94,6 +94,18 @@ export default async function ProjectPage({ params }: Props) {
         AND media_type LIKE 'image%'
         AND metadata->>'is_logo' = 'true'
       LIMIT 1
+    `,
+    sql`
+      SELECT p.id, p.name, p.slug,
+             (SELECT ma.storage_url FROM asset_projects ap2
+              JOIN media_assets ma ON ma.id = ap2.asset_id
+              WHERE ap2.project_id = p.id AND ma.media_type LIKE 'image%'
+              ORDER BY ma.quality_score DESC NULLS LAST LIMIT 1
+             ) AS cover_image
+      FROM projects p
+      WHERE p.site_id = ${site.siteId}
+        AND (SELECT COUNT(*) FROM asset_projects ap WHERE ap.project_id = p.id) >= 3
+      ORDER BY p.start_date DESC NULLS LAST
     `,
   ]);
 
@@ -176,6 +188,21 @@ export default async function ProjectPage({ params }: Props) {
       type: String(p.type),
     }));
 
+  // Prev/next project navigation
+  const projectList = siblingProjects.map((p: Record<string, unknown>) => ({
+    slug: String(p.slug),
+    name: String(p.name),
+    coverImage: p.cover_image ? String(p.cover_image) : null,
+  }));
+  const currentIndex = projectList.findIndex((p) => p.slug === projectSlug);
+  const prevProject = currentIndex > 0 ? projectList[currentIndex - 1] : null;
+  const nextProject = currentIndex < projectList.length - 1 ? projectList[currentIndex + 1] : null;
+
+  // Build sibling hrefs using custom domain if available
+  const projectsBase = customDomain
+    ? `https://${customDomain.replace("blog.", "projects.")}`
+    : `/projects/${siteSlug}`;
+
   return (
     <BlogShell
       siteName={site.siteName}
@@ -198,6 +225,8 @@ export default async function ProjectPage({ params }: Props) {
           months={monthNav}
           brands={asideBrands}
           personas={asidePersonas}
+          prev={prevProject ? { ...prevProject, slug: `${projectsBase}/${prevProject.slug}` } : null}
+          next={nextProject ? { ...nextProject, slug: `${projectsBase}/${nextProject.slug}` } : null}
         />
       }
     >
@@ -317,7 +346,7 @@ const projectStyles = `
 
   .pj-hero-img {
     width: 100%;
-    aspect-ratio: 21 / 9;
+    aspect-ratio: 16 / 9;
     object-fit: cover;
     display: block;
   }

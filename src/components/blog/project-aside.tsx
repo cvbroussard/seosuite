@@ -124,22 +124,63 @@ export function ProjectHubAside({
   );
 }
 
+interface SiblingProject {
+  slug: string;
+  name: string;
+  coverImage: string | null;
+}
+
 /**
- * Detail page aside — project meta + month nav + materials + team
+ * Detail page aside — project nav + meta + month nav + materials + team
  */
 export function ProjectDetailAside({
   meta,
   months,
   brands,
   personas,
+  prev,
+  next,
 }: {
   meta: ProjectMeta;
   months: MonthNav[];
   brands: Brand[];
   personas: Persona[];
+  prev?: SiblingProject | null;
+  next?: SiblingProject | null;
 }) {
   return (
     <div className="pj-aside-sticky">
+      {/* Project navigation — prev/next */}
+      {(prev || next) && (
+        <div className="bs-aside-section">
+          <h3 className="bs-aside-title">More Projects</h3>
+          <div className="pj-sibling-nav">
+            {prev && (
+              <a href={prev.slug} className="pj-sibling">
+                {prev.coverImage && (
+                  <img src={prev.coverImage} alt={prev.name} className="pj-sibling-img" />
+                )}
+                <div>
+                  <span className="pj-sibling-dir">&larr; Previous</span>
+                  <span className="pj-sibling-name">{prev.name}</span>
+                </div>
+              </a>
+            )}
+            {next && (
+              <a href={next.slug} className="pj-sibling">
+                {next.coverImage && (
+                  <img src={next.coverImage} alt={next.name} className="pj-sibling-img" />
+                )}
+                <div>
+                  <span className="pj-sibling-dir">Next &rarr;</span>
+                  <span className="pj-sibling-name">{next.name}</span>
+                </div>
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Project meta */}
       <div className="bs-aside-section">
         <h3 className="bs-aside-title">Project Details</h3>
@@ -289,6 +330,53 @@ const detailAsideStyles = `
     top: 80px;
     max-height: calc(100vh - 96px);
     overflow-y: auto;
+  }
+
+  /* Sibling project nav */
+  .pj-sibling-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pj-sibling {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: calc(var(--bs-radius) / 2);
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s;
+  }
+
+  .pj-sibling:hover {
+    background: color-mix(in srgb, var(--bs-primary) 5%, var(--bs-bg));
+  }
+
+  .pj-sibling-img {
+    width: 56px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: calc(var(--bs-radius) / 2);
+    flex-shrink: 0;
+  }
+
+  .pj-sibling-dir {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--bs-muted);
+    margin-bottom: 2px;
+  }
+
+  .pj-sibling-name {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--bs-primary);
+    line-height: 1.3;
   }
 
   .pj-meta-card {
