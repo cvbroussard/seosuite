@@ -71,6 +71,65 @@ export async function sendWelcomeEmail(email: string, magicUrl: string, isNew: b
 }
 
 /**
+ * Send DNS setup instructions to tenant.
+ */
+export async function sendDnsInstructionsEmail({
+  to,
+  tenantName,
+  siteName,
+  dnsRecords,
+}: {
+  to: string;
+  tenantName: string;
+  siteName: string;
+  dnsRecords: Array<{ type: string; name: string; value: string; purpose: string }>;
+}): Promise<boolean> {
+  const rows = dnsRecords.map((r) =>
+    `<tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;">${r.type}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;">${r.name}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px; word-break: break-all;">${r.value}</td>
+    </tr>`
+  ).join("");
+
+  const hasTxt = dnsRecords.some((r) => r.type === "TXT");
+
+  return sendEmail({
+    to,
+    subject: `${siteName} — Connect your blog and portfolio domains`,
+    html: `
+      <div style="font-family: system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <h1 style="font-size: 22px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a;">
+          Your blog and portfolio are ready
+        </h1>
+        <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 24px;">
+          Hi ${tenantName}, to connect your blog and portfolio to your domain,
+          add these DNS records with your domain provider:
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #e5e7eb; border-radius: 6px;">
+          <thead>
+            <tr style="background: #f9fafb;">
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Type</th>
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Name</th>
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Value</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="font-size: 13px; color: #6b7280; line-height: 1.6; margin-bottom: 24px;">
+          <p style="margin: 0 0 8px;">If you use Cloudflare, set CNAME records to <strong>DNS only</strong> (grey cloud, not proxied).</p>
+          ${hasTxt ? '<p style="margin: 0 0 8px;">TXT records are for ownership verification and can be deleted once your domains are active.</p>' : ""}
+          <p style="margin: 0;">Not sure how to do this? Forward this email to whoever manages your domain — they&apos;ll know what to do.</p>
+        </div>
+        <p style="font-size: 12px; color: #9ca3af;">
+          — The ${siteName} content team, powered by TracPost
+        </p>
+      </div>
+    `,
+  });
+}
+
+/**
  * Send OTP verification code.
  */
 export async function sendOtpEmail(email: string, code: string, action: string): Promise<boolean> {

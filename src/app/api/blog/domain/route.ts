@@ -128,6 +128,38 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (action === "send-dns") {
+    const { dnsRecords } = body;
+    if (!dnsRecords || !Array.isArray(dnsRecords)) {
+      return NextResponse.json({ error: "dnsRecords required" }, { status: 400 });
+    }
+
+    // Get tenant owner email + site name
+    const [owner] = await sql`
+      SELECT u.email, u.name
+      FROM users u
+      JOIN subscriptions sub ON sub.id = u.subscription_id
+      JOIN sites s ON s.subscription_id = sub.id
+      WHERE s.id = ${site_id} AND u.role = 'owner'
+    `;
+    if (!owner?.email) {
+      return NextResponse.json({ error: "Tenant owner email not found" }, { status: 404 });
+    }
+
+    const [siteRow] = await sql`SELECT name FROM sites WHERE id = ${site_id}`;
+    const siteName = (siteRow?.name as string) || "Your site";
+
+    const { sendDnsInstructionsEmail } = await import("@/lib/email");
+    const sent = await sendDnsInstructionsEmail({
+      to: owner.email as string,
+      tenantName: (owner.name as string) || "there",
+      siteName,
+      dnsRecords,
+    });
+
+    return NextResponse.json({ sent, to: owner.email });
+  }
+
   if (action === "remove") {
     const [settings] = await sql`
       SELECT custom_domain FROM blog_settings WHERE site_id = ${site_id}

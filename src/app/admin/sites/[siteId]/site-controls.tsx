@@ -129,6 +129,8 @@ function DomainProvisioning({
     initialDomainInfo?.projectsStatus || "unknown"
   );
   const [verifying, setVerifying] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   const isProvisioned = !!blogDomain;
@@ -256,7 +258,7 @@ function DomainProvisioning({
         </div>
       </div>
 
-      {/* Verify button */}
+      {/* Action buttons */}
       <div className="flex items-center gap-2">
         <button
           onClick={verify}
@@ -265,6 +267,35 @@ function DomainProvisioning({
         >
           {verifying ? "Checking..." : "Verify DNS"}
         </button>
+        <button
+          onClick={async () => {
+            setSending(true);
+            setSent(false);
+            try {
+              const records = dnsRecords || defaultRecords();
+              const res = await fetch("/api/blog/domain", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "send-dns", site_id: siteId, dnsRecords: records }),
+              });
+              const data = await res.json();
+              if (data.sent) {
+                setSent(true);
+              } else {
+                alert(data.error || "Failed to send email");
+              }
+            } catch {
+              alert("Failed to send email");
+            } finally {
+              setSending(false);
+            }
+          }}
+          disabled={sending}
+          className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {sending ? "Sending..." : "Send to Tenant"}
+        </button>
+        {sent && <span className="text-[10px] text-success">Email sent</span>}
         {blogStatus === "active" && projectsStatus === "active" && (
           <span className="text-[10px] text-success">All domains verified</span>
         )}
