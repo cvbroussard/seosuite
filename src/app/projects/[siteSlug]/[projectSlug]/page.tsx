@@ -43,7 +43,6 @@ export default async function ProjectPage({ params }: Props) {
   const site = await resolveBlogSiteBySlug(siteSlug);
   if (!site) notFound();
 
-  // Fetch project
   const [project] = await sql`
     SELECT id, name, slug, description, address, start_date, end_date, status
     FROM projects
@@ -53,10 +52,10 @@ export default async function ProjectPage({ params }: Props) {
 
   const projectId = project.id as string;
 
-  // Parallel data fetches
   const [assets, brands, personas, locationRows, blogSettings, siteRow, logoAsset] = await Promise.all([
     sql`
-      SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.date_taken, ma.created_at, ma.quality_score
+      SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note,
+             ma.date_taken, ma.created_at, ma.quality_score
       FROM media_assets ma
       JOIN asset_projects ap ON ap.asset_id = ma.id
       WHERE ap.project_id = ${projectId}
@@ -132,13 +131,14 @@ export default async function ProjectPage({ params }: Props) {
   const endDate = project.end_date
     ? new Date(project.end_date as string).toLocaleDateString("en-US", { year: "numeric", month: "long" })
     : null;
-  const captionedCount = assets.filter((a: Record<string, unknown>) => a.context_note).length;
 
-  // Hero image — highest quality asset
-  const heroAsset = assets[0];
-  const heroUrl = heroAsset?.storage_url ? String(heroAsset.storage_url) : null;
+  // Hero — highest quality asset (skip first few for variety if gallery is large)
+  const sortedByQuality = [...assets].sort((a, b) =>
+    (Number(b.quality_score) || 0) - (Number(a.quality_score) || 0)
+  );
+  const heroUrl = sortedByQuality[0]?.storage_url ? String(sortedByQuality[0].storage_url) : null;
 
-  // Group assets by month for timeline
+  // Group assets by month
   const timeline = new Map<string, Array<Record<string, unknown>>>();
   for (const asset of assets) {
     const date = asset.date_taken || asset.created_at;
@@ -158,234 +158,404 @@ export default async function ProjectPage({ params }: Props) {
       location={siteLocation}
       websiteUrl={websiteUrl}
     >
-      {/* Hero */}
+      {/* Hero with overlay */}
       {heroUrl && (
-        <img src={heroUrl} alt={String(project.name)} className="bs-hero-media" />
+        <div className="pj-hero">
+          <img src={heroUrl} alt={String(project.name)} className="pj-hero-img" />
+          <div className="pj-hero-overlay">
+            <h1 className="pj-hero-title">{String(project.name)}</h1>
+            {project.description && (
+              <p className="pj-hero-desc">{String(project.description)}</p>
+            )}
+          </div>
+        </div>
       )}
 
-      <header className="bs-project-header">
-        <Link href={`/projects/${siteSlug}`} className="bs-back-link">
+      {/* Overview bar */}
+      <div className="pj-overview">
+        <Link href={`/projects/${siteSlug}`} className="pj-back">
           &larr; All Projects
         </Link>
-        <h1 className="bs-article-page-title">{String(project.name)}</h1>
-        {project.description && (
-          <p className="bs-project-description">{String(project.description)}</p>
-        )}
-        <div className="bs-article-meta">
+        <div className="pj-overview-stats">
           {startDate && (
-            <span>{startDate}{endDate && endDate !== startDate ? ` — ${endDate}` : ""}</span>
+            <div className="pj-stat">
+              <span className="pj-stat-label">Timeline</span>
+              <span className="pj-stat-value">
+                {startDate}{endDate && endDate !== startDate ? ` — ${endDate}` : ""}
+              </span>
+            </div>
           )}
           {(location?.city || location?.state) && (
-            <span>· {[location.city, location.state].filter(Boolean).join(", ")}</span>
+            <div className="pj-stat">
+              <span className="pj-stat-label">Location</span>
+              <span className="pj-stat-value">
+                {[location.city, location.state].filter(Boolean).join(", ")}
+              </span>
+            </div>
           )}
-          <span>· {assets.length} photos</span>
+          <div className="pj-stat">
+            <span className="pj-stat-label">Documentation</span>
+            <span className="pj-stat-value">{assets.length} photos</span>
+          </div>
+          {brands.length > 0 && (
+            <div className="pj-stat">
+              <span className="pj-stat-label">Materials</span>
+              <span className="pj-stat-value">{brands.length} suppliers</span>
+            </div>
+          )}
         </div>
-      </header>
+      </div>
 
-      {/* Timeline */}
-      {Array.from(timeline.entries()).map(([month, monthAssets]) => (
-        <section key={month} className="bs-timeline-section">
-          <h2 className="bs-timeline-month">{month}</h2>
-          <div className="bs-timeline-grid">
-            {monthAssets.map((asset) => {
+      {/* Timeline sections */}
+      {Array.from(timeline.entries()).map(([month, monthAssets]) => {
+        const captioned = monthAssets.filter((a) => a.context_note);
+        const uncaptioned = monthAssets.filter((a) => !a.context_note);
+
+        return (
+          <section key={month} className="pj-month">
+            <h2 className="pj-month-title">{month}</h2>
+
+            {/* Featured moments — captioned assets in two-column layout */}
+            {captioned.map((asset) => {
               const isVideo = (asset.media_type as string) === "video";
-              const caption = asset.context_note ? String(asset.context_note) : null;
+              const caption = String(asset.context_note);
               const dateTaken = asset.date_taken
                 ? new Date(asset.date_taken as string).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                 : null;
 
               return (
-                <div key={String(asset.id)} className={caption ? "bs-timeline-item bs-timeline-captioned" : "bs-timeline-item"}>
-                  {isVideo ? (
-                    <video
-                      src={String(asset.storage_url)}
-                      controls
-                      className="bs-timeline-media"
-                      preload="metadata"
-                    />
-                  ) : (
-                    <img
-                      src={String(asset.storage_url)}
-                      alt={caption || ""}
-                      className="bs-timeline-media"
-                      loading="lazy"
-                    />
-                  )}
-                  {caption && (
-                    <div className="bs-timeline-caption">
-                      <p>{caption}</p>
-                      {dateTaken && <span className="bs-timeline-date">{dateTaken}</span>}
-                    </div>
-                  )}
+                <div key={String(asset.id)} className="pj-featured">
+                  <div className="pj-featured-media">
+                    {isVideo ? (
+                      <video src={String(asset.storage_url)} controls preload="metadata" />
+                    ) : (
+                      <img src={String(asset.storage_url)} alt={caption} loading="lazy" />
+                    )}
+                  </div>
+                  <div className="pj-featured-text">
+                    <p className="pj-featured-caption">{caption}</p>
+                    {dateTaken && <span className="pj-featured-date">{dateTaken}</span>}
+                  </div>
                 </div>
               );
             })}
-          </div>
-        </section>
-      ))}
 
-      {/* Brands */}
+            {/* Gallery grid — uncaptioned assets */}
+            {uncaptioned.length > 0 && (
+              <div className="pj-gallery">
+                {uncaptioned.map((asset) => (
+                  <div key={String(asset.id)} className="pj-gallery-item">
+                    {(asset.media_type as string) === "video" ? (
+                      <video src={String(asset.storage_url)} controls preload="metadata" />
+                    ) : (
+                      <img src={String(asset.storage_url)} alt="" loading="lazy" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+
+      {/* Materials & Equipment */}
       {brands.length > 0 && (
-        <section className="bs-entity-section">
-          <h2 className="bs-aside-title">Materials &amp; Equipment</h2>
-          <div className="bs-entity-chips">
+        <section className="pj-entities">
+          <h2 className="pj-entities-title">Materials &amp; Equipment</h2>
+          <div className="pj-entity-grid">
             {brands.map((b: Record<string, unknown>) => (
-              <span key={String(b.id)} className="bs-entity-chip">
+              <div key={String(b.id)} className="pj-entity-card">
                 {b.url ? (
-                  <a href={String(b.url)} target="_blank" rel="noopener noreferrer">{String(b.name)}</a>
+                  <a href={String(b.url)} target="_blank" rel="noopener noreferrer">
+                    {String(b.name)}
+                  </a>
                 ) : String(b.name)}
-              </span>
+              </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* Personas */}
+      {/* Team */}
       {personas.filter((p: Record<string, unknown>) => p.consent_given).length > 0 && (
-        <section className="bs-entity-section">
-          <h2 className="bs-aside-title">Team</h2>
-          <div className="bs-entity-chips">
+        <section className="pj-entities">
+          <h2 className="pj-entities-title">Team</h2>
+          <div className="pj-entity-grid">
             {personas
               .filter((p: Record<string, unknown>) => p.consent_given)
               .map((p: Record<string, unknown>) => (
-                <span key={String(p.id)} className="bs-entity-chip">
-                  {String(p.name)}
-                  <span className="bs-entity-type">{String(p.type)}</span>
-                </span>
+                <div key={String(p.id)} className="pj-entity-card">
+                  <span className="pj-entity-name">{String(p.name)}</span>
+                  <span className="pj-entity-role">{String(p.type)}</span>
+                </div>
               ))}
           </div>
         </section>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: projectPageStyles }} />
+      <style dangerouslySetInnerHTML={{ __html: projectStyles }} />
     </BlogShell>
   );
 }
 
-const projectPageStyles = `
-  .bs-hero-media {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
+const projectStyles = `
+  /* Hero with text overlay */
+  .pj-hero {
+    position: relative;
     border-radius: var(--bs-radius);
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+
+  .pj-hero-img {
+    width: 100%;
+    aspect-ratio: 21 / 9;
+    object-fit: cover;
+    display: block;
+  }
+
+  .pj-hero-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 40px 32px 28px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  }
+
+  .pj-hero-title {
+    font-family: var(--bs-heading-font);
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 6px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .pj-hero-desc {
+    font-size: 16px;
+    color: rgba(255,255,255,0.85);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 768px) {
+    .pj-hero-img { aspect-ratio: 16 / 9; }
+    .pj-hero-title { font-size: 24px; }
+    .pj-hero-overlay { padding: 24px 16px 16px; }
+  }
+
+  /* Overview bar */
+  .pj-overview {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px 0 24px;
     margin-bottom: 32px;
-  }
-
-  .bs-back-link {
-    display: inline-block;
-    font-size: 14px;
-    color: var(--bs-muted);
-    text-decoration: none;
-    margin-bottom: 16px;
-  }
-
-  .bs-back-link:hover {
-    color: var(--bs-accent);
-  }
-
-  .bs-project-header {
-    margin-bottom: 48px;
-    padding-bottom: 24px;
     border-bottom: 1px solid var(--bs-border);
   }
 
-  .bs-project-description {
-    font-size: 18px;
-    line-height: 1.6;
+  .pj-back {
+    font-size: 13px;
     color: var(--bs-muted);
-    margin: 12px 0 16px;
+    text-decoration: none;
+    white-space: nowrap;
+    margin-top: 4px;
   }
 
-  /* Timeline */
-  .bs-timeline-section {
+  .pj-back:hover { color: var(--bs-accent); }
+
+  .pj-overview-stats {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .pj-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .pj-stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--bs-muted);
+    margin-bottom: 2px;
+  }
+
+  .pj-stat-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bs-primary);
+  }
+
+  @media (max-width: 768px) {
+    .pj-overview { flex-direction: column; gap: 12px; }
+    .pj-overview-stats { justify-content: flex-start; gap: 20px; }
+    .pj-stat { align-items: flex-start; }
+  }
+
+  /* Month sections */
+  .pj-month {
     margin-bottom: 48px;
   }
 
-  .bs-timeline-month {
+  .pj-month-title {
     font-family: var(--bs-heading-font);
     font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--bs-muted);
-    margin-bottom: 20px;
+    margin-bottom: 24px;
     padding-bottom: 8px;
     border-bottom: 2px solid var(--bs-accent);
   }
 
-  .bs-timeline-grid {
+  /* Featured moments — captioned assets */
+  .pj-featured {
     display: grid;
+    grid-template-columns: 1.2fr 1fr;
     gap: 24px;
+    margin-bottom: 32px;
+    align-items: start;
   }
 
-  .bs-timeline-item {
+  .pj-featured:nth-child(even) {
+    direction: rtl;
+  }
+
+  .pj-featured:nth-child(even) > * {
+    direction: ltr;
+  }
+
+  .pj-featured-media {
     border-radius: var(--bs-radius);
     overflow: hidden;
-  }
-
-  .bs-timeline-captioned {
-    border: 1px solid var(--bs-border);
-  }
-
-  .bs-timeline-media {
-    width: 100%;
-    max-height: 70vh;
-    object-fit: contain;
-    display: block;
     background: color-mix(in srgb, var(--bs-primary) 3%, var(--bs-bg));
   }
 
-  .bs-timeline-caption {
-    padding: 16px 20px;
+  .pj-featured-media img,
+  .pj-featured-media video {
+    width: 100%;
+    display: block;
+    object-fit: cover;
+    aspect-ratio: 4 / 3;
   }
 
-  .bs-timeline-caption p {
+  .pj-featured-text {
+    padding-top: 8px;
+  }
+
+  .pj-featured-caption {
     font-size: 15px;
     line-height: 1.65;
     color: var(--bs-text);
     margin: 0;
   }
 
-  .bs-timeline-date {
+  .pj-featured-date {
     display: block;
     font-size: 12px;
     color: var(--bs-muted);
-    margin-top: 8px;
+    margin-top: 10px;
+  }
+
+  @media (max-width: 768px) {
+    .pj-featured {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .pj-featured:nth-child(even) { direction: ltr; }
+  }
+
+  /* Gallery grid — uncaptioned assets */
+  .pj-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .pj-gallery-item {
+    border-radius: calc(var(--bs-radius) / 2);
+    overflow: hidden;
+    background: color-mix(in srgb, var(--bs-primary) 3%, var(--bs-bg));
+  }
+
+  .pj-gallery-item img,
+  .pj-gallery-item video {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s;
+  }
+
+  .pj-gallery-item:hover img {
+    transform: scale(1.05);
+  }
+
+  @media (max-width: 640px) {
+    .pj-gallery { grid-template-columns: repeat(2, 1fr); }
   }
 
   /* Entity sections */
-  .bs-entity-section {
+  .pj-entities {
     padding-top: 32px;
     border-top: 1px solid var(--bs-border);
     margin-bottom: 32px;
   }
 
-  .bs-entity-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .pj-entities-title {
+    font-family: var(--bs-heading-font);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--bs-muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--bs-accent);
   }
 
-  .bs-entity-chip {
+  .pj-entity-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .pj-entity-card {
     font-size: 14px;
-    padding: 6px 14px;
+    padding: 8px 16px;
     border-radius: var(--bs-radius);
     border: 1px solid var(--bs-border);
     color: var(--bs-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
-  .bs-entity-chip a {
+  .pj-entity-card a {
     color: var(--bs-accent);
     text-decoration: none;
   }
 
-  .bs-entity-chip a:hover {
+  .pj-entity-card a:hover {
     text-decoration: underline;
   }
 
-  .bs-entity-type {
+  .pj-entity-name {
+    font-weight: 500;
+  }
+
+  .pj-entity-role {
     font-size: 11px;
     color: var(--bs-muted);
-    margin-left: 6px;
+    text-transform: capitalize;
   }
 `;
