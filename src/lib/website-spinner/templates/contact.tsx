@@ -8,6 +8,8 @@ export interface ContactPageData {
   email?: string;
   hours?: string;
   mapEmbed?: string;
+  formAction?: string;  // POST endpoint for the contact form
+  siteId?: string;      // included as hidden field
 }
 
 export default function ContactPage({ data }: { data: ContactPageData }) {
@@ -52,14 +54,14 @@ export default function ContactPage({ data }: { data: ContactPageData }) {
               </div>
             </div>
 
-            {/* Contact form placeholder */}
+            {/* Contact form */}
             <div className="ws-contact-form">
               <h2 className="ws-form-title">Send a Message</h2>
-              <form action="#" method="POST" className="ws-form">
+              <form id="ws-contact-form" className="ws-form" data-site-id={data.siteId || ""} data-action={data.formAction || ""}>
                 <div className="ws-form-row">
                   <div className="ws-form-field">
                     <label className="ws-form-label">Name</label>
-                    <input type="text" name="name" className="ws-form-input" placeholder="Your name" />
+                    <input type="text" name="name" required className="ws-form-input" placeholder="Your name" />
                   </div>
                   <div className="ws-form-field">
                     <label className="ws-form-label">Phone</label>
@@ -68,16 +70,18 @@ export default function ContactPage({ data }: { data: ContactPageData }) {
                 </div>
                 <div className="ws-form-field">
                   <label className="ws-form-label">Email</label>
-                  <input type="email" name="email" className="ws-form-input" placeholder="Your email" />
+                  <input type="email" name="email" required className="ws-form-input" placeholder="Your email" />
                 </div>
                 <div className="ws-form-field">
                   <label className="ws-form-label">Message</label>
-                  <textarea name="message" rows={5} className="ws-form-input ws-form-textarea" placeholder="Tell us about your project" />
+                  <textarea name="message" rows={5} required className="ws-form-input ws-form-textarea" placeholder="Tell us about your project" />
                 </div>
                 <button type="submit" className="ws-btn ws-btn-primary" style={{ width: "100%" }}>
                   Send Message
                 </button>
+                <div id="ws-form-status" className="ws-form-status" />
               </form>
+              <script dangerouslySetInnerHTML={{ __html: contactFormScript }} />
             </div>
           </div>
         </div>
@@ -197,4 +201,76 @@ const contactStyles = `
     resize: vertical;
     min-height: 100px;
   }
+
+  .ws-form-status {
+    margin-top: 12px;
+    padding: 0;
+    font-size: 14px;
+  }
+
+  .ws-form-status.success {
+    padding: 12px;
+    background: color-mix(in srgb, var(--ws-accent) 12%, var(--ws-bg));
+    color: var(--ws-primary);
+    border-radius: calc(var(--ws-radius) / 2);
+  }
+
+  .ws-form-status.error {
+    padding: 12px;
+    background: #fef2f2;
+    color: #991b1b;
+    border-radius: calc(var(--ws-radius) / 2);
+  }
+`;
+
+const contactFormScript = `
+  document.getElementById('ws-contact-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var form = e.target;
+    var siteId = form.dataset.siteId;
+    var action = form.dataset.action;
+    var status = document.getElementById('ws-form-status');
+    var btn = form.querySelector('button[type="submit"]');
+
+    if (!siteId || !action) {
+      status.className = 'ws-form-status error';
+      status.textContent = 'Form not configured. Please call or email us directly.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    status.className = 'ws-form-status';
+    status.textContent = '';
+
+    try {
+      var data = new FormData(form);
+      var res = await fetch(action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          site_id: siteId,
+          name: data.get('name'),
+          email: data.get('email'),
+          phone: data.get('phone'),
+          message: data.get('message'),
+        }),
+      });
+      var result = await res.json();
+      if (result.success) {
+        status.className = 'ws-form-status success';
+        status.textContent = 'Thanks! We\\'ll be in touch shortly.';
+        form.reset();
+      } else {
+        status.className = 'ws-form-status error';
+        status.textContent = result.error || 'Something went wrong. Please try again.';
+      }
+    } catch (err) {
+      status.className = 'ws-form-status error';
+      status.textContent = 'Network error. Please try again.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send Message';
+    }
+  });
 `;

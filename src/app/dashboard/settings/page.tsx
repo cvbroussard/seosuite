@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { SiteDeactivation } from "./site-deactivation";
 import { EditExistingAccounts } from "./edit-existing-accounts";
 import { BlogSettings } from "../blog/blog-settings";
+import { BusinessInfo } from "./business-info";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
       SELECT s.name, s.url, s.brand_voice, s.autopilot_enabled, s.cadence_config,
              s.content_pillars, s.pillar_config, s.autopilot_config, s.created_at,
              s.is_active, s.blog_cadence,
+             s.business_phone, s.business_email, s.business_logo,
              s.provisioning_status, s.metadata AS site_metadata
       FROM sites s
       WHERE s.id = ${siteId}
@@ -75,6 +77,18 @@ export default async function SettingsPage() {
             <span className="font-medium">{site?.url || "—"}</span>
           </div>
         </div>
+      </section>
+
+      {/* Business Info */}
+      <section className="mb-8">
+        <h2 className="mb-4">Business Info</h2>
+        <BusinessInfo
+          initial={{
+            business_phone: (site?.business_phone as string) || null,
+            business_email: (site?.business_email as string) || null,
+            business_logo: (site?.business_logo as string) || null,
+          }}
+        />
       </section>
 
       {/* Autopilot */}

@@ -51,7 +51,7 @@ export default async function HubPage({ params }: Props) {
   const [posts, blogSettings, siteRow, logoAsset] = await Promise.all([
     getBlogPosts(site.siteId, 20),
     sql`SELECT nav_links, theme FROM blog_settings WHERE site_id = ${site.siteId}`,
-    sql`SELECT url, location, brand_playbook FROM sites WHERE id = ${site.siteId}`,
+    sql`SELECT url, location, brand_playbook, business_phone, business_email, business_logo FROM sites WHERE id = ${site.siteId}`,
     sql`
       SELECT storage_url FROM media_assets
       WHERE site_id = ${site.siteId}
@@ -66,11 +66,13 @@ export default async function HubPage({ params }: Props) {
   const websiteUrl = (siteInfo.url as string) || null;
   const logoUrl = (logoAsset[0]?.storage_url as string) || null;
 
-  // Theme
+  // Theme — prefer business_logo (tenant-managed) over asset metadata
+  const businessLogo = (siteInfo.business_logo as string) || null;
+  const businessPhone = (siteInfo.business_phone as string) || null;
   const rawTheme = (settings.theme as Record<string, string>) || {};
   const theme: BlogTheme = {
     ...rawTheme,
-    logoUrl: logoUrl || rawTheme.logoUrl,
+    logoUrl: businessLogo || logoUrl || rawTheme.logoUrl,
   };
 
   // Nav links — from blog_settings or generate defaults
@@ -122,6 +124,7 @@ export default async function HubPage({ params }: Props) {
       navLinks={navLinks}
       theme={theme}
       location={siteLocation}
+      phone={businessPhone}
       websiteUrl={websiteUrl}
       aside={
         <BlogAside

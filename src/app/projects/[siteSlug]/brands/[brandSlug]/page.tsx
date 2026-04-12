@@ -110,7 +110,7 @@ export default async function BrandDetailPage({ params }: Props) {
       LIMIT 8
     `,
     sql`SELECT nav_links, theme FROM blog_settings WHERE site_id = ${site.siteId}`,
-    sql`SELECT url, location, brand_playbook FROM sites WHERE id = ${site.siteId}`,
+    sql`SELECT url, location, brand_playbook, business_phone, business_email, business_logo FROM sites WHERE id = ${site.siteId}`,
     sql`
       SELECT storage_url FROM media_assets
       WHERE site_id = ${site.siteId}
@@ -127,8 +127,10 @@ export default async function BrandDetailPage({ params }: Props) {
   const logoUrl = (logoAsset[0]?.storage_url as string) || null;
   const siteLocation = (siteInfo.location as string) || null;
 
+  const businessLogo = (siteInfo.business_logo as string) || null;
+  const businessPhone = (siteInfo.business_phone as string) || null;
   const rawTheme = (settings.theme as Record<string, string>) || {};
-  const theme: BlogTheme = { ...rawTheme, logoUrl: logoUrl || rawTheme.logoUrl };
+  const theme: BlogTheme = { ...rawTheme, logoUrl: businessLogo || logoUrl || rawTheme.logoUrl };
 
   const storedNavLinks = (settings.nav_links as NavLink[]) || [];
   const navLinks: NavLink[] = storedNavLinks.length > 0
@@ -164,6 +166,7 @@ export default async function BrandDetailPage({ params }: Props) {
       navLinks={navLinks}
       theme={theme}
       location={siteLocation}
+      phone={businessPhone}
       websiteUrl={websiteUrl}
     >
       {/* JSON-LD Schema — Brand/Product with local business context */}

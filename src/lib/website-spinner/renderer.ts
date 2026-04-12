@@ -12,10 +12,12 @@ import type { WebsiteCopy } from "./copy-generator";
 import type { SelectedAssets } from "./asset-picker";
 
 interface RenderContext {
+  siteId: string;
   siteName: string;
   tagline: string;
   location: string;
   phone?: string;
+  email?: string;
   logoUrl?: string;
   theme: SiteTheme;
   blogUrl: string;
@@ -167,6 +169,9 @@ export async function renderWebsite(ctx: RenderContext): Promise<RenderedPage[]>
     subtitle: ctx.copy.contact.subtitle,
     location: ctx.location,
     phone: ctx.phone,
+    email: ctx.email,
+    siteId: ctx.siteId,
+    formAction: "https://tracpost.com/api/website/contact",
   };
   pages.push(renderPage(
     renderToString, ctx, "contact",
