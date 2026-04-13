@@ -139,8 +139,15 @@ export async function POST(
       .replace(/^-|-$/g, "")
       .slice(0, 80);
 
+    // Resolve featured asset URL for og_image
+    let ogImageUrl: string | null = null;
+    if (article.featuredAssetId) {
+      const [asset] = await sql`SELECT storage_url FROM media_assets WHERE id = ${article.featuredAssetId}`;
+      ogImageUrl = (asset?.storage_url as string) || null;
+    }
+
     const [post] = await sql`
-      INSERT INTO blog_posts (site_id, title, slug, body, excerpt, status, source_asset_id, metadata)
+      INSERT INTO blog_posts (site_id, title, slug, body, excerpt, status, source_asset_id, og_image_url, metadata)
       VALUES (
         ${project.site_id},
         ${article.title},
@@ -149,6 +156,7 @@ export async function POST(
         ${article.excerpt},
         'draft',
         ${article.featuredAssetId || null},
+        ${ogImageUrl},
         ${JSON.stringify({
           type: "project",
           project_id: id,
