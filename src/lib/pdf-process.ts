@@ -66,6 +66,15 @@ export async function processPdf(
   const parentId = parentAsset.id as string;
   allAssetIds.push(parentId);
 
+  // Link parent PDF to project immediately (parent is 'triaged', won't go through pipeline)
+  if (projectId) {
+    await sql`
+      INSERT INTO asset_projects (asset_id, project_id)
+      VALUES (${parentId}, ${projectId})
+      ON CONFLICT DO NOTHING
+    `;
+  }
+
   // 2. Render each page as PNG thumbnail
   // pdf-to-img is ESM-only, dynamic import
   const { pdf } = await import("pdf-to-img");
