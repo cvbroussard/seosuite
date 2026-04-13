@@ -27,10 +27,17 @@ export async function POST(req: NextRequest) {
 
   const siteId = session.activeSiteId;
   const formData = await req.formData();
+  const name = (formData.get("name") as string)?.trim() || null;
+  const businessType = (formData.get("business_type") as string)?.trim() || null;
+  const location = (formData.get("location") as string)?.trim() || null;
   const phone = (formData.get("business_phone") as string) || null;
   const email = (formData.get("business_email") as string) || null;
   const logoFile = formData.get("business_logo") as File | null;
   const existingLogoUrl = (formData.get("business_logo_url") as string) || null;
+
+  if (!name) {
+    return NextResponse.json({ error: "Site name is required" }, { status: 400 });
+  }
 
   // Validate email
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -60,7 +67,10 @@ export async function POST(req: NextRequest) {
 
   await sql`
     UPDATE sites
-    SET business_phone = ${phone},
+    SET name = ${name},
+        business_type = ${businessType},
+        location = ${location},
+        business_phone = ${phone},
         business_email = ${email},
         business_logo = ${logoUrl},
         updated_at = NOW()

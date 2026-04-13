@@ -4,6 +4,9 @@ import { useState, useRef } from "react";
 
 interface Props {
   initial: {
+    name: string;
+    business_type: string | null;
+    location: string | null;
     business_phone: string | null;
     business_email: string | null;
     business_logo: string | null;
@@ -11,6 +14,9 @@ interface Props {
 }
 
 export function BusinessInfo({ initial }: Props) {
+  const [name, setName] = useState(initial.name);
+  const [businessType, setBusinessType] = useState(initial.business_type || "");
+  const [location, setLocation] = useState(initial.location || "");
   const [phone, setPhone] = useState(initial.business_phone || "");
   const [email, setEmail] = useState(initial.business_email || "");
   const [logoUrl, setLogoUrl] = useState(initial.business_logo || "");
@@ -55,6 +61,9 @@ export function BusinessInfo({ initial }: Props) {
     setError(null);
 
     const formData = new FormData();
+    formData.set("name", name);
+    formData.set("business_type", businessType);
+    formData.set("location", location);
     formData.set("business_phone", phone);
     formData.set("business_email", email);
     if (logoFile) {
@@ -92,6 +101,40 @@ export function BusinessInfo({ initial }: Props) {
       <p className="text-sm text-muted">
         These details appear on your website, blog, and project pages.
       </p>
+
+      <div>
+        <label className="mb-1 block text-xs text-muted">Site Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full text-sm"
+          placeholder="Your business name"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted">Business Type</label>
+          <input
+            type="text"
+            value={businessType}
+            onChange={(e) => setBusinessType(e.target.value)}
+            className="w-full text-sm"
+            placeholder="Residential Remodeling"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">Location</label>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full text-sm"
+            placeholder="Pittsburgh, PA"
+          />
+        </div>
+      </div>
 
       <div>
         <label className="mb-1 block text-xs text-muted">Business Phone</label>

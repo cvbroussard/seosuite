@@ -24,7 +24,8 @@ export default async function SettingsPage() {
 
   const [[site], blogSettingsRows, [blogCounts], [lastArticle]] = await Promise.all([
     sql`
-      SELECT s.name, s.url, s.brand_voice, s.autopilot_enabled, s.cadence_config,
+      SELECT s.name, s.url, s.business_type, s.location,
+             s.brand_voice, s.autopilot_enabled, s.cadence_config,
              s.content_pillars, s.pillar_config, s.autopilot_config, s.created_at,
              s.is_active, s.blog_cadence,
              s.business_phone, s.business_email, s.business_logo,
@@ -64,31 +65,23 @@ export default async function SettingsPage() {
       <h1>Settings</h1>
       <p className="mt-2 mb-8 text-muted">Site configuration and autopilot settings</p>
 
-      {/* Site Info */}
+      {/* Site Profile */}
       <section className="mb-8">
-        <h2 className="mb-4">Site Info</h2>
-        <div className="space-y-3">
-          <div className="flex items-baseline justify-between border-b border-border py-2">
-            <span className="text-sm text-muted">Site Name</span>
-            <span className="font-medium">{site?.name || "—"}</span>
-          </div>
-          <div className="flex items-baseline justify-between border-b border-border py-2">
-            <span className="text-sm text-muted">Site URL</span>
-            <span className="font-medium">{site?.url || "—"}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Business Info */}
-      <section className="mb-8">
-        <h2 className="mb-4">Business Info</h2>
+        <h2 className="mb-4">Site Profile</h2>
         <BusinessInfo
           initial={{
+            name: (site?.name as string) || "",
+            business_type: (site?.business_type as string) || null,
+            location: (site?.location as string) || null,
             business_phone: (site?.business_phone as string) || null,
             business_email: (site?.business_email as string) || null,
             business_logo: (site?.business_logo as string) || null,
           }}
         />
+        <div className="mt-4 flex items-baseline justify-between border-t border-border py-2">
+          <span className="text-sm text-muted">Website URL</span>
+          <span className="text-sm">{site?.url || <span className="text-dim">— not set</span>}</span>
+        </div>
       </section>
 
       {/* Autopilot */}
