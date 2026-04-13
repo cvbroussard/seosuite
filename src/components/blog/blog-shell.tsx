@@ -126,11 +126,12 @@ export default function BlogShell({
       {/* Site Header */}
       <header className="bs-header">
         <div className="bs-header-inner">
-          <a href={navLinks[0]?.href || "/"} className="bs-brand">
-            {theme.logoUrl && (
+          <a href={navLinks[0]?.href || "/"} className="bs-brand" aria-label={siteName}>
+            {theme.logoUrl ? (
               <img src={theme.logoUrl} alt={siteName} className="bs-logo" />
+            ) : (
+              <span className="bs-site-name">{siteName}</span>
             )}
-            <span className="bs-site-name">{siteName}</span>
           </a>
           <nav className="bs-nav">
             {finalNav.map((link) => (
@@ -239,10 +240,10 @@ const shellStyles = `
   }
 
   .bs-logo {
-    width: 40px;
     height: 40px;
-    border-radius: var(--bs-radius);
-    object-fit: cover;
+    width: auto;
+    max-width: 200px;
+    object-fit: contain;
   }
 
   .bs-site-name {

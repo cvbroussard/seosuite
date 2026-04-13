@@ -107,9 +107,12 @@ export default function Layout({
         {/* Header */}
         <header className="ws-header">
           <div className="ws-container ws-header-inner">
-            <a href="/" className="ws-brand">
-              {logoUrl && <img src={logoUrl} alt={siteName} className="ws-logo" />}
-              <span className="ws-brand-name">{siteName}</span>
+            <a href="/" className="ws-brand" aria-label={siteName}>
+              {logoUrl ? (
+                <img src={logoUrl} alt={siteName} className="ws-logo" />
+              ) : (
+                <span className="ws-brand-name">{siteName}</span>
+              )}
             </a>
             <nav className="ws-nav">
               {nav.map((item) => (
@@ -215,10 +218,10 @@ const siteStyles = `
   }
 
   .ws-logo {
-    width: 40px;
     height: 40px;
-    border-radius: var(--ws-radius);
-    object-fit: cover;
+    width: auto;
+    max-width: 200px;
+    object-fit: contain;
   }
 
   .ws-brand-name {
