@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 interface Props {
   initial: {
@@ -13,30 +13,70 @@ interface Props {
 export function BusinessInfo({ initial }: Props) {
   const [phone, setPhone] = useState(initial.business_phone || "");
   const [email, setEmail] = useState(initial.business_email || "");
-  const [logo, setLogo] = useState(initial.business_logo || "");
+  const [logoUrl, setLogoUrl] = useState(initial.business_logo || "");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Logo must be an image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Logo must be under 2MB");
+      return;
+    }
+
+    setError(null);
+    setLogoFile(file);
+    // Local preview using FileReader
+    const reader = new FileReader();
+    reader.onload = (ev) => setLogoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function removeLogo() {
+    setLogoFile(null);
+    setLogoPreview(null);
+    setLogoUrl("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   async function save() {
     setSaving(true);
     setSaved(false);
     setError(null);
+
+    const formData = new FormData();
+    formData.set("business_phone", phone);
+    formData.set("business_email", email);
+    if (logoFile) {
+      formData.set("business_logo", logoFile);
+    } else {
+      formData.set("business_logo_url", logoUrl);
+    }
+
     try {
       const res = await fetch("/api/dashboard/business-info", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_phone: phone || null,
-          business_email: email || null,
-          business_logo: logo || null,
-        }),
+        body: formData,
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Failed to save");
       } else {
         setSaved(true);
+        setLogoFile(null);
+        if (data.business_logo) setLogoUrl(data.business_logo);
+        setLogoPreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setTimeout(() => setSaved(false), 2000);
       }
     } catch {
@@ -44,6 +84,8 @@ export function BusinessInfo({ initial }: Props) {
     }
     setSaving(false);
   }
+
+  const displayLogo = logoPreview || logoUrl;
 
   return (
     <div className="space-y-4">
@@ -78,21 +120,49 @@ export function BusinessInfo({ initial }: Props) {
 
       <div>
         <label className="mb-1 block text-xs text-muted">
-          Logo URL
-          <span className="ml-1 text-dim">— displayed in header</span>
+          Logo
+          <span className="ml-1 text-dim">— PNG, JPG, SVG, or WebP, under 2MB</span>
         </label>
-        <input
-          type="url"
-          value={logo}
-          onChange={(e) => setLogo(e.target.value)}
-          className="w-full text-sm"
-          placeholder="https://..."
-        />
-        {logo && (
-          <div className="mt-2 inline-block rounded border border-border p-2 bg-surface">
-            <img src={logo} alt="Logo preview" className="h-12 w-auto" />
+
+        {displayLogo ? (
+          <div className="flex items-start gap-3">
+            <div className="rounded border border-border bg-surface p-2">
+              <img src={displayLogo} alt="Logo" className="h-16 w-auto object-contain" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs text-accent hover:underline text-left"
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                onClick={removeLogo}
+                className="text-xs text-muted hover:text-foreground text-left"
+              >
+                Remove
+              </button>
+            </div>
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded border border-dashed border-border bg-surface px-4 py-6 text-xs text-muted hover:border-accent hover:text-accent w-full"
+          >
+            Click to upload logo
+          </button>
         )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
       </div>
 
       <div className="flex items-center gap-3">
