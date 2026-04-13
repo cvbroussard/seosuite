@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { resolveBlogSiteBySlug, getCustomDomain } from "@/lib/blog";
+import { resolveBlogSiteBySlug, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
 
@@ -18,6 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = `Materials & Equipment — ${site.siteName}`;
   const description = `Materials, equipment, and brands used by ${site.siteName}`;
   const customDomain = await getCustomDomain(site.siteId);
+  const favicon = await getFavicon(site.siteId);
   const projectsDomain = customDomain ? customDomain.replace("blog.", "projects.") : null;
   const canonicalUrl = projectsDomain
     ? `https://${projectsDomain}/brands`
@@ -26,6 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    ...(favicon ? { icons: { icon: favicon } } : {}),
     alternates: { canonical: canonicalUrl },
     openGraph: { title, description, url: canonicalUrl, type: "website" },
   };

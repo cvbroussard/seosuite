@@ -24,7 +24,7 @@ export async function spinWebsite(siteId: string): Promise<SpinResult> {
   const [siteRow, blogSettings, projects, articles, brands, personas] = await Promise.all([
     sql`
       SELECT name, url, location, business_type, brand_playbook, blog_slug,
-             business_phone, business_email, business_logo
+             business_phone, business_email, business_logo, business_favicon
       FROM sites WHERE id = ${siteId}
     `,
     sql`SELECT theme, custom_domain, subdomain FROM blog_settings WHERE site_id = ${siteId}`,
@@ -136,6 +136,7 @@ export async function spinWebsite(siteId: string): Promise<SpinResult> {
     phone: (site.business_phone as string) || undefined,
     email: (site.business_email as string) || undefined,
     logoUrl: (site.business_logo as string) || undefined,
+    faviconUrl: (site.business_favicon as string) || undefined,
     theme,
     blogUrl,
     projectsUrl,

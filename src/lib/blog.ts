@@ -98,6 +98,17 @@ export async function getCustomDomain(siteId: string): Promise<string | null> {
 }
 
 /**
+ * Get the tenant-managed favicon URL for a site.
+ * Used by generateMetadata across blog/projects/brand pages.
+ */
+export async function getFavicon(siteId: string): Promise<string | null> {
+  const [row] = await sql`
+    SELECT business_favicon FROM sites WHERE id = ${siteId}
+  `;
+  return row?.business_favicon ? (row.business_favicon as string) : null;
+}
+
+/**
  * Resolve a blog site by its slug or subdomain (for hub pages and tenant subdomains).
  * Checks sites.blog_slug first, then blog_settings.subdomain as fallback.
  */

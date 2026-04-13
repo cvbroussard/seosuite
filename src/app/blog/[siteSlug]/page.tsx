@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { resolveBlogSiteBySlug, getBlogPosts, getCustomDomain } from "@/lib/blog";
+import { resolveBlogSiteBySlug, getBlogPosts, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import { generateHubSchema } from "@/lib/blog/schema";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
@@ -22,6 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = site.blogDescription || `${site.siteName} — articles and updates`;
 
   const customDomain = await getCustomDomain(site.siteId);
+  const favicon = await getFavicon(site.siteId);
   const hubUrl = customDomain
     ? `https://${customDomain}`
     : `https://tracpost.com/blog/${siteSlug}`;
@@ -29,6 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    ...(favicon ? { icons: { icon: favicon } } : {}),
     alternates: {
       canonical: hubUrl,
       types: { "application/rss+xml": `/blog/${siteSlug}/feed.xml` },

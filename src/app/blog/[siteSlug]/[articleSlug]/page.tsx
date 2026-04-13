@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { resolveBlogSiteBySlug, resolveBlogSite, getBlogPost, getBlogPosts, getCustomDomain } from "@/lib/blog";
+import { resolveBlogSiteBySlug, resolveBlogSite, getBlogPost, getBlogPosts, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import { generateArticleSchema } from "@/lib/blog/schema";
 import { autoLinkEntities } from "@/lib/blog/auto-linker";
@@ -46,6 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   // Canonical: custom domain if configured, otherwise tracpost.com
   const customDomain = await getCustomDomain(site.siteId);
+  const favicon = await getFavicon(site.siteId);
   const canonicalUrl = customDomain
     ? `https://${customDomain}/${articleSlug}`
     : `https://tracpost.com/blog/${siteSlug}/${articleSlug}`;
@@ -53,6 +54,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: articleTitle,
     description: metaDesc,
+    ...(favicon ? { icons: { icon: favicon } } : {}),
     alternates: { canonical: canonicalUrl },
     openGraph: {
       title: articleTitle,

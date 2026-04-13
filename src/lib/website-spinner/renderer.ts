@@ -19,6 +19,7 @@ interface RenderContext {
   phone?: string;
   email?: string;
   logoUrl?: string;
+  faviconUrl?: string;
   theme: SiteTheme;
   blogUrl: string;
   projectsUrl: string;
@@ -60,6 +61,7 @@ function renderPage(
     location: ctx.location,
     phone: ctx.phone,
     logoUrl: ctx.logoUrl,
+    faviconUrl: ctx.faviconUrl,
     theme: ctx.theme,
     nav,
     blogUrl: ctx.blogUrl,

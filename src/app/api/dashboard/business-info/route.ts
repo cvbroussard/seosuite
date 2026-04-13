@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
   const email = (formData.get("business_email") as string) || null;
   const logoFile = formData.get("business_logo") as File | null;
   const existingLogoUrl = (formData.get("business_logo_url") as string) || null;
+  const faviconFile = formData.get("business_favicon") as File | null;
+  const existingFaviconUrl = (formData.get("business_favicon_url") as string) || null;
 
   if (!name) {
     return NextResponse.json({ error: "Site name is required" }, { status: 400 });
@@ -44,25 +46,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
   }
 
-  // Determine logo URL — upload new file or keep existing
+  // Helper: upload an image file to R2
+  async function uploadImage(file: File, label: string, maxBytes: number): Promise<string> {
+    if (!file.type.startsWith("image/") && file.type !== "image/x-icon") {
+      throw new Error(`${label} must be an image`);
+    }
+    if (file.size > maxBytes) {
+      throw new Error(`${label} must be under ${Math.floor(maxBytes / 1024)}KB`);
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.type.includes("png") ? "png"
+      : file.type.includes("svg") ? "svg"
+      : file.type.includes("webp") ? "webp"
+      : file.type.includes("icon") ? "ico"
+      : "jpg";
+    const fname = seoFilename(label, ext);
+    const key = `sites/${siteId}/branding/${fname}`;
+    return uploadBufferToR2(key, buffer, file.type);
+  }
+
+  // Logo upload
   let logoUrl: string | null = existingLogoUrl;
   if (logoFile && logoFile.size > 0) {
-    // Validate file
-    if (!logoFile.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Logo must be an image" }, { status: 400 });
+    try {
+      logoUrl = await uploadImage(logoFile, "logo", 2 * 1024 * 1024);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Logo upload failed" }, { status: 400 });
     }
-    if (logoFile.size > 2 * 1024 * 1024) {
-      return NextResponse.json({ error: "Logo must be under 2MB" }, { status: 400 });
-    }
+  }
 
-    const buffer = Buffer.from(await logoFile.arrayBuffer());
-    const ext = logoFile.type.includes("png") ? "png"
-      : logoFile.type.includes("svg") ? "svg"
-      : logoFile.type.includes("webp") ? "webp"
-      : "jpg";
-    const fname = seoFilename("logo", ext);
-    const key = `sites/${siteId}/branding/${fname}`;
-    logoUrl = await uploadBufferToR2(key, buffer, logoFile.type);
+  // Favicon upload
+  let faviconUrl: string | null = existingFaviconUrl;
+  if (faviconFile && faviconFile.size > 0) {
+    try {
+      faviconUrl = await uploadImage(faviconFile, "favicon", 256 * 1024);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Favicon upload failed" }, { status: 400 });
+    }
   }
 
   await sql`
@@ -73,9 +93,10 @@ export async function POST(req: NextRequest) {
         business_phone = ${phone},
         business_email = ${email},
         business_logo = ${logoUrl},
+        business_favicon = ${faviconUrl},
         updated_at = NOW()
     WHERE id = ${siteId}
   `;
 
-  return NextResponse.json({ success: true, business_logo: logoUrl });
+  return NextResponse.json({ success: true, business_logo: logoUrl, business_favicon: faviconUrl });
 }

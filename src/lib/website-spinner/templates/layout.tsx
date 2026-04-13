@@ -24,6 +24,7 @@ interface LayoutProps {
   location?: string;
   phone?: string;
   logoUrl?: string;
+  faviconUrl?: string;
   theme: SiteTheme;
   nav: SiteNav[];
   blogUrl?: string;
@@ -59,6 +60,7 @@ export default function Layout({
   location,
   phone,
   logoUrl,
+  faviconUrl,
   theme,
   nav,
   blogUrl,
@@ -72,6 +74,12 @@ export default function Layout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {faviconUrl && (
+          <>
+            <link rel="icon" href={faviconUrl} />
+            <link rel="apple-touch-icon" href={faviconUrl} />
+          </>
+        )}
         {fontsUrl && (
           <>
             <link rel="preconnect" href="https://fonts.googleapis.com" />
