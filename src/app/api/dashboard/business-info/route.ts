@@ -5,6 +5,7 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { seoFilename } from "@/lib/seo-filename";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 /**
  * POST /api/dashboard/business-info

@@ -112,9 +112,12 @@ export function BusinessInfo({ initial }: Props) {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch { data = null; }
       if (!res.ok) {
-        setError(data.error || "Failed to save");
+        setError(data?.error || `Failed to save (HTTP ${res.status})`);
+      } else if (data?.error) {
+        setError(data.error);
       } else {
         setSaved(true);
         setLogoFile(null);
