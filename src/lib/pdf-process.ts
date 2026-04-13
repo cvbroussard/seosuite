@@ -1,12 +1,13 @@
 /**
- * PDF processing — extract page thumbnails as JPEG media assets.
+ * PDF processing — register PDF as a media_asset + extract page thumbnails.
  *
  * Flow:
- * 1. Upload PDF to R2
- * 2. Extract page count with pdf-lib
- * 3. Render each page as JPEG with pdf-to-img
- * 4. Upload each page thumbnail to R2
- * 5. Create a media_asset per page with source_pdf_url in metadata
+ * 1. PDF already on R2 (uploaded via /api/assets)
+ * 2. Create a media_asset for the PDF itself (media_type = 'pdf')
+ * 3. Extract page count with pdf-lib
+ * 4. Render each page as PNG with pdf-to-img
+ * 5. Upload each page thumbnail to R2
+ * 6. Create a media_asset per page linking back to the parent PDF
  */
 import { PDFDocument } from "pdf-lib";
 import { sql } from "@/lib/db";
@@ -14,9 +15,8 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { seoFilename } from "@/lib/seo-filename";
 
 /**
- * Process a PDF: extract page thumbnails and create media assets.
- * The PDF itself stays on R2 as the source reference.
- * Returns the IDs of created thumbnail assets.
+ * Process a PDF: create the parent PDF asset and extract page thumbnails.
+ * Returns the IDs of all created assets (parent PDF first, then thumbnails).
  */
 export async function processPdf(
   pdfUrl: string,
@@ -34,10 +34,39 @@ export async function processPdf(
   const pageCount = pdfDoc.getPageCount();
   console.log(`PDF processing: ${pageCount} pages from ${pdfUrl}`);
 
-  const assetIds: string[] = [];
   const date = new Date().toISOString().slice(0, 10);
+  const allAssetIds: string[] = [];
 
-  // Render each page as JPEG
+  // Base sort_order — current epoch seconds. Thumbnails get base + pageNum * 0.001
+  // so they sort in page order while staying close to upload time.
+  const baseSortOrder = Math.floor(Date.now() / 1000);
+
+  // 1. Create parent PDF asset (sort just above the first page thumbnail)
+  const parentMetadata: Record<string, unknown> = {
+    pdf_total_pages: pageCount,
+  };
+  if (projectId) {
+    parentMetadata.pending_project_id = projectId;
+  }
+
+  const [parentAsset] = await sql`
+    INSERT INTO media_assets (
+      site_id, storage_url, media_type, context_note,
+      source, triage_status, metadata, sort_order
+    )
+    VALUES (
+      ${siteId}, ${pdfUrl}, 'pdf',
+      ${contextNote || `${pageCount}-page document`},
+      'pdf', 'triaged',
+      ${JSON.stringify(parentMetadata)},
+      ${baseSortOrder + (pageCount + 1) * 0.001}
+    )
+    RETURNING id
+  `;
+  const parentId = parentAsset.id as string;
+  allAssetIds.push(parentId);
+
+  // 2. Render each page as PNG thumbnail
   // pdf-to-img is ESM-only, dynamic import
   const { pdf } = await import("pdf-to-img");
 
@@ -46,7 +75,6 @@ export async function processPdf(
     pageNum++;
     const imgBuffer = Buffer.from(image);
 
-    // Upload thumbnail to R2
     const fname = seoFilename(
       contextNote ? `${contextNote} page ${pageNum}` : `document page ${pageNum}`,
       "png"
@@ -54,37 +82,41 @@ export async function processPdf(
     const key = `sites/${siteId}/${date}/${fname}`;
     const thumbnailUrl = await uploadBufferToR2(key, imgBuffer, "image/png");
 
-    // Create media asset for this page
     const pageNote = contextNote
       ? `${contextNote} — page ${pageNum} of ${pageCount}`
       : `Document page ${pageNum} of ${pageCount}`;
 
-    const metadata: Record<string, unknown> = {
+    const thumbMetadata: Record<string, unknown> = {
       source_pdf_url: pdfUrl,
+      source_pdf_asset_id: parentId,
       pdf_page: pageNum,
       pdf_total_pages: pageCount,
     };
 
     if (projectId) {
-      metadata.pending_project_id = projectId;
+      thumbMetadata.pending_project_id = projectId;
     }
+
+    // sort_order: page 1 highest, page N lowest, all just below the parent PDF
+    const pageSortOrder = baseSortOrder + (pageCount - pageNum + 1) * 0.001;
 
     const [asset] = await sql`
       INSERT INTO media_assets (
         site_id, storage_url, media_type, context_note,
-        source, triage_status, metadata
+        source, triage_status, metadata, sort_order
       )
       VALUES (
         ${siteId}, ${thumbnailUrl}, 'image',
         ${pageNote}, 'pdf', 'received',
-        ${JSON.stringify(metadata)}
+        ${JSON.stringify(thumbMetadata)},
+        ${pageSortOrder}
       )
       RETURNING id
     `;
 
-    assetIds.push(asset.id as string);
+    allAssetIds.push(asset.id as string);
   }
 
-  console.log(`PDF processed: ${assetIds.length} page thumbnails created`);
-  return assetIds;
+  console.log(`PDF processed: parent + ${pageCount} page thumbnails created`);
+  return allAssetIds;
 }

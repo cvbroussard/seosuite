@@ -130,6 +130,23 @@ export function MediaGrid({
                   onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
                   onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
                 />
+              ) : a.media_type === "pdf" ? (
+                <a
+                  href={a.storage_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-full w-full flex-col items-center justify-center gap-2 bg-surface text-muted hover:bg-surface-hover"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span className="text-[11px] font-medium">
+                    {((a.metadata as Record<string, unknown>)?.pdf_total_pages as number) || ""} page PDF
+                  </span>
+                  <span className="text-[10px] underline">Open</span>
+                </a>
               ) : a.storage_url?.endsWith(".heic") || a.storage_url?.endsWith(".heif") ? (
                 <div className="flex h-full w-full items-center justify-center text-xs text-muted">
                   HEIC — processing

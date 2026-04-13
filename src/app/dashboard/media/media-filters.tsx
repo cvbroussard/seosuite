@@ -127,6 +127,7 @@ export function MediaFilters({
         <option value="all">All types</option>
         <option value="image">Images</option>
         <option value="video">Videos</option>
+        <option value="pdf">PDFs</option>
       </select>
 
       {/* Scene type filter */}
