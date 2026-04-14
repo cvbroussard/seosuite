@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { autoGeneratePlaybook } from "@/lib/brand-intelligence/auto-generate";
 
+// Provisioning fans out into autoGeneratePlaybook + blog seed + theme
+// derivation + nav discovery — all in series. Default 60s was too tight;
+// 300s is the Pro-plan max.
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 /**
  * POST /api/admin/sites/provision
  * Body: { siteId, action: "start" | "complete" }

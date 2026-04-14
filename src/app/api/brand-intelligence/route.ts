@@ -1,6 +1,13 @@
 import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+
+// refinePlaybook + autoGeneratePlaybook fan out into a long cascade of
+// Anthropic calls (playbook gen, content topics, pillar config, image
+// style, reward prompts, blog seed, per-project article prompts). The
+// default 60s timeout cuts the tail off; 300s is the Pro-plan max.
+export const runtime = "nodejs";
+export const maxDuration = 300;
 import {
   startResearch,
   selectAnglesAndGenerateHooks,

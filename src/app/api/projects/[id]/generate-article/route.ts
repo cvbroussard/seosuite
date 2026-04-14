@@ -3,7 +3,10 @@ import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Project article generation can include asset selection, prompt assembly,
+// and the main article-writing call to Claude — all in series. 60s was cutting
+// it close; 300s is the Pro-plan max.
+export const maxDuration = 300;
 
 /**
  * POST /api/projects/:id/generate-article
