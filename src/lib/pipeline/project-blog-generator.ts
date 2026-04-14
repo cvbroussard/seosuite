@@ -109,7 +109,7 @@ export async function generateProjectArticle(
 
 ## Project Details
 - **Name**: ${project.name}
-- **Description**: ${project.description || "A renovation project"}
+${project.description ? `- **Description**: ${project.description}` : ""}
 ${duration ? `- **Timeline**: ${duration}` : ""}
 ${project.address ? `- **Location**: ${project.address}` : ""}
 - **Status**: ${project.status}
@@ -259,10 +259,27 @@ export async function generateArticlePrompts(
   projectId: string
 ): Promise<ArticlePrompt[]> {
   const [project] = await sql`
-    SELECT id, name, description, address, start_date, end_date
+    SELECT id, name, description, address, start_date, end_date, site_id
     FROM projects WHERE id = ${projectId}
   `;
   if (!project) return [];
+
+  // Pull site-level context so prompts are framed for the publishing tenant's
+  // voice and audience — not hardcoded for a renovation-contractor vertical.
+  // The project is the subject matter; the site's business_type, content_vibe,
+  // and playbook audience define the reader and the rhetorical stance.
+  const [site] = await sql`
+    SELECT business_type, content_vibe, brand_playbook
+    FROM sites WHERE id = ${project.site_id}
+  `;
+
+  const businessType = (site?.business_type as string) || "business";
+  const contentVibe = (site?.content_vibe as string) || "";
+  const playbook = (site?.brand_playbook || null) as Record<string, unknown> | null;
+  const currentState =
+    ((playbook?.audienceResearch as Record<string, unknown>)?.transformationJourney as Record<string, unknown>)
+      ?.currentState as string | undefined;
+  const audienceDescription = currentState || "the site's target audience";
 
   const snapshot = await buildProjectSnapshot(projectId);
 
@@ -281,7 +298,9 @@ export async function generateArticlePrompts(
     return `${date ? `[${date}] ` : ""}${a.context_note}`;
   }).join("\n");
 
-  const prompt = `You are analyzing a construction/renovation project to identify compelling blog article angles.
+  const prompt = `You are analyzing the project "${project.name}" to identify compelling blog article angles for the blog of a ${businessType}.
+${contentVibe ? `\nContent vibe: ${contentVibe}\n` : ""}
+Target audience: ${audienceDescription}
 
 Project: ${project.name}
 ${project.description ? `Description: ${project.description}` : ""}
@@ -293,10 +312,11 @@ ${captionList}
 Identify 10-15 distinct article angles from this project. Each angle should be:
 - Specific to something that actually happened (not generic advice)
 - Supported by multiple photos in the timeline
-- Interesting to a homeowner considering similar work
+- Interesting to the target audience reading the ${businessType}'s blog
+- Framed in the voice the ${businessType} would use when writing about this project for that audience
 
 For each angle, provide:
-- A compelling article title
+- A compelling article title aimed at that audience
 - A one-sentence description of the angle/focus
 - A key phrase from the captions that anchors this angle (for image selection)
 
@@ -406,7 +426,7 @@ export async function generateProjectArticleFromPrompt(
 
 ## Project
 - **Name**: ${project.name}
-- **Description**: ${project.description || "A renovation project"}
+${project.description ? `- **Description**: ${project.description}` : ""}
 ${snapshot.brands.length > 0 ? `- **Materials/Brands**: ${snapshot.brands.join(", ")}` : ""}
 
 ## Selected Photos
