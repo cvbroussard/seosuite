@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { classifyHost } from "@/lib/subdomains";
+import {
+  lookupTenantByCustomDomain,
+  lookupCustomDomainBySlug,
+} from "@/lib/custom-domain-lookup";
 
 /**
  * Extract siteSlug from a custom subdomain.
@@ -34,7 +38,7 @@ function extractSlugFromHost(hostname: string, prefix: string): string | null {
  * Development (localhost):
  *   No rewriting — access /dashboard/* and /admin/* directly.
  */
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const hostname = req.headers.get("host") || "localhost";
   const subdomain = classifyHost(hostname);
   const { pathname } = req.nextUrl;
@@ -56,6 +60,27 @@ export function middleware(req: NextRequest) {
   const sharedPaths = ["/privacy", "/terms", "/data-deletion", "/admin-login"];
   if (sharedPaths.some((p) => pathname === p)) {
     return NextResponse.next();
+  }
+
+  const host = hostname.toLowerCase().split(":")[0];
+  const isTracpostMarketing =
+    host === "tracpost.com" || host === "www.tracpost.com";
+
+  // Root custom domain resolution — any hostname that isn't a platform
+  // subdomain AND isn't TracPost's own marketing is checked against
+  // blog_settings.custom_domain. Match → rewrite to /tenant/[slug]/*.
+  if (subdomain === "marketing" && !isTracpostMarketing) {
+    const tenantSlug = await lookupTenantByCustomDomain(host);
+    if (tenantSlug) {
+      const url = req.nextUrl.clone();
+      url.pathname = `/tenant/${tenantSlug}${pathname === "/" ? "" : pathname}`;
+      return NextResponse.rewrite(url);
+    }
+    // Unknown hostname pointing at us — treat as misconfigured CNAME
+    const url = req.nextUrl.clone();
+    url.hostname = "tracpost.com";
+    url.pathname = "/unauthorized";
+    return NextResponse.redirect(url, 302);
   }
 
   if (subdomain === "blog") {
@@ -118,9 +143,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url, 302);
   }
 
-  if (subdomain === "staging") {
-    // Staging — preview tenant content before they have a custom domain.
-    // staging.tracpost.com/b2construct/blog/my-article
+  if (subdomain === "preview") {
+    // Preview — tenant content before DNS cutover, or for stakeholder
+    // previews. preview.tracpost.com/b2construct/blog/my-article
     //   → /tenant/b2construct/blog/my-article
     if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
       return new NextResponse("Not Found", { status: 404 });
@@ -129,7 +154,7 @@ export function middleware(req: NextRequest) {
     // Strip leading slash, take first segment as slug
     const segments = pathname.split("/").filter(Boolean);
     if (segments.length === 0) {
-      // Bare staging.tracpost.com — bounce to marketing root
+      // Bare preview.tracpost.com — bounce to marketing root
       const url = req.nextUrl.clone();
       url.hostname = "tracpost.com";
       url.pathname = "/";
@@ -138,9 +163,28 @@ export function middleware(req: NextRequest) {
 
     const slug = segments[0];
     const rest = segments.slice(1).join("/");
+
+    // Post-cutover graduation: if this tenant has an active custom
+    // domain, 301 redirect preview URLs to the production domain.
+    // Lets stakeholder-shared preview URLs keep working forever by
+    // silently moving to the real site once DNS goes live.
+    const customDomain = await lookupCustomDomainBySlug(slug);
+    if (customDomain) {
+      const destination = new URL(
+        `https://${customDomain}${rest ? `/${rest}` : ""}`,
+      );
+      destination.search = req.nextUrl.search;
+      return NextResponse.redirect(destination, 301);
+    }
+
+    // No custom domain yet — rewrite to the internal tenant route.
     const url = req.nextUrl.clone();
     url.pathname = rest ? `/tenant/${slug}/${rest}` : `/tenant/${slug}`;
-    return NextResponse.rewrite(url);
+    const res = NextResponse.rewrite(url);
+    // Preview URLs must not be indexed — they advertise unreleased content
+    // and would poach SEO from the real domain once it launches.
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return res;
   }
 
   if (subdomain === "studio") {

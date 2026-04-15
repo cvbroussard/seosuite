@@ -16,11 +16,15 @@ export type SubdomainType =
   | "platform"
   | "blog"
   | "projects"
-  | "staging";
+  | "preview";
 
 /**
  * Classify a hostname into a subdomain type.
  * Returns "marketing" for unknown/local hosts.
+ *
+ * `preview.tracpost.com` and `staging.tracpost.com` both classify as
+ * "preview" during the rename transition; after DNS cutover, staging
+ * goes away.
  */
 export function classifyHost(hostname: string): SubdomainType {
   // Strip port if present
@@ -28,7 +32,7 @@ export function classifyHost(hostname: string): SubdomainType {
 
   if (host === "studio.tracpost.com") return "studio";
   if (host === "platform.tracpost.com") return "platform";
-  if (host === "staging.tracpost.com") return "staging";
+  if (host === "preview.tracpost.com" || host === "staging.tracpost.com") return "preview";
 
   // Custom blog domains (e.g., blog.b2construct.com).
   // Note: blog.tracpost.com is reserved/dormant — falls through to marketing.
