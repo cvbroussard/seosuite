@@ -31,43 +31,51 @@ export default async function MediaPage({ searchParams }: Props) {
   const sortOrder = params.sort || "newest";
   const projectFilter = params.project || "all";
 
-  // Build WHERE conditions
-  const conditions: string[] = [`site_id = '${siteId}'`];
+  // Sort must happen in SQL so that the LIMIT picks from the correct
+  // end of the dataset. Branching on a fixed allow-list keeps each
+  // query static — no string interpolation into the SQL body.
+  const allAssets = sortOrder === "oldest"
+    ? await sql`
+        SELECT id, storage_url, media_type, context_note, triage_status,
+               quality_score, content_pillar, content_pillars, content_tags,
+               source, ai_analysis, metadata, date_taken, sort_order,
+               platform_fit, flag_reason, shelve_reason, created_at
+        FROM media_assets WHERE site_id = ${siteId}
+        ORDER BY sort_order ASC NULLS LAST
+        LIMIT 500
+      `
+    : sortOrder === "quality"
+    ? await sql`
+        SELECT id, storage_url, media_type, context_note, triage_status,
+               quality_score, content_pillar, content_pillars, content_tags,
+               source, ai_analysis, metadata, date_taken, sort_order,
+               platform_fit, flag_reason, shelve_reason, created_at
+        FROM media_assets WHERE site_id = ${siteId}
+        ORDER BY quality_score DESC NULLS LAST
+        LIMIT 500
+      `
+    : sortOrder === "least_used"
+    ? await sql`
+        SELECT id, storage_url, media_type, context_note, triage_status,
+               quality_score, content_pillar, content_pillars, content_tags,
+               source, ai_analysis, metadata, date_taken, sort_order,
+               platform_fit, flag_reason, shelve_reason, created_at
+        FROM media_assets WHERE site_id = ${siteId}
+        ORDER BY COALESCE((metadata->>'used_count')::int, 0) ASC, sort_order DESC
+        LIMIT 500
+      `
+    : await sql`
+        SELECT id, storage_url, media_type, context_note, triage_status,
+               quality_score, content_pillar, content_pillars, content_tags,
+               source, ai_analysis, metadata, date_taken, sort_order,
+               platform_fit, flag_reason, shelve_reason, created_at
+        FROM media_assets WHERE site_id = ${siteId}
+        ORDER BY sort_order DESC NULLS LAST
+        LIMIT 500
+      `;
 
-  if (sourceFilter !== "all") {
-    conditions.push(`COALESCE(source, 'upload') = '${sourceFilter}'`);
-  }
-  if (sceneFilter !== "all") {
-    conditions.push(`ai_analysis->>'scene_type' = '${sceneFilter}'`);
-  }
-  if (qualityFilter === "high") {
-    conditions.push("quality_score >= 0.8");
-  } else if (qualityFilter === "medium") {
-    conditions.push("quality_score >= 0.5 AND quality_score < 0.8");
-  } else if (qualityFilter === "low") {
-    conditions.push("quality_score < 0.5");
-  }
-
-  // Use parameterized queries per sort to avoid SQL injection
-  // while still supporting dynamic WHERE
-  // Fetch all assets for the site, apply server-side sort
-  const orderClause = sortOrder === "quality" ? "quality_score DESC"
-    : sortOrder === "least_used" ? "COALESCE((metadata->>'used_count')::int, 0) ASC, sort_order DESC"
-    : sortOrder === "oldest" ? "sort_order ASC"
-    : "sort_order DESC";
-
-  // Single query — filter in JS for reliability with Neon tagged templates
-  const allAssets = await sql`
-    SELECT id, storage_url, media_type, context_note, triage_status,
-           quality_score, content_pillar, content_pillars, content_tags,
-           source, ai_analysis, metadata, date_taken, sort_order,
-           platform_fit, flag_reason, shelve_reason, created_at
-    FROM media_assets WHERE site_id = ${siteId}
-    ORDER BY sort_order DESC NULLS LAST
-    LIMIT 500
-  `;
-
-  // Apply filters in JS
+  // Secondary filters applied in JS — cheaper than recomputing the
+  // WHERE clause and keeps the SQL path static.
   let filtered = allAssets as Array<Record<string, unknown>>;
 
   if (sourceFilter !== "all") {
@@ -91,19 +99,6 @@ export default async function MediaPage({ searchParams }: Props) {
     });
   } else if (qualityFilter === "low") {
     filtered = filtered.filter(a => (a.quality_score as number) < 0.5);
-  }
-
-  // Apply sort
-  if (sortOrder === "oldest") {
-    filtered.sort((a, b) => ((a.sort_order as number) || 0) - ((b.sort_order as number) || 0));
-  } else if (sortOrder === "quality") {
-    filtered.sort((a, b) => ((b.quality_score as number) || 0) - ((a.quality_score as number) || 0));
-  } else if (sortOrder === "least_used") {
-    filtered.sort((a, b) => {
-      const aCount = ((a.metadata as Record<string, unknown>)?.used_count as number) || 0;
-      const bCount = ((b.metadata as Record<string, unknown>)?.used_count as number) || 0;
-      return aCount - bCount;
-    });
   }
 
   let filteredAssets = filtered.slice(0, 200);
