@@ -22,9 +22,15 @@ const nextConfig: NextConfig = {
   },
   // TracPost is a tenant of itself. Its public surface lives at clean
   // root paths, but the routes themselves live under /tenant/tracpost/.
-  // Custom domains and staging URLs reach the same routes via middleware.
+  // Custom domains and preview URLs reach the same routes via middleware.
+  // Filesystem routes (login, admin, api, privacy, terms, etc.) win
+  // over rewrites, so only unrouted public paths fall through here.
   async rewrites() {
     return [
+      { source: "/", destination: "/tenant/tracpost" },
+      { source: "/about", destination: "/tenant/tracpost/about" },
+      { source: "/work", destination: "/tenant/tracpost/work" },
+      { source: "/contact", destination: "/tenant/tracpost/contact" },
       { source: "/blog", destination: "/tenant/tracpost/blog" },
       { source: "/blog/:path*", destination: "/tenant/tracpost/blog/:path*" },
       { source: "/projects", destination: "/tenant/tracpost/projects" },
