@@ -123,8 +123,11 @@ export function AssetEditModal({
   const [creatingProject, setCreatingProject] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<boolean | "force">(false);
+  const [confirmDelete, setConfirmDelete] = useState<boolean | "replace">(false);
   const [deleting, setDeleting] = useState(false);
+  const [replacing, setReplacing] = useState(false);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const replaceFileRef = useRef<HTMLInputElement>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -648,22 +651,98 @@ export function AssetEditModal({
 
         {/* Footer: actions */}
         <div className="flex items-center justify-between border-t border-border px-6 py-3">
-          {confirmDelete ? (
+          {confirmDelete === "replace" ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-danger">{confirmDelete === "force" ? "Used in a blog post. Delete anyway?" : "Delete this asset?"}</span>
+              <span className="text-xs text-warning">Used in a blog post. Upload a replacement image/video (same type).</span>
+              <input
+                ref={replaceFileRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setReplacing(true);
+                  setReplaceError(null);
+                  try {
+                    if (file.type.startsWith("video/")) {
+                      // Presigned direct-upload path for large files
+                      const presignRes = await fetch(`/api/assets/${assetId}/replace`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ contentType: file.type, sizeBytes: file.size }),
+                      });
+                      const presign = await presignRes.json();
+                      if (!presignRes.ok || !presign.uploadUrl) {
+                        setReplaceError(presign.error || "Could not prepare upload");
+                        setReplacing(false);
+                        return;
+                      }
+                      const put = await fetch(presign.uploadUrl, {
+                        method: "PUT",
+                        headers: { "Content-Type": file.type },
+                        body: file,
+                      });
+                      if (!put.ok) {
+                        setReplaceError("Upload to storage failed");
+                        setReplacing(false);
+                        return;
+                      }
+                    } else {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      const res = await fetch(`/api/assets/${assetId}/replace`, {
+                        method: "POST",
+                        body: fd,
+                      });
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        setReplaceError(data.error || "Replacement failed");
+                        setReplacing(false);
+                        return;
+                      }
+                    }
+                    // Same URL, new bytes. Close the modal; library re-fetches
+                    // via its parent; CDN will catch up within 24h.
+                    onDeleted?.();
+                    onClose();
+                  } catch {
+                    setReplaceError("Replacement failed");
+                  } finally {
+                    setReplacing(false);
+                  }
+                }}
+              />
+              <button
+                onClick={() => replaceFileRef.current?.click()}
+                disabled={replacing}
+                className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {replacing ? "Uploading..." : "Choose replacement"}
+              </button>
+              <button
+                onClick={() => { setConfirmDelete(false); setReplaceError(null); }}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              {replaceError && <span className="text-[10px] text-danger">{replaceError}</span>}
+            </div>
+          ) : confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-danger">Delete this asset?</span>
               <button
                 onClick={async () => {
                   setDeleting(true);
                   try {
-                    const force = confirmDelete === "force" ? "?force=true" : "";
-                    const res = await fetch(`/api/assets/${assetId}${force}`, { method: "DELETE" });
+                    const res = await fetch(`/api/assets/${assetId}`, { method: "DELETE" });
                     if (res.ok) {
                       onDeleted?.();
                       onClose();
                     } else {
                       const data = await res.json();
-                      if (data.requiresForce) {
-                        setConfirmDelete("force");
+                      if (data.requiresReplace) {
+                        setConfirmDelete("replace");
                         setDeleting(false);
                         return;
                       }
@@ -674,7 +753,7 @@ export function AssetEditModal({
                 disabled={deleting}
                 className="rounded bg-danger px-3 py-1 text-xs font-medium text-white hover:bg-danger/90 disabled:opacity-50"
               >
-                {deleting ? "Deleting..." : confirmDelete === "force" ? "Yes, delete anyway" : "Yes, delete"}
+                {deleting ? "Deleting..." : "Yes, delete"}
               </button>
               <button
                 onClick={() => setConfirmDelete(false)}

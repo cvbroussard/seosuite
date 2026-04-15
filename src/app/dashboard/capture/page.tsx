@@ -103,10 +103,6 @@ function CaptureForm() {
     setShowUrlInput(false);
   }
 
-  function updateNote(id: string, note: string) {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, contextNote: note } : item)));
-  }
-
   function removeItem(id: string) {
     setItems((prev) => {
       const item = prev.find((i) => i.id === id);
@@ -286,13 +282,6 @@ function CaptureForm() {
                   ✕
                 </button>
               </div>
-              <input
-                type="text"
-                value={item.contextNote}
-                onChange={(e) => updateNote(item.id, e.target.value)}
-                placeholder="Context note — e.g. 'Custom walnut island with knife storage'"
-                className="w-full text-xs"
-              />
             </div>
           ))}
 

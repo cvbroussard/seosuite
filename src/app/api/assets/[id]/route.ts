@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { parseContextNote } from "@/lib/context-note-parser";
+import { deleteObjectFromR2, keyFromStorageUrl } from "@/lib/r2";
 
 /**
  * PATCH /api/assets/:id — Update an asset's context note or pillar.
@@ -162,9 +163,8 @@ export async function DELETE(
   const auth = authResult as AuthContext;
   const { id } = await params;
 
-  // Verify ownership
   const [asset] = await sql`
-    SELECT ma.id
+    SELECT ma.id, ma.storage_url
     FROM media_assets ma
     JOIN sites s ON ma.site_id = s.id
     WHERE ma.id = ${id} AND s.subscription_id = ${auth.subscriptionId}
@@ -174,28 +174,37 @@ export async function DELETE(
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
 
-  // Check if asset is used in blog posts
+  // Referenced assets cannot be deleted — the tenant must upload a
+  // replacement via /api/assets/:id/replace, which overwrites the
+  // R2 object in place so every URL reference keeps working.
   const refs = await sql`
     SELECT id, title, status FROM blog_posts WHERE source_asset_id = ${id}
   `;
 
-  const forceDelete = new URL(req.url).searchParams.get("force") === "true";
-
-  if (refs.length > 0 && !forceDelete) {
+  if (refs.length > 0) {
     return NextResponse.json({
-      error: "Asset is used in blog posts",
+      error: "Asset is used in blog posts — upload a replacement instead",
       posts: refs.map((r) => ({ id: r.id, title: r.title, status: r.status })),
-      requiresForce: true,
+      requiresReplace: true,
     }, { status: 409 });
   }
 
-  // Clear references and delete
-  await sql`UPDATE blog_posts SET source_asset_id = NULL WHERE source_asset_id = ${id}`;
-  await sql`DELETE FROM asset_brands WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_projects WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_personas WHERE asset_id = ${id}`;
+  // Unreferenced asset — full teardown including R2 blob.
+  await sql`DELETE FROM asset_brands    WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_projects  WHERE asset_id = ${id}`;
+  await sql`DELETE FROM asset_personas  WHERE asset_id = ${id}`;
   await sql`DELETE FROM asset_locations WHERE asset_id = ${id}`;
-  await sql`DELETE FROM media_assets WHERE id = ${id}`;
+  await sql`DELETE FROM asset_services  WHERE asset_id = ${id}`;
+  await sql`DELETE FROM media_assets    WHERE id       = ${id}`;
+
+  const key = asset.storage_url ? keyFromStorageUrl(String(asset.storage_url)) : null;
+  if (key) {
+    try {
+      await deleteObjectFromR2(key);
+    } catch (err) {
+      console.error("R2 delete failed (DB delete succeeded):", err);
+    }
+  }
 
   return NextResponse.json({ success: true });
 }
