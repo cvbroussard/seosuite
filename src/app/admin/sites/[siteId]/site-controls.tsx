@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { PageConfig } from "@/lib/tenant-site";
+import {
+  PageLayoutEditor,
+  HeroOverridePicker,
+  RegenerateCopyButton,
+} from "./website-pane";
 
 interface SiteData {
   name: string;
@@ -631,6 +637,10 @@ export function SiteControls({
   projects = [],
   navLinks: initialNavLinks = [],
   domainInfo,
+  pageConfig,
+  heroAssetCandidates = [],
+  currentHeroAssetId = null,
+  hasWebsiteCopy = false,
 }: {
   siteId: string;
   site: SiteData;
@@ -640,6 +650,10 @@ export function SiteControls({
   projects?: ProjectInfo[];
   navLinks?: NavLink[];
   domainInfo?: DomainInfoProps | null;
+  pageConfig: PageConfig;
+  heroAssetCandidates?: Array<{ id: string; storage_url: string; context_note: string | null; quality_score: number | null }>;
+  currentHeroAssetId?: string | null;
+  hasWebsiteCopy?: boolean;
 }) {
   const [contentVibe, setContentVibe] = useState(site.contentVibe);
   const [imageStyle, setImageStyle] = useState(site.imageStyle);
@@ -995,19 +1009,6 @@ export function SiteControls({
             </div>
           </Field>
 
-          <Field label="Custom Domains">
-            <DomainProvisioning
-              siteId={siteId}
-              customDomain={customDomain}
-              initialDomainInfo={domainInfo || undefined}
-              onProvisioned={(rootDomain, slug, records) => {
-                setCustomDomain(rootDomain);
-                setBlogSlug(slug);
-                setDnsRecords(records);
-              }}
-            />
-          </Field>
-
           <Field label="Video Ratio — 1 video post per N posts">
             <div className="flex items-center gap-2">
               <select
@@ -1221,15 +1222,60 @@ export function SiteControls({
         </div>
       </Section>
 
-      {/* Website Spinner */}
-      <Section title="Website" tier={0}>
-        <div className="rounded border border-border bg-background p-3">
-          <p className="mb-2 text-xs font-medium">Generate Website</p>
-          <p className="mb-3 text-[10px] text-muted">
-            Generate a complete static website from the brand playbook, assets, and entities.
-            Deploys as a separate Vercel project.
-          </p>
-          <WebsiteSpinner siteId={siteId} siteUrl={site.url} />
+      {/* Website — consolidated marketing-site controls */}
+      <Section title="Website" tier={0} defaultOpen>
+        <div className="space-y-3">
+          {/* Custom Domain */}
+          <div className="rounded border border-border bg-background p-3">
+            <p className="mb-2 text-xs font-medium">Custom Domain</p>
+            <p className="mb-3 text-[10px] text-muted">
+              Tenant&apos;s root domain. TracPost serves home, blog, projects, and everything else from this domain via middleware.
+            </p>
+            <DomainProvisioning
+              siteId={siteId}
+              customDomain={customDomain}
+              initialDomainInfo={domainInfo || undefined}
+              onProvisioned={(rootDomain, slug, records) => {
+                setCustomDomain(rootDomain);
+                setBlogSlug(slug);
+                setDnsRecords(records);
+              }}
+            />
+          </div>
+
+          {/* Generated Copy */}
+          <div className="rounded border border-border bg-background p-3">
+            <p className="mb-2 text-xs font-medium">Generated Copy</p>
+            <p className="mb-3 text-[10px] text-muted">
+              AI-written copy for home, about, work, contact pages, derived from the sharpened playbook.
+              {hasWebsiteCopy
+                ? " Currently populated."
+                : " Not yet generated — pages render with fallback placeholders until you regenerate."}
+            </p>
+            <RegenerateCopyButton siteId={siteId} />
+          </div>
+
+          {/* Hero Image Override */}
+          <div className="rounded border border-border bg-background p-3">
+            <p className="mb-2 text-xs font-medium">Hero Image</p>
+            <p className="mb-3 text-[10px] text-muted">
+              The home page hero defaults to the highest-quality-scored asset. Pin a specific one to override.
+            </p>
+            <HeroOverridePicker
+              siteId={siteId}
+              initialHeroAssetId={currentHeroAssetId}
+              candidates={heroAssetCandidates}
+            />
+          </div>
+
+          {/* Page Layout */}
+          <div className="rounded border border-border bg-background p-3">
+            <p className="mb-2 text-xs font-medium">Page Layout</p>
+            <p className="mb-3 text-[10px] text-muted">
+              Six-slot page model. Disable slots that don&apos;t apply, rename labels, and pick a content variant per slot.
+            </p>
+            <PageLayoutEditor siteId={siteId} initial={pageConfig} />
+          </div>
         </div>
       </Section>
     </div>

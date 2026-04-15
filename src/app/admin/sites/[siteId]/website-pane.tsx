@@ -1,0 +1,261 @@
+"use client";
+
+import { useState } from "react";
+import type { PageConfig, PageSlot, SlotKey } from "@/lib/tenant-site";
+
+// ──────────────────────────────────────────────────────────────────
+// Page Layout editor — per-slot enabled / label / variant
+// ──────────────────────────────────────────────────────────────────
+
+const VARIANT_OPTIONS: Record<SlotKey, string[]> = {
+  home: ["service_business", "saas_landing", "coach", "portfolio_forward"],
+  about: ["solo_practitioner", "team", "founder", "studio", "firm"],
+  work: ["services_tiles", "pricing_tiers", "hybrid"],
+  blog: ["journal", "insights", "news"],
+  projects: ["portfolio", "case_studies", "timeline"],
+  contact: ["form", "booking_demo", "multi_channel"],
+};
+
+export function PageLayoutEditor({
+  siteId,
+  initial,
+}: {
+  siteId: string;
+  initial: PageConfig;
+}) {
+  const [config, setConfig] = useState<PageConfig>(initial);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  function update(idx: number, patch: Partial<PageSlot>) {
+    setConfig((prev) => prev.map((slot, i) => (i === idx ? { ...slot, ...patch } : slot)));
+  }
+
+  async function save() {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch(`/api/admin/sites/${siteId}/marketing-config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_config: config }),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Save failed");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border text-[10px] text-muted">
+            <th className="text-left font-normal pb-1 pr-2">Slot</th>
+            <th className="text-left font-normal pb-1 pr-2">Enabled</th>
+            <th className="text-left font-normal pb-1 pr-2">Label</th>
+            <th className="text-left font-normal pb-1">Variant</th>
+          </tr>
+        </thead>
+        <tbody>
+          {config.map((slot, i) => (
+            <tr key={slot.id} className="border-b border-border last:border-0">
+              <td className="py-1.5 pr-2 text-muted">{slot.key}</td>
+              <td className="py-1.5 pr-2">
+                <input
+                  type="checkbox"
+                  checked={slot.enabled}
+                  onChange={(e) => update(i, { enabled: e.target.checked })}
+                />
+              </td>
+              <td className="py-1.5 pr-2">
+                <input
+                  type="text"
+                  value={slot.label}
+                  onChange={(e) => update(i, { label: e.target.value })}
+                  className="w-full bg-surface-hover px-1.5 py-0.5 text-xs"
+                />
+              </td>
+              <td className="py-1.5">
+                <select
+                  value={slot.variant}
+                  onChange={(e) => update(i, { variant: e.target.value })}
+                  className="w-full bg-surface-hover px-1.5 py-0.5 text-xs"
+                >
+                  {VARIANT_OPTIONS[slot.key].map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex items-center gap-2 pt-2">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save layout"}
+        </button>
+        {saved && <span className="text-[10px] text-success">Saved</span>}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Hero Override picker — choose which media asset is the home hero
+// ──────────────────────────────────────────────────────────────────
+
+interface HeroAsset {
+  id: string;
+  storage_url: string;
+  context_note: string | null;
+  quality_score: number | null;
+}
+
+export function HeroOverridePicker({
+  siteId,
+  initialHeroAssetId,
+  candidates,
+}: {
+  siteId: string;
+  initialHeroAssetId: string | null;
+  candidates: HeroAsset[];
+}) {
+  const [selected, setSelected] = useState<string | null>(initialHeroAssetId);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save(value: string | null) {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch(`/api/admin/sites/${siteId}/marketing-config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hero_asset_id: value }),
+      });
+      if (res.ok) {
+        setSelected(value);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Save failed");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (candidates.length === 0) {
+    return <p className="text-[10px] text-muted">No image assets yet — upload some to set a hero.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-4 gap-2">
+        <button
+          onClick={() => save(null)}
+          disabled={saving}
+          className={`relative aspect-video overflow-hidden rounded border-2 ${
+            selected === null ? "border-accent" : "border-border"
+          }`}
+        >
+          <div className="flex h-full items-center justify-center bg-surface-hover text-[10px] text-muted">
+            Auto
+            <br />(top quality)
+          </div>
+        </button>
+        {candidates.slice(0, 11).map((asset) => (
+          <button
+            key={asset.id}
+            onClick={() => save(asset.id)}
+            disabled={saving}
+            className={`relative aspect-video overflow-hidden rounded border-2 ${
+              selected === asset.id ? "border-accent" : "border-border hover:border-accent/50"
+            }`}
+            title={asset.context_note || ""}
+          >
+            <img
+              src={asset.storage_url}
+              alt={asset.context_note || ""}
+              className="h-full w-full object-cover"
+            />
+            {selected === asset.id && (
+              <div className="absolute right-1 top-1 rounded bg-accent px-1 text-[9px] font-medium text-white">✓</div>
+            )}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted">
+        {selected === null
+          ? "Auto: highest quality_score wins."
+          : "Pinned override active. Click Auto to revert."}
+        {saving && " · saving..."}
+        {saved && <span className="text-success"> · saved</span>}
+      </p>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Regenerate Copy button — fires the AI copy generator
+// ──────────────────────────────────────────────────────────────────
+
+export function RegenerateCopyButton({ siteId }: { siteId: string }) {
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState<{ heroTitle?: string; heroSubtitle?: string; ctaText?: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function regenerate() {
+    setGenerating(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/admin/sites/${siteId}/regenerate-copy`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult(data.preview);
+      } else {
+        setError(data.error || "Generation failed");
+      }
+    } catch {
+      setError("Request failed");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={regenerate}
+        disabled={generating}
+        className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+      >
+        {generating ? "Generating (~30-60s)..." : "Regenerate copy"}
+      </button>
+      {error && <p className="text-[10px] text-danger">{error}</p>}
+      {result && (
+        <div className="rounded border border-success/30 bg-success/5 p-2 space-y-1">
+          <p className="text-[10px] text-muted">New hero:</p>
+          <p className="text-xs font-medium">{result.heroTitle}</p>
+          <p className="text-[10px] text-muted">{result.heroSubtitle}…</p>
+          <p className="text-[10px] text-muted">CTA: {result.ctaText}</p>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { SiteControls } from "./site-controls";
 import { verifyDomain } from "@/lib/vercel-domains";
+import { normalizePageConfig } from "@/lib/tenant-site/page-config";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,8 @@ export default async function SiteControlPanel({ params }: Props) {
            s.autopilot_enabled, s.cadence_config, s.autopilot_config,
            s.provisioning_status, s.metadata, s.video_ratio,
            s.inline_upload_count, s.inline_ai_count, s.blog_cadence, s.article_mix,
+           s.page_config, s.hero_asset_id,
+           (s.website_copy IS NOT NULL) AS has_website_copy,
            u.name AS subscriber_name, sub.plan,
            bs.blog_enabled, bs.subdomain, bs.custom_domain,
            bs.blog_title, bs.blog_description, bs.nav_links
@@ -72,6 +75,23 @@ export default async function SiteControlPanel({ params }: Props) {
   const projects = await sql`
     SELECT id, name, slug FROM projects WHERE site_id = ${siteId} ORDER BY name
   `;
+
+  // Hero candidates — top 12 image assets the admin can pick from
+  const heroAssetCandidates = await sql`
+    SELECT id, storage_url, context_note, quality_score
+    FROM media_assets
+    WHERE site_id = ${siteId}
+      AND triage_status = 'triaged'
+      AND media_type LIKE 'image%'
+    ORDER BY quality_score DESC NULLS LAST
+    LIMIT 12
+  `;
+
+  // Page config (normalize so admin always sees 6 slots)
+  const pageConfig = normalizePageConfig(
+    site.page_config,
+    (site.business_type as string) || null,
+  );
 
   // Domain status — fetch from Vercel if custom domain is set
   const customDomain = (site.custom_domain as string) || null;
@@ -198,6 +218,10 @@ export default async function SiteControlPanel({ params }: Props) {
         projects={projects as Array<{ id: string; name: string; slug: string }>}
         navLinks={(site.nav_links as Array<{ label: string; href: string }>) || []}
         domainInfo={domainInfo}
+        pageConfig={pageConfig}
+        heroAssetCandidates={heroAssetCandidates as Array<{ id: string; storage_url: string; context_note: string | null; quality_score: number | null }>}
+        currentHeroAssetId={(site.hero_asset_id as string) || null}
+        hasWebsiteCopy={!!site.has_website_copy}
       />
     </div>
   );
