@@ -20,17 +20,14 @@ const nextConfig: NextConfig = {
       "./node_modules/pdf-lib/**/*",
     ],
   },
-  // TracPost is a tenant of itself. Its public surface lives at clean
-  // root paths, but the routes themselves live under /tenant/tracpost/.
-  // Custom domains and preview URLs reach the same routes via middleware.
-  // Filesystem routes (login, admin, api, privacy, terms, etc.) win
-  // over rewrites, so only unrouted public paths fall through here.
+  // TracPost blog and projects always route through the tenant engine
+  // regardless of which marketing shell wraps them. The marketing-
+  // specific rewrites (/, /about, /work, /contact) are now handled
+  // in middleware so they can be hostname-conditioned (tracpost.com
+  // serves current tenant template; next.tracpost.com serves the
+  // new marketing route group).
   async rewrites() {
     return [
-      { source: "/", destination: "/tenant/tracpost" },
-      { source: "/about", destination: "/tenant/tracpost/about" },
-      { source: "/work", destination: "/tenant/tracpost/work" },
-      { source: "/contact", destination: "/tenant/tracpost/contact" },
       { source: "/blog", destination: "/tenant/tracpost/blog" },
       { source: "/blog/:path*", destination: "/tenant/tracpost/blog/:path*" },
       { source: "/projects", destination: "/tenant/tracpost/projects" },

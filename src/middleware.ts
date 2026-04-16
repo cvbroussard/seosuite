@@ -248,6 +248,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
+  // next.tracpost.com — new marketing site staging. Routes to the
+  // (marketing) route group directly. Blog/projects still rewrite
+  // via next.config. Block admin/dashboard.
+  if (subdomain === "next") {
+    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+    // Let the route group handle it — no rewrites needed
+    return NextResponse.next();
+  }
+
   // /login on marketing serves subscriber login
   if (pathname === "/login") {
     return NextResponse.next();
@@ -261,6 +272,25 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/admin")) {
     const rest = pathname.replace(/^\/admin/, "") || "/";
     return NextResponse.redirect(new URL(`https://platform.tracpost.com${rest}`));
+  }
+
+  // tracpost.com marketing — rewrite root marketing pages to the
+  // tenant template (TracPost-as-tenant-of-itself). These were
+  // formerly in next.config but moved here so next.tracpost.com
+  // can bypass them and serve the new marketing route group.
+  if (isTracpostMarketing) {
+    const tenantRewrites: Record<string, string> = {
+      "/": "/tenant/tracpost",
+      "/about": "/tenant/tracpost/about",
+      "/work": "/tenant/tracpost/work",
+      "/contact": "/tenant/tracpost/contact",
+    };
+    const rewriteDest = tenantRewrites[pathname];
+    if (rewriteDest) {
+      const url = req.nextUrl.clone();
+      url.pathname = rewriteDest;
+      return NextResponse.rewrite(url);
+    }
   }
 
   return NextResponse.next();

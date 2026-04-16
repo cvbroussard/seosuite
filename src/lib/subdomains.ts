@@ -12,6 +12,7 @@
 
 export type SubdomainType =
   | "marketing"
+  | "next"
   | "studio"
   | "platform"
   | "blog"
@@ -32,6 +33,7 @@ export function classifyHost(hostname: string): SubdomainType {
 
   if (host === "studio.tracpost.com") return "studio";
   if (host === "platform.tracpost.com") return "platform";
+  if (host === "next.tracpost.com") return "next";
   if (host === "preview.tracpost.com" || host === "staging.tracpost.com") return "preview";
 
   // Custom blog domains (e.g., blog.b2construct.com).
