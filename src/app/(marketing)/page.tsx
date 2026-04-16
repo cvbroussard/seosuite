@@ -96,12 +96,14 @@ export default async function MarketingHomePage() {
         </div>
         <div className="mp-hero-visual">
           <div className="mp-container">
-            <div className="mp-hero-placeholder">
-              <p>Hero animation — coming soon</p>
-              <p className="mp-hero-placeholder-sub">
-                Night-shift scene: phone capture → pipeline bots → 8 platforms lit
-              </p>
-            </div>
+            <picture>
+              <source srcSet="https://assets.tracpost.com/marketing/hero-comp.webp" type="image/webp" />
+              <img
+                src="https://assets.tracpost.com/marketing/hero-comp.jpg"
+                alt="Business owner captures a photo on their phone. AI-powered helpers deliver the content across Instagram, TikTok, Facebook, YouTube, Pinterest, LinkedIn, X, and Google."
+                className="mp-hero-img"
+              />
+            </picture>
           </div>
         </div>
       </section>
@@ -377,7 +379,12 @@ const homeStyles = `
   }
 
   .mp-hero-visual { margin-top: 56px; }
-  .mp-hero-placeholder, .mp-unipost-placeholder, .mp-roi-placeholder {
+  .mp-hero-img {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+  }
+  .mp-unipost-placeholder, .mp-roi-placeholder {
     border: 2px dashed #d1d5db;
     border-radius: 12px;
     padding: 80px 32px;
