@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db";
 import Link from "next/link";
+import { RoiCalculator } from "@/components/marketing-platform/roi-calculator";
 
 export const revalidate = 3600;
 
@@ -192,21 +193,15 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      {/* ── Section 9: ROI calculator (placeholder) ── */}
+      {/* ── Section 9: ROI calculator ── */}
       <section className="mp-section">
-        <div className="mp-container mp-text-center">
-          <h2 className="mp-section-title">More content. Fewer tools.</h2>
-          <p className="mp-section-subtitle" style={{ margin: "0 auto 40px" }}>
+        <div className="mp-container">
+          <h2 className="mp-section-title mp-text-center">More content. Fewer tools.</h2>
+          <p className="mp-section-subtitle mp-text-center" style={{ margin: "0 auto 48px" }}>
             Most businesses spend $2,000–5,000/month on a social media manager, freelance writer,
             SEO agency, and scheduling tools — separately. TracPost replaces all of them.
           </p>
-          <div className="mp-roi-placeholder">
-            <p>ROI calculator — interactive slider coming</p>
-            <p className="mp-hero-placeholder-sub">
-              "What are you spending now?" → writer + social manager + SEO + tools = $X/mo →
-              "TracPost: $99–219/mo. You save $Y/yr."
-            </p>
-          </div>
+          <RoiCalculator />
         </div>
       </section>
 

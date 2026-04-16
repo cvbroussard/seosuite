@@ -23,6 +23,7 @@ const PLANS = [
     ],
     cta: "Start 14-day trial",
     highlight: false,
+    ctaStyle: "outline" as const,
   },
   {
     name: "Authority",
@@ -41,6 +42,26 @@ const PLANS = [
     ],
     cta: "Start 14-day trial",
     highlight: true,
+    ctaStyle: "primary" as const,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    tagline: "Scale across clients and locations.",
+    features: [
+      "Everything in Authority",
+      "Unlimited sites (channels)",
+      "Multi-brand management",
+      "Dedicated brand playbook per client",
+      "Agency dashboard",
+      "Priority support + SLA",
+      "Custom integrations",
+      "SSO / team access controls",
+      "Dedicated account manager",
+    ],
+    cta: "Talk to us",
+    highlight: false,
+    ctaStyle: "outline" as const,
   },
 ];
 
@@ -76,8 +97,8 @@ export default function PricingPage() {
                   ))}
                 </ul>
                 <Link
-                  href="/contact"
-                  className={plan.highlight ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
+                  href={plan.name === "Enterprise" ? "/contact" : "/pricing"}
+                  className={plan.ctaStyle === "primary" ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
                 >
                   {plan.cta}
                 </Link>
@@ -106,12 +127,12 @@ export default function PricingPage() {
 const pricingStyles = `
   .mp-pricing-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 24px;
-    max-width: 800px;
+    max-width: 960px;
     margin: 0 auto;
   }
-  @media (max-width: 640px) { .mp-pricing-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .mp-pricing-grid { grid-template-columns: 1fr; } }
 
   .mp-plan-card {
     border: 1px solid #e5e7eb;
