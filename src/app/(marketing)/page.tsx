@@ -5,8 +5,8 @@ export const revalidate = 3600;
 
 const PIPELINE_PILLARS = [
   { n: "1.0", title: "Capture", body: "Snap photos of your work with your phone. Add a quick voice note. The engine takes it from there." },
-  { n: "2.0", title: "Analyze", body: "AI evaluates your content — scene type, quality, brand fit, audience match. Weak shots get flagged. Strong ones get fast-tracked." },
-  { n: "3.0", title: "Write", body: "Captions, blog posts, hashtags, alt text — all generated in your brand voice from the playbook the engine built for you." },
+  { n: "2.0", title: "Analyze", body: "AI scores every photo for quality, scene type, and brand fit. Weak shots get flagged. Strong ones get fast-tracked." },
+  { n: "3.0", title: "Write", body: "AI writes captions, blog posts, hashtags, and alt text — all in your brand voice, drawn from the playbook we built for you." },
   { n: "4.0", title: "Publish", body: "Instagram, TikTok, Facebook, X, YouTube, Pinterest, LinkedIn, Google Business — scheduled and posted across all 8 platforms." },
   { n: "5.0", title: "Monitor", body: "One dashboard, every platform. Comments, followers, engagement — unified. No more hopping between eight different apps." },
 ];
