@@ -45,7 +45,7 @@ async function selectNextAsset(
 
   // Get the last 2 published pillars for diversity
   const recentPillars = await sql`
-    SELECT DISTINCT ma.content_pillar
+    SELECT ma.content_pillar
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
     JOIN site_social_links ssl ON ssl.social_account_id = sa.id
@@ -56,7 +56,7 @@ async function selectNextAsset(
     ORDER BY sp.published_at DESC
     LIMIT 2
   `;
-  const lastPillars = recentPillars.map((r) => String(r.content_pillar));
+  const lastPillars = [...new Set(recentPillars.map((r) => String(r.content_pillar)))];
 
   // Build boost clause for campaign pillars
   const boostCase = opts.boostPillars && opts.boostPillars.length > 0
