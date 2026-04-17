@@ -63,3 +63,57 @@ export async function refreshExpiringTokens(): Promise<{ refreshed: number; fail
 
   return { refreshed, failed };
 }
+
+/**
+ * Attempt to recover token_expired accounts using stored refresh tokens.
+ * Called manually from admin or as part of site maintenance.
+ */
+export async function forceRefreshExpired(siteId?: string): Promise<{ recovered: number; failed: number }> {
+  const expired = siteId
+    ? await sql`
+        SELECT sa.id, sa.platform, sa.access_token_encrypted, sa.refresh_token_encrypted, sa.account_name
+        FROM social_accounts sa
+        JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+        WHERE sa.status = 'token_expired'
+          AND sa.refresh_token_encrypted IS NOT NULL
+          AND ssl.site_id = ${siteId}
+      `
+    : await sql`
+        SELECT id, platform, access_token_encrypted, refresh_token_encrypted, account_name
+        FROM social_accounts
+        WHERE status = 'token_expired'
+          AND refresh_token_encrypted IS NOT NULL
+      `;
+
+  let recovered = 0;
+  let failed = 0;
+
+  for (const account of expired) {
+    try {
+      const adapter = getAdapter(account.platform);
+      if (!adapter) { failed++; continue; }
+
+      const refreshToken = decrypt(account.refresh_token_encrypted as string);
+      const { accessToken, expiresIn } = await adapter.refreshToken(refreshToken);
+
+      const newExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+      await sql`
+        UPDATE social_accounts
+        SET access_token_encrypted = ${encrypt(accessToken)},
+            token_expires_at = ${newExpiry},
+            status = 'active',
+            updated_at = NOW()
+        WHERE id = ${account.id}
+      `;
+
+      console.log(`Recovered ${account.platform} account: ${account.account_name}`);
+      recovered++;
+    } catch (err) {
+      console.error(`Recovery failed for ${account.account_name} (${account.platform}): ${err instanceof Error ? err.message : err}`);
+      failed++;
+    }
+  }
+
+  return { recovered, failed };
+}

@@ -6,6 +6,7 @@ import {
   PageLayoutEditor,
   HeroOverridePicker,
   RegenerateCopyButton,
+  AutopilotControls,
   RenderPipelineButton,
   RegenerateServicesButton,
   WorkContentEditor,
@@ -1045,6 +1046,15 @@ export function SiteControls({
               Platform-derived: primary + additional GBP categories plus 6–8 service tiles. Each service anchors to a gcid for local SEO. Run after playbook sharpen; re-run when the offer changes.
             </p>
             <RegenerateServicesButton siteId={siteId} />
+          </div>
+
+          {/* Autopilot Publishing */}
+          <div className="rounded border border-border bg-background p-3">
+            <p className="mb-2 text-xs font-medium">Autopilot Publishing</p>
+            <p className="mb-3 text-[10px] text-muted">
+              Publish now triggers the cadence-driven autopilot for all active platforms. Refresh expired tokens attempts to recover accounts without re-OAuth.
+            </p>
+            <AutopilotControls siteId={siteId} />
           </div>
 
           {/* Render Pipeline */}

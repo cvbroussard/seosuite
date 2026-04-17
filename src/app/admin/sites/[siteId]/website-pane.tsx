@@ -325,6 +325,63 @@ export function RenderPipelineButton({ siteId }: { siteId: string }) {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// Autopilot controls — publish now + refresh expired tokens
+// ──────────────────────────────────────────────────────────────────
+
+export function AutopilotControls({ siteId }: { siteId: string }) {
+  const [running, setRunning] = useState<string | null>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function trigger(action: string) {
+    setRunning(action);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/admin/sites/${siteId}/autopilot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (res.ok) setResult(data);
+      else setError(data.error || "Failed");
+    } catch {
+      setError("Request failed");
+    } finally {
+      setRunning(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => trigger("publish")}
+          disabled={!!running}
+          className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {running === "publish" ? "Publishing..." : "Publish now"}
+        </button>
+        <button
+          onClick={() => trigger("refresh_tokens")}
+          disabled={!!running}
+          className="border border-border px-3 py-1 text-[10px] font-medium hover:bg-surface-hover disabled:opacity-50"
+        >
+          {running === "refresh_tokens" ? "Refreshing..." : "Refresh expired tokens"}
+        </button>
+      </div>
+      {error && <p className="text-[10px] text-danger">{error}</p>}
+      {result && (
+        <div className="rounded border border-success/30 bg-success/5 p-2">
+          <pre className="text-[10px] text-muted whitespace-pre-wrap">{JSON.stringify(result, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Services regenerate — GBP categorize + derive 6-8 service tiles
 // ──────────────────────────────────────────────────────────────────
 
