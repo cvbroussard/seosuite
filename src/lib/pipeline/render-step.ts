@@ -30,9 +30,14 @@ export async function renderAssetVariants(assetId: string): Promise<{
   `;
   if (!asset) return { rendered: 0, skipped: true, reason: "not found" };
 
-  // Skip already-rendered or failed assets (re-render via force flag)
+  // Skip already-rendered assets
   if (asset.render_status === "rendered") {
     return { rendered: 0, skipped: true, reason: "already rendered" };
+  }
+
+  // Skip permanently failed assets (3+ attempts)
+  if (asset.render_status === "skipped") {
+    return { rendered: 0, skipped: true, reason: "permanently skipped after repeated failures" };
   }
 
   // Skip video assets for now (Phase 5)
@@ -60,7 +65,22 @@ export async function renderAssetVariants(assetId: string): Promise<{
     return { rendered: Object.keys(variants).length, skipped: false };
   } catch (err) {
     console.error(`Render failed for asset ${assetId}:`, err);
-    await sql`UPDATE media_assets SET render_status = 'failed' WHERE id = ${assetId}`;
+    // Track retry count — skip permanently after 3 failures
+    const [meta] = await sql`
+      SELECT COALESCE((metadata->>'render_retries')::int, 0) AS retries
+      FROM media_assets WHERE id = ${assetId}
+    `;
+    const retries = ((meta?.retries as number) || 0) + 1;
+    const newStatus = retries >= 3 ? "skipped" : "failed";
+    await sql`
+      UPDATE media_assets
+      SET render_status = ${newStatus},
+          metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+            render_retries: retries,
+            render_last_error: err instanceof Error ? err.message : "unknown",
+          })}::jsonb
+      WHERE id = ${assetId}
+    `;
     return { rendered: 0, skipped: true, reason: err instanceof Error ? err.message : "unknown error" };
   }
 }

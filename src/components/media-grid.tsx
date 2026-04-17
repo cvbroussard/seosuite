@@ -178,11 +178,6 @@ export function MediaGrid({
                   AI
                 </span>
               )}
-              {a.variant_count > 0 && (
-                <span className="absolute bottom-10 right-1.5 rounded bg-success/80 px-1.5 py-0.5 text-[9px] font-medium text-white" title={`${a.variant_count} platform variants rendered`}>
-                  {a.variant_count} variants
-                </span>
-              )}
             </div>
             <div className="px-2.5 py-2">
               {a.context_note ? (
