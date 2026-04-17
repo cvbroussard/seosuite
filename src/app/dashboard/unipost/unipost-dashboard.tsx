@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PlatformIcon } from "@/components/platform-icons";
 
-type StatusFilter = "review" | "scheduled" | "live" | "all";
+type StatusFilter = "recent" | "live" | "quarantined" | "all";
 
 const ALL_PLATFORMS = [
   "instagram", "tiktok", "facebook", "youtube",
@@ -11,9 +11,9 @@ const ALL_PLATFORMS = [
 ];
 
 const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
-  { key: "review", label: "Review" },
-  { key: "scheduled", label: "Scheduled" },
+  { key: "recent", label: "Recent" },
   { key: "live", label: "Live" },
+  { key: "quarantined", label: "Quarantined" },
   { key: "all", label: "All" },
 ];
 
@@ -23,7 +23,7 @@ interface PostItem {
   mediaUrl: string | null;
   platform: string;
   accountName: string;
-  status: "published" | "scheduled" | "failed" | "draft";
+  status: "published" | "scheduled" | "failed" | "draft" | "held";
   publishedAt: string | null;
   platformPostUrl: string | null;
   errorMessage: string | null;
@@ -87,6 +87,7 @@ function statusBadge(status: string) {
     scheduled: "bg-accent/10 text-accent",
     failed: "bg-danger/10 text-danger",
     draft: "bg-muted/10 text-muted",
+    held: "bg-warning/10 text-warning",
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[status] || "bg-muted/10 text-muted"}`}>
@@ -95,8 +96,14 @@ function statusBadge(status: string) {
   );
 }
 
+function isRecent(publishedAt: string | null): boolean {
+  if (!publishedAt) return false;
+  const age = Date.now() - new Date(publishedAt).getTime();
+  return age < 48 * 60 * 60 * 1000; // 48 hours
+}
+
 export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGroups }: Props) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("review");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("recent");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [posts, setPosts] = useState(recentPosts);
   const [actioning, setActioning] = useState<string | null>(null);
@@ -148,9 +155,9 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
   const statusPosts = statusFilter === "all"
     ? posts
     : posts.filter((p) => {
-        if (statusFilter === "review") return p.status === "draft" || p.status === "failed";
-        if (statusFilter === "scheduled") return p.status === "scheduled";
+        if (statusFilter === "recent") return p.status === "published" && isRecent(p.publishedAt);
         if (statusFilter === "live") return p.status === "published";
+        if (statusFilter === "quarantined") return p.status === "held" || p.status === "failed";
         return true;
       });
 
@@ -160,14 +167,14 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
     : statusPosts.filter((p) => p.platform === channelFilter);
 
   // Counts per status tab
-  const reviewCount = posts.filter((p) => p.status === "draft" || p.status === "failed").length;
-  const scheduledCount = posts.filter((p) => p.status === "scheduled").length;
+  const recentCount = posts.filter((p) => p.status === "published" && isRecent(p.publishedAt)).length;
   const liveCount = posts.filter((p) => p.status === "published").length;
+  const quarantinedCount = posts.filter((p) => p.status === "held" || p.status === "failed").length;
 
   const tabCounts: Record<StatusFilter, number> = {
-    review: reviewCount,
-    scheduled: scheduledCount,
+    recent: recentCount,
     live: liveCount,
+    quarantined: quarantinedCount,
     all: posts.length,
   };
 
@@ -252,11 +259,13 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
         {filteredPosts.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border px-8 py-12 text-center">
             <p className="text-sm text-muted">
-              {statusFilter === "review"
-                ? "All caught up — nothing needs your attention."
-                : statusFilter === "scheduled"
-                ? "No posts scheduled."
-                : "No posts published yet."}
+              {statusFilter === "recent"
+                ? "No posts in the last 48 hours."
+                : statusFilter === "quarantined"
+                ? "Nothing quarantined — all clear."
+                : statusFilter === "live"
+                ? "No posts published yet."
+                : "No posts."}
             </p>
           </div>
         ) : (
@@ -371,35 +380,17 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
 
                         {/* Action buttons */}
                         <div className="flex items-center gap-2 pt-1">
-                          {post.status === "draft" && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); postAction(post.id, "approve"); }}
-                              disabled={actioning === post.id}
-                              className="rounded bg-success/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-success disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
-                          )}
-                          {post.status === "failed" && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); postAction(post.id, "retry"); }}
-                              disabled={actioning === post.id}
-                              className="rounded bg-accent/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent disabled:opacity-50"
-                            >
-                              Retry
-                            </button>
-                          )}
-                          {/* Delete with confirmation */}
-                          {(post.status === "draft" || post.status === "failed" || post.status === "scheduled") && (
+                          {/* Published posts: Take Down */}
+                          {post.status === "published" && (
                             confirmDeleteId === post.id ? (
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-danger">This post will be permanently deleted and the slot reassigned.</span>
+                                <span className="text-[10px] text-danger">This post will be removed from the platform.</span>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); postAction(post.id, "veto"); setConfirmDeleteId(null); setExpandedId(null); }}
                                   disabled={actioning === post.id}
                                   className="rounded bg-danger px-3 py-1.5 text-xs font-medium text-white hover:bg-danger/80 disabled:opacity-50"
                                 >
-                                  Delete
+                                  Take down
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
@@ -413,9 +404,28 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
                                 onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(post.id); }}
                                 className="px-3 py-1.5 text-xs text-muted hover:text-danger"
                               >
-                                Delete
+                                Take down
                               </button>
                             )
+                          )}
+                          {/* Quarantined/held: Release (admin) or Delete */}
+                          {(post.status === "held" || post.status === "failed") && (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); postAction(post.id, "retry"); }}
+                                disabled={actioning === post.id}
+                                className="rounded bg-accent/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent disabled:opacity-50"
+                              >
+                                Release
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); postAction(post.id, "veto"); setExpandedId(null); }}
+                                disabled={actioning === post.id}
+                                className="px-3 py-1.5 text-xs text-muted hover:text-danger"
+                              >
+                                Delete
+                              </button>
+                            </>
                           )}
                           {post.platformPostUrl && (
                             <a

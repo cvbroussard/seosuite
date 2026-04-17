@@ -249,26 +249,48 @@ export async function GET(req: NextRequest) {
     // ── 2. Refresh expiring tokens ──
     const tokenResult = await refreshExpiringTokens();
 
-    // ── 3. Run all pipelines ──
+    // ── 3. Autopilot publishing ──
+    // Replaces the old slot-based pipeline. For each active site with
+    // autopilot enabled, evaluate cadence rules and publish immediately
+    // if conditions are met. No slots, no drafts, no approval.
+    const autopilotSites = await sql`
+      SELECT id FROM sites WHERE autopilot_enabled = true AND is_active = true
+    `;
+    const publishResults: Array<{ siteId: string; results: unknown[] }> = [];
+    for (const site of autopilotSites) {
+      try {
+        const { autopilotPublish } = await import("@/lib/pipeline/autopilot-publisher");
+        const results = await autopilotPublish(site.id as string);
+        publishResults.push({ siteId: site.id as string, results });
+      } catch (err) {
+        console.error(`Autopilot publish failed for ${site.id}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // ── 4. Legacy pipeline (blog promotion, etc.) ──
     const results = await runAllPipelines();
+
+    const totalPublished = publishResults.reduce(
+      (n, s) => n + (s.results as Array<{ published: boolean }>).filter((r) => r.published).length, 0,
+    );
+    const totalQuarantined = publishResults.reduce(
+      (n, s) => n + (s.results as Array<{ quarantined?: boolean }>).filter((r) => r.quarantined).length, 0,
+    );
 
     const summary = {
       assets_processed: processed,
       assets_errors: processErrors,
-      assets_remaining: pending.length === 30 ? "30+" : 0,
-      sites_processed: results.length,
-      total_triaged: results.reduce((n, r) => n + r.assetsTriaged, 0),
-      total_slots_generated: results.reduce((n, r) => n + r.slotsGenerated, 0),
-      total_slots_filled: results.reduce((n, r) => n + r.slotsFilled, 0),
-      total_captions: results.reduce((n, r) => n + r.captionsGenerated, 0),
-      total_published: results.reduce((n, r) => n + r.postsPublished, 0),
-      total_failed: results.reduce((n, r) => n + r.postsFailed, 0),
+      assets_remaining: pending.length === 50 ? "50+" : 0,
+      autopilot_sites: autopilotSites.length,
+      autopilot_published: totalPublished,
+      autopilot_quarantined: totalQuarantined,
+      legacy_sites: results.length,
+      legacy_published: results.reduce((n, r) => n + r.postsPublished, 0),
       tokens_refreshed: tokenResult.refreshed,
       tokens_failed: tokenResult.failed,
-      errors: results.flatMap((r) => r.errors),
     };
 
-    return NextResponse.json({ summary, results });
+    return NextResponse.json({ summary, publishResults });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
