@@ -246,8 +246,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── 2. Refresh expiring tokens ──
+    // ── 2. Refresh expiring + recover expired tokens ──
     const tokenResult = await refreshExpiringTokens();
+    try {
+      const { forceRefreshExpired } = await import("@/lib/pipeline/token-refresh");
+      const recovered = await forceRefreshExpired();
+      if (recovered.recovered > 0) {
+        console.log(`Recovered ${recovered.recovered} expired tokens`);
+      }
+    } catch (err) {
+      console.error("Token recovery failed:", err instanceof Error ? err.message : err);
+    }
 
     // ── 3. Autopilot publishing ──
     // Replaces the old slot-based pipeline. For each active site with
