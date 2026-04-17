@@ -56,11 +56,11 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
       WHERE id = ${postId}
     `;
 
-    // Update slot if linked
+    // Legacy: update slot if linked (deprecated — autopilot doesn't use slots)
     if (post.slot_id) {
       await sql`
         UPDATE publishing_slots SET status = 'published' WHERE id = ${post.slot_id}
-      `;
+      `.catch(() => {});
     }
 
     // Update source asset

@@ -1,9 +1,5 @@
 import { sql } from "@/lib/db";
 import { triageAsset } from "./triage";
-import { generateSlots } from "./slot-generator";
-import { fillSlots } from "./slot-filler";
-import { generateMissingCaptions } from "./caption-generator";
-import { publishDuePosts } from "./publisher";
 import { generateMissingBlogPosts } from "./blog-generator";
 import { sendPushNotification } from "@/lib/notifications";
 import { syncInboxEngagement } from "@/lib/inbox/sync";
@@ -13,13 +9,8 @@ export interface PipelineRunResult {
   siteId: string;
   rssItemsIngested: number;
   assetsTriaged: number;
-  slotsGenerated: number;
-  slotsFilled: number;
-  captionsGenerated: number;
   blogPostsGenerated: number;
   autopilotContentGenerated: number;
-  postsPublished: number;
-  postsFailed: number;
   inboxCommentsAdded: number;
   inboxReviewsAdded: number;
   errors: string[];
@@ -41,13 +32,8 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     siteId,
     rssItemsIngested: 0,
     assetsTriaged: 0,
-    slotsGenerated: 0,
-    slotsFilled: 0,
-    captionsGenerated: 0,
     blogPostsGenerated: 0,
     autopilotContentGenerated: 0,
-    postsPublished: 0,
-    postsFailed: 0,
     inboxCommentsAdded: 0,
     inboxReviewsAdded: 0,
     errors: [],
@@ -102,31 +88,12 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     }
   }
 
-  // Step 2: Generate slots for the next 7 days
-  try {
-    result.slotsGenerated = await generateSlots(siteId, 7);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    result.errors.push(`slot-gen: ${msg}`);
-  }
+  // Steps 2-4 (slot generation, slot filling, caption generation) REMOVED.
+  // Social publishing is now handled by the autopilot publisher in the
+  // cron route (cadence-driven, no slots, no drafts, no approval).
+  // This orchestrator now handles blog generation + inbox sync only.
 
-  // Step 3: Fill open slots
-  try {
-    result.slotsFilled = await fillSlots(siteId);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    result.errors.push(`slot-fill: ${msg}`);
-  }
-
-  // Step 4: Generate captions for posts that need them
-  try {
-    result.captionsGenerated = await generateMissingCaptions(siteId);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    result.errors.push(`captions: ${msg}`);
-  }
-
-  // Step 5: Autopilot content generation (reward prompt → asset → blog post)
+  // Step 2: Autopilot content generation (reward prompt → asset → blog post)
   const [siteVoice] = await sql`
     SELECT brand_voice, metadata FROM sites WHERE id = ${siteId}
   `;
@@ -198,15 +165,8 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     result.errors.push(`blog-promote: ${msg}`);
   }
 
-  // Step 6: Publish posts that are due
-  try {
-    const pubResult = await publishDuePosts(siteId);
-    result.postsPublished = pubResult.published;
-    result.postsFailed = pubResult.failed;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    result.errors.push(`publish: ${msg}`);
-  }
+  // Step 6 (publish due posts) REMOVED — autopilot publisher handles
+  // social publishing via cadence rules in the cron route.
 
   // Step 7: Sync inbox engagement (comments + reviews)
   try {
@@ -234,7 +194,7 @@ async function notifyPipelineResults(
   result: PipelineRunResult
 ): Promise<void> {
   const hasMeaningfulResults =
-    result.assetsTriaged > 0 || result.postsPublished > 0;
+    result.assetsTriaged > 0 || result.blogPostsGenerated > 0;
   if (!hasMeaningfulResults) return;
 
   try {
@@ -252,8 +212,8 @@ async function notifyPipelineResults(
     if (result.assetsTriaged > 0) {
       parts.push(`${result.assetsTriaged} asset${result.assetsTriaged === 1 ? "" : "s"} triaged`);
     }
-    if (result.postsPublished > 0) {
-      parts.push(`${result.postsPublished} post${result.postsPublished === 1 ? "" : "s"} published`);
+    if (result.blogPostsGenerated > 0) {
+      parts.push(`${result.blogPostsGenerated} article${result.blogPostsGenerated === 1 ? "" : "s"} generated`);
     }
 
     const title = `Pipeline Complete — ${site_name || "Your Site"}`;

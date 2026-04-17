@@ -285,7 +285,7 @@ export async function GET(req: NextRequest) {
       autopilot_published: totalPublished,
       autopilot_quarantined: totalQuarantined,
       legacy_sites: results.length,
-      legacy_published: results.reduce((n, r) => n + r.postsPublished, 0),
+      legacy_blogs: results.reduce((n, r) => n + r.blogPostsGenerated, 0),
       tokens_refreshed: tokenResult.refreshed,
       tokens_failed: tokenResult.failed,
     };
