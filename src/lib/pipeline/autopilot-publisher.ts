@@ -152,7 +152,7 @@ function getVariantUrl(asset: Record<string, unknown>, platform: string): string
  * Publish content for one site across all platforms.
  * Called by the pipeline cron every hour.
  */
-export async function autopilotPublish(siteId: string): Promise<PublishResult[]> {
+export async function autopilotPublish(siteId: string, opts: { force?: boolean } = {}): Promise<PublishResult[]> {
   const config = await loadCadenceConfig(siteId);
   const results: PublishResult[] = [];
 
@@ -171,11 +171,13 @@ export async function autopilotPublish(siteId: string): Promise<PublishResult[]>
   for (const account of accounts) {
     const platform = String(account.platform);
 
-    // Should we publish now?
-    const cadenceCheck = await shouldPublishNow(siteId, platform, config);
-    if (!cadenceCheck.publish) {
-      results.push({ platform, published: false, reason: cadenceCheck.reason });
-      continue;
+    // Should we publish now? (admin force bypasses cadence gates)
+    if (!opts.force) {
+      const cadenceCheck = await shouldPublishNow(siteId, platform, config);
+      if (!cadenceCheck.publish) {
+        results.push({ platform, published: false, reason: cadenceCheck.reason });
+        continue;
+      }
     }
 
     // Select the next best asset

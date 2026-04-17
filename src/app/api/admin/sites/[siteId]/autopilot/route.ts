@@ -32,7 +32,7 @@ export async function POST(
 
   if (action === "publish") {
     const { autopilotPublish } = await import("@/lib/pipeline/autopilot-publisher");
-    const results = await autopilotPublish(siteId);
+    const results = await autopilotPublish(siteId, { force: true });
     return NextResponse.json({ success: true, results });
   }
 
