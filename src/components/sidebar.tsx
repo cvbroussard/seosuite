@@ -9,7 +9,14 @@ interface SiteInfo {
   url: string;
 }
 
-const siteNav = [
+interface NavItem {
+  label: string;
+  path: string;
+  icon: string;
+  children?: { label: string; path: string }[];
+}
+
+const siteNav: NavItem[] = [
   { label: "Dashboard", path: "", icon: "◆" },
   { label: "Unipost", path: "/unipost", icon: "◈" },
   { label: "Brand", path: "/brand", icon: "◇" },
@@ -18,7 +25,15 @@ const siteNav = [
   { label: "Entities", path: "/entities", icon: "◫" },
   { label: "Calendar", path: "/calendar", icon: "▦" },
   { label: "Inbox", path: "/inbox", icon: "▤" },
-  { label: "Google", path: "/google", icon: "G" },
+  {
+    label: "Google", path: "/google", icon: "G",
+    children: [
+      { label: "Reviews", path: "/google/reviews" },
+      { label: "Performance", path: "/google/performance" },
+      { label: "Profile", path: "/google/profile" },
+      { label: "Photos", path: "/google/photos" },
+    ],
+  },
   { label: "Blog", path: "/blog", icon: "✎" },
   { label: "SEO", path: "/seo", icon: "◇" },
   { label: "Spotlight", path: "/spotlight", icon: "✦" },
@@ -76,18 +91,40 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
                     ? pathname === prefix || pathname === prefix + "/"
                     : pathname === fullPath || pathname === fullPath + "/" || pathname.startsWith(fullPath + "/");
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
-                      active
-                        ? "bg-accent-muted text-accent"
-                        : "text-muted hover:bg-surface-hover hover:text-foreground"
-                    }`}
-                  >
-                    <span className="text-xs">{item.icon}</span>
-                    {item.label}
-                  </Link>
+                  <div key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                        active
+                          ? "bg-accent-muted text-accent"
+                          : "text-muted hover:bg-surface-hover hover:text-foreground"
+                      }`}
+                    >
+                      <span className="text-xs">{item.icon}</span>
+                      {item.label}
+                    </Link>
+                    {active && item.children && (
+                      <div className="ml-6 flex flex-col gap-0.5 py-0.5">
+                        {item.children.map((child) => {
+                          const childPath = prefix + child.path;
+                          const childActive = pathname === childPath || pathname === childPath + "/";
+                          return (
+                            <Link
+                              key={childPath}
+                              href={childPath}
+                              className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                                childActive
+                                  ? "text-accent font-medium"
+                                  : "text-muted hover:text-foreground"
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
