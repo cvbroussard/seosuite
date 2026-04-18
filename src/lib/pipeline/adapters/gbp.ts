@@ -27,8 +27,15 @@ class GbpAdapter implements PlatformAdapter {
    * refresh before calling publish if needed.
    */
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { platformAccountId, accessToken, caption, mediaUrls } = input;
-    const locationId = platformAccountId;
+    const { platformAccountId, accessToken, caption, mediaUrls, accountMetadata } = input;
+
+    // Construct the full v4 resource path: accounts/{id}/locations/{id}
+    // platformAccountId stores the v1 format (locations/{id})
+    // accountMetadata has the accounts prefix
+    const gbpAccountId = (accountMetadata?.account_id as string) || "";
+    const locationId = gbpAccountId && platformAccountId
+      ? `${gbpAccountId}/${platformAccountId}`
+      : platformAccountId;
 
     // Build the Local Post payload
     const postBody: Record<string, unknown> = {
