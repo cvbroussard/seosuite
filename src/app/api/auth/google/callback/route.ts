@@ -125,7 +125,17 @@ export async function GET(req: NextRequest) {
           status = 'active',
           metadata = EXCLUDED.metadata,
           updated_at = NOW()
+        RETURNING id
       `;
+
+      // Link to site (was missing — caused GBP to not show in connections)
+      if (socialAccount.length > 0) {
+        await sql`
+          INSERT INTO site_social_links (site_id, social_account_id)
+          VALUES (${state.site_id}, ${socialAccount[0].id})
+          ON CONFLICT DO NOTHING
+        `;
+      }
     }
 
     // Log usage
