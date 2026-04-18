@@ -20,7 +20,7 @@ export function getPinterestAuthUrl(state: string): string {
     client_id: process.env.PINTEREST_APP_ID!,
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/pinterest/callback`,
     response_type: "code",
-    scope: "boards:read,pins:read,pins:write,user_accounts:read",
+    scope: "boards:read,boards:write,pins:read,pins:write,user_accounts:read",
     state,
   });
 

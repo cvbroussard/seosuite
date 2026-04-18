@@ -15,6 +15,7 @@ const REDIRECT_URI =
 const SCOPES = [
   "https://www.googleapis.com/auth/business.manage",
   "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/webmasters.readonly",
 ];
 
 /**
