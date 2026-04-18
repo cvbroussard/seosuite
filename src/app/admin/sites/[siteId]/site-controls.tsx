@@ -10,6 +10,7 @@ import {
   RenderPipelineButton,
   RegenerateServicesButton,
   WorkContentEditor,
+  SyncReviewsButton,
 } from "./website-pane";
 
 interface SiteData {
@@ -1055,6 +1056,15 @@ export function SiteControls({
               Publish now triggers the cadence-driven autopilot for all active platforms. Refresh expired tokens attempts to recover accounts without re-OAuth.
             </p>
             <AutopilotControls siteId={siteId} />
+          </div>
+
+          {/* Reviews Sync */}
+          <div className="rounded border border-border bg-background p-3">
+            <p className="mb-2 text-xs font-medium">Reviews</p>
+            <p className="mb-3 text-[10px] text-muted">
+              Pull reviews from GBP and auto-draft AI replies using the subscriber&apos;s voice.
+            </p>
+            <SyncReviewsButton siteId={siteId} />
           </div>
 
           {/* Render Pipeline */}

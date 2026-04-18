@@ -45,10 +45,10 @@ export async function POST(
     brandPlaybook: review.brand_playbook,
   });
 
-  // Cache it
   await sql`
     UPDATE inbox_reviews
-    SET suggested_reply = ${suggestion}, suggested_reply_at = NOW()
+    SET suggested_reply = ${suggestion}, suggested_reply_at = NOW(),
+        reply_status = 'draft_ready'
     WHERE id = ${id}
   `;
 

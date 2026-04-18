@@ -807,3 +807,35 @@ function PricingTiersEditor({
     </div>
   );
 }
+
+export function SyncReviewsButton({ siteId }: { siteId: string }) {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState<number | null>(null);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={async () => {
+          setSyncing(true);
+          setResult(null);
+          try {
+            const res = await fetch(`/api/admin/sites/${siteId}/reviews`, {
+              method: "POST",
+            });
+            const data = await res.json();
+            setResult(data.added ?? 0);
+          } catch { setResult(-1); }
+          setSyncing(false);
+        }}
+        disabled={syncing}
+        className="bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+      >
+        {syncing ? "Syncing..." : "Sync Reviews"}
+      </button>
+      {result !== null && result >= 0 && (
+        <span className="text-[10px] text-success">{result} new review{result !== 1 ? "s" : ""} pulled</span>
+      )}
+      {result === -1 && <span className="text-[10px] text-danger">Sync failed</span>}
+    </div>
+  );
+}

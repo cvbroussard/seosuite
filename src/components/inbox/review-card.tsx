@@ -15,12 +15,21 @@ interface Review {
   our_reply: string | null;
   our_reply_at: string | null;
   suggested_reply: string | null;
+  reply_status: string;
+  auto_drafted: boolean;
 }
 
 interface ReviewCardProps {
   review: Review;
   onReplied: () => void;
 }
+
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  needs_reply: { label: "Needs Reply", className: "bg-amber-100 text-amber-800" },
+  draft_ready: { label: "Draft Ready", className: "bg-blue-100 text-blue-800" },
+  replied: { label: "Replied", className: "bg-emerald-100 text-emerald-800" },
+  ignored: { label: "Ignored", className: "bg-gray-100 text-gray-500" },
+};
 
 function Stars({ rating }: { rating: number | null }) {
   if (!rating) return null;
@@ -47,11 +56,15 @@ function timeAgo(dateStr: string): string {
 }
 
 export function ReviewCard({ review, onReplied }: ReviewCardProps) {
-  const [showReply, setShowReply] = useState(false);
+  const [showReply, setShowReply] = useState(
+    review.reply_status === "draft_ready" && review.auto_drafted
+  );
   const [replyText, setReplyText] = useState(review.suggested_reply || "");
   const [loading, setLoading] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState("");
+
+  const badge = STATUS_BADGE[review.reply_status] || STATUS_BADGE.needs_reply;
 
   async function handleSuggest() {
     setSuggesting(true);
@@ -93,10 +106,16 @@ export function ReviewCard({ review, onReplied }: ReviewCardProps) {
     }
   }
 
+  async function handleIgnore() {
+    try {
+      await fetch(`/api/inbox/reviews/${review.id}/ignore`, { method: "POST" });
+      onReplied();
+    } catch { /* ignore */ }
+  }
+
   return (
     <div className={`border-b border-border p-4 ${!review.is_read ? "bg-accent/5" : ""}`}>
       <div className="flex items-start gap-3">
-        {/* Avatar */}
         <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-surface-hover">
           {review.reviewer_avatar_url ? (
             <img src={review.reviewer_avatar_url} alt="" className="h-full w-full object-cover" />
@@ -107,12 +126,14 @@ export function ReviewCard({ review, onReplied }: ReviewCardProps) {
           )}
         </div>
 
-        {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">{review.reviewer_name || "Anonymous"}</span>
             <PlatformIcon platform={review.platform} size={14} />
             <span className="text-xs text-muted">{timeAgo(review.reviewed_at)}</span>
+            <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+              {badge.label}
+            </span>
           </div>
 
           <div className="mt-1">
@@ -123,7 +144,7 @@ export function ReviewCard({ review, onReplied }: ReviewCardProps) {
             <p className="mt-1.5 text-sm whitespace-pre-wrap">{review.body}</p>
           )}
 
-          {/* Our reply */}
+          {/* Our published reply */}
           {review.our_reply && (
             <div className="mt-3 rounded bg-surface-hover p-3 text-sm">
               <span className="text-xs font-medium text-muted">Your response</span>
@@ -131,60 +152,76 @@ export function ReviewCard({ review, onReplied }: ReviewCardProps) {
             </div>
           )}
 
-          {/* Reply actions */}
-          {!review.our_reply && (
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowReply(!showReply);
-                  if (!showReply && !replyText) handleSuggest();
-                }}
-                className="text-xs text-accent hover:text-accent/80"
-              >
-                Respond
-              </button>
-            </div>
-          )}
+          {/* Reply actions — for unreplied reviews */}
+          {!review.our_reply && review.reply_status !== "ignored" && (
+            <>
+              {!showReply && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowReply(true);
+                      if (!replyText) handleSuggest();
+                    }}
+                    className="text-xs text-accent hover:text-accent/80"
+                  >
+                    Respond
+                  </button>
+                  <button
+                    onClick={handleIgnore}
+                    className="text-xs text-muted hover:text-foreground"
+                  >
+                    Ignore
+                  </button>
+                </div>
+              )}
 
-          {showReply && !review.our_reply && (
-            <div className="mt-3 space-y-2">
-              {suggesting && (
-                <p className="text-xs text-muted">Generating suggested response...</p>
+              {showReply && (
+                <div className="mt-3 space-y-2">
+                  {suggesting && (
+                    <p className="text-xs text-muted">Generating suggested response...</p>
+                  )}
+                  {review.auto_drafted && replyText && (
+                    <p className="text-xs text-blue-600">Auto-drafted reply — edit or approve as-is</p>
+                  )}
+                  <textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Write your response..."
+                    rows={3}
+                    className="w-full resize-none rounded border border-border bg-background p-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                  {error && <p className="text-xs text-danger">{error}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSend}
+                      disabled={!replyText.trim() || loading}
+                      className="rounded bg-accent px-3 py-1 text-xs text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+                    >
+                      {loading ? "Sending..." : "Approve & Send"}
+                    </button>
+                    <button
+                      onClick={handleSuggest}
+                      disabled={suggesting}
+                      className="rounded border border-border px-3 py-1 text-xs text-muted hover:text-foreground disabled:opacity-50"
+                    >
+                      {suggesting ? "Generating..." : "Regenerate"}
+                    </button>
+                    <button
+                      onClick={handleIgnore}
+                      className="rounded px-3 py-1 text-xs text-muted hover:text-foreground"
+                    >
+                      Ignore
+                    </button>
+                    <button
+                      onClick={() => setShowReply(false)}
+                      className="rounded px-3 py-1 text-xs text-muted hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
-              <textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Write your response..."
-                rows={3}
-                className="w-full resize-none rounded border border-border bg-background p-2 text-sm focus:border-accent focus:outline-none"
-              />
-              {replyText && (
-                <p className="text-xs text-muted">Suggested response — edit or send as-is</p>
-              )}
-              {error && <p className="text-xs text-danger">{error}</p>}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSend}
-                  disabled={!replyText.trim() || loading}
-                  className="rounded bg-accent px-3 py-1 text-xs text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
-                >
-                  {loading ? "Sending..." : "Send Response"}
-                </button>
-                <button
-                  onClick={handleSuggest}
-                  disabled={suggesting}
-                  className="rounded border border-border px-3 py-1 text-xs text-muted hover:text-foreground disabled:opacity-50"
-                >
-                  {suggesting ? "Generating..." : "New Suggestion"}
-                </button>
-                <button
-                  onClick={() => setShowReply(false)}
-                  className="rounded px-3 py-1 text-xs text-muted hover:text-foreground"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            </>
           )}
         </div>
       </div>

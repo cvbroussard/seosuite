@@ -51,10 +51,10 @@ export async function POST(
     accountMetadata: review.account_metadata as Record<string, unknown>,
   });
 
-  // Store the reply
   await sql`
     UPDATE inbox_reviews
-    SET our_reply = ${replyText.trim()}, our_reply_at = NOW(), is_read = true
+    SET our_reply = ${replyText.trim()}, our_reply_at = NOW(),
+        is_read = true, reply_status = 'replied'
     WHERE id = ${id}
   `;
 

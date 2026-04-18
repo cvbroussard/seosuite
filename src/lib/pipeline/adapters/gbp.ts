@@ -121,9 +121,13 @@ class GbpAdapter implements PlatformAdapter {
     return `https://business.google.com/`;
   }
   async fetchReviews(input: FetchReviewsInput): Promise<{ reviews: ReviewData[]; nextCursor?: string }> {
-    const { platformAccountId, accessToken, cursor } = input;
-    // platformAccountId is the location resource name e.g. "accounts/123/locations/456"
-    let url = `https://mybusiness.googleapis.com/v4/${platformAccountId}/reviews?pageSize=25`;
+    const { platformAccountId, accessToken, cursor, accountMetadata } = input;
+    // Construct full v4 path: accounts/{id}/locations/{id}
+    const gbpAccountId = (accountMetadata?.account_id as string) || "";
+    const locationPath = gbpAccountId && platformAccountId
+      ? `${gbpAccountId}/${platformAccountId}`
+      : platformAccountId;
+    let url = `https://mybusiness.googleapis.com/v4/${locationPath}/reviews?pageSize=25`;
     if (cursor) {
       url += `&pageToken=${cursor}`;
     }
@@ -157,11 +161,15 @@ class GbpAdapter implements PlatformAdapter {
   }
 
   async replyToReview(input: ReplyInput): Promise<{ success: boolean; platformReplyId?: string }> {
-    const { platformAccountId, accessToken, platformReviewId, body } = input;
-    // Review name format: "accounts/123/locations/456/reviews/789"
+    const { platformAccountId, accessToken, platformReviewId, body, accountMetadata } = input;
+    // Construct full review resource path: accounts/{id}/locations/{id}/reviews/{id}
+    const gbpAccountId = (accountMetadata?.account_id as string) || "";
+    const locationPath = gbpAccountId && platformAccountId
+      ? `${gbpAccountId}/${platformAccountId}`
+      : platformAccountId;
     const reviewName = platformReviewId?.startsWith("accounts/")
       ? platformReviewId
-      : `${platformAccountId}/reviews/${platformReviewId}`;
+      : `${locationPath}/reviews/${platformReviewId}`;
 
     const res = await fetch(
       `https://mybusiness.googleapis.com/v4/${reviewName}/reply`,
