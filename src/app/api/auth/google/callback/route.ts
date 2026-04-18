@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
       `;
 
       // Create social_account for the pipeline to publish through
-      await sql`
+      const socialAccount = await sql`
         INSERT INTO social_accounts (
           subscription_id, platform, account_name, account_id,
           access_token_encrypted, token_expires_at,
