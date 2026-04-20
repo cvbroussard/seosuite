@@ -21,7 +21,6 @@ interface Props {
   coverUrl: string | null;
   logoUrl: string | null;
   coverAssetId: string | null;
-  logoAssetId: string | null;
   stats: {
     total: number;
     product: number;
@@ -97,7 +96,7 @@ function ImagePicker({ images, currentId, onSelect, onClose, title }: {
   );
 }
 
-export function PhotosClient({ siteId, connected, initialSynced, initialEligible, allImages, coverUrl, logoUrl, coverAssetId, logoAssetId, stats }: Props) {
+export function PhotosClient({ siteId, connected, initialSynced, initialEligible, allImages, coverUrl, logoUrl, coverAssetId, stats }: Props) {
   const [synced, setSynced] = useState<SyncedPhoto[]>(initialSynced);
   const [eligible] = useState<EligibleAsset[]>(initialEligible);
   const [syncing, setSyncing] = useState(false);
@@ -105,8 +104,7 @@ export function PhotosClient({ siteId, connected, initialSynced, initialEligible
   const [activeTab, setActiveTab] = useState<"gallery" | "eligible">("gallery");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [currentCover, setCurrentCover] = useState<{ id: string | null; url: string | null }>({ id: coverAssetId, url: coverUrl });
-  const [currentLogo, setCurrentLogo] = useState<{ id: string | null; url: string | null }>({ id: logoAssetId, url: logoUrl });
-  const [pickerOpen, setPickerOpen] = useState<"cover" | "logo" | null>(null);
+  const [pickerOpen, setPickerOpen] = useState<"cover" | null>(null);
 
   if (!connected) {
     return (
@@ -158,30 +156,22 @@ export function PhotosClient({ siteId, connected, initialSynced, initialEligible
     setDeleting(null);
   }
 
-  async function setAsset(type: "cover" | "logo", assetId: string, url: string) {
-    const res = await fetch(`/api/admin/sites/${siteId}/photos`, {
+  async function setCoverPhoto(assetId: string, url: string) {
+    await fetch(`/api/admin/sites/${siteId}/photos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: type === "cover" ? "set_cover" : "set_logo", sourceUrl: url }),
+      body: JSON.stringify({ action: "set_cover", sourceUrl: url }),
     });
 
-    // Save reference locally
     await fetch(`/api/google/profile`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        site_id: siteId,
-        [`gbp_${type}_asset_id`]: assetId,
-      }),
+      body: JSON.stringify({ site_id: siteId, gbp_cover_asset_id: assetId }),
     });
 
-    if (type === "cover") {
-      setCurrentCover({ id: assetId, url });
-    } else {
-      setCurrentLogo({ id: assetId, url });
-    }
+    setCurrentCover({ id: assetId, url });
     setPickerOpen(null);
-    setSyncResult(`${type === "cover" ? "Cover" : "Logo"} updated`);
+    setSyncResult("Cover photo updated");
     setTimeout(() => setSyncResult(null), 3000);
   }
 
@@ -211,36 +201,36 @@ export function PhotosClient({ siteId, connected, initialSynced, initialEligible
           </span>
         </div>
 
-        {/* Logo */}
-        <div
-          className="relative h-36 w-36 overflow-hidden rounded-xl bg-surface-hover cursor-pointer group border border-border"
-          onClick={() => setPickerOpen("logo")}
+        {/* Logo — managed in Settings, displayed here */}
+        <a
+          href="/dashboard/settings"
+          className="relative h-36 w-36 overflow-hidden rounded-xl bg-surface-hover group border border-border block"
         >
-          {currentLogo.url ? (
-            <img src={currentLogo.url} alt="" className="h-full w-full object-cover" />
+          {logoUrl ? (
+            <img src={logoUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center">
-              <p className="text-[10px] text-muted text-center px-2">Click to set logo</p>
+              <p className="text-[10px] text-muted text-center px-2">No logo set</p>
             </div>
           )}
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
             <span className="text-xs text-white font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-              {currentLogo.url ? "Change" : "Set Logo"}
+              Manage in Settings
             </span>
           </div>
           <span className="absolute top-2 left-2 rounded bg-black/50 px-2 py-0.5 text-[9px] text-white">
             Logo · 250×250
           </span>
-        </div>
+        </a>
       </div>
 
-      {/* Image picker modal */}
+      {/* Cover photo picker modal */}
       {pickerOpen && (
         <ImagePicker
           images={allImages}
-          currentId={pickerOpen === "cover" ? currentCover.id : currentLogo.id}
-          title={pickerOpen === "cover" ? "Select Cover Photo" : "Select Logo"}
-          onSelect={(id, url) => setAsset(pickerOpen, id, url)}
+          currentId={currentCover.id}
+          title="Select Cover Photo"
+          onSelect={(id, url) => setCoverPhoto(id, url)}
           onClose={() => setPickerOpen(null)}
         />
       )}

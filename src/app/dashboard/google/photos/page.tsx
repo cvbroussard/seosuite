@@ -57,23 +57,17 @@ export default async function GooglePhotosPage() {
     LIMIT 1
   `;
 
-  // Cover + logo asset references
+  // Cover asset + logo from branding
   const [siteAssets] = await sql`
-    SELECT gbp_cover_asset_id, gbp_logo_asset_id FROM sites WHERE id = ${siteId}
+    SELECT gbp_cover_asset_id, business_logo FROM sites WHERE id = ${siteId}
   `;
   const coverAssetId = siteAssets?.gbp_cover_asset_id as string | null;
-  const logoAssetId = siteAssets?.gbp_logo_asset_id as string | null;
+  const logoUrl = (siteAssets?.business_logo as string) || null;
 
   let coverUrl: string | null = null;
-  let logoUrl: string | null = null;
-
   if (coverAssetId) {
     const [a] = await sql`SELECT storage_url FROM media_assets WHERE id = ${coverAssetId}`;
     coverUrl = (a?.storage_url as string) || null;
-  }
-  if (logoAssetId) {
-    const [a] = await sql`SELECT storage_url FROM media_assets WHERE id = ${logoAssetId}`;
-    logoUrl = (a?.storage_url as string) || null;
   }
 
   // All image assets for the picker
@@ -97,7 +91,6 @@ export default async function GooglePhotosPage() {
       coverUrl={coverUrl}
       logoUrl={logoUrl}
       coverAssetId={coverAssetId}
-      logoAssetId={logoAssetId}
       stats={{
         total: (stats?.total_synced as number) ?? 0,
         product: (stats?.product as number) ?? 0,
