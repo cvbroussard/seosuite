@@ -16,11 +16,42 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "site_id required" }, { status: 400 });
   }
 
-  const { fetchProfile } = await import("@/lib/gbp/profile");
-  const profile = await fetchProfile(siteId);
+  const { fetchProfile, syncProfileFromGoogle } = await import("@/lib/gbp/profile");
+
+  // Try cache first
+  let profile = await fetchProfile(siteId);
+
+  // If cache miss, try direct sync with error details
+  if (!profile) {
+    try {
+      profile = await syncProfileFromGoogle(siteId);
+    } catch (err) {
+      return NextResponse.json({
+        error: "GBP profile sync failed",
+        detail: err instanceof Error ? err.message : String(err),
+      }, { status: 500 });
+    }
+  }
 
   if (!profile) {
-    return NextResponse.json({ error: "No active GBP connection" }, { status: 404 });
+    // Check if there's even a GBP account linked
+    const { sql } = await import("@/lib/db");
+    const gbpCheck = await sql`
+      SELECT sa.id, sa.status, sa.account_id, sa.metadata->>'account_id' AS meta_acct
+      FROM social_accounts sa
+      JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+      WHERE ssl.site_id = ${siteId} AND sa.platform = 'gbp'
+      LIMIT 1
+    `;
+    return NextResponse.json({
+      error: "No active GBP connection",
+      debug: {
+        gbpAccountFound: gbpCheck.length > 0,
+        status: gbpCheck[0]?.status || null,
+        accountId: gbpCheck[0]?.account_id || null,
+        metaAccountId: gbpCheck[0]?.meta_acct || null,
+      },
+    }, { status: 404 });
   }
 
   return NextResponse.json(profile);
