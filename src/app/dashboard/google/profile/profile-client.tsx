@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/empty-state";
+import { PlatformIcon } from "@/components/platform-icons";
 
 interface GbpProfile {
   name: string;
@@ -83,10 +84,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, value, editable, onSave }: {
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 11 && digits[0] === "1") {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return phone;
+}
+
+function Field({ label, value, editable, onSave, format }: {
   label: string;
   value: string;
   editable?: boolean;
+  format?: "phone";
   onSave?: (value: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -150,7 +163,7 @@ function Field({ label, value, editable, onSave }: {
             </div>
           </div>
         ) : (
-          <p className="mt-0.5 text-xs">{value || <span className="text-muted">Not set</span>}</p>
+          <p className="mt-0.5 text-xs">{value ? (format === "phone" ? formatPhone(value) : value) : <span className="text-muted">Not set</span>}</p>
         )}
       </div>
       {editable && !editing && (
@@ -298,6 +311,47 @@ function CategoryPicker({ siteId, onDirty }: { siteId: string; onDirty?: () => v
         <p className="text-[9px] text-muted">{categories.length}/10 categories · 1 primary + {Math.max(0, categories.length - 1)} additional</p>
         {status && <span className="text-[9px] text-accent">{status}</span>}
       </div>
+    </Section>
+  );
+}
+
+function SocialProfilesCard({ siteId }: { siteId: string }) {
+  const [profiles, setProfiles] = useState<Array<{ platform: string; url: string; handle: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/google/social-profiles?site_id=${siteId}`)
+      .then((r) => r.ok ? r.json() : { profiles: [] })
+      .then((data) => setProfiles(data.profiles || []))
+      .finally(() => setLoading(false));
+  }, [siteId]);
+
+  if (loading) return null;
+
+  return (
+    <Section title="Social Profiles">
+      {profiles.length > 0 ? (
+        <div className="space-y-1">
+          {profiles.map((p) => (
+              <div key={p.platform} className="flex items-center justify-between border-b border-border py-1.5 last:border-0">
+                <div className="flex items-center gap-2">
+                  <PlatformIcon platform={p.platform} size={14} />
+                  <span className="text-xs">{p.handle}</span>
+                </div>
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[9px] text-accent hover:underline"
+                >
+                  Open
+                </a>
+              </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted">No social accounts connected. Connect platforms from the Connections page to auto-populate.</p>
+      )}
     </Section>
   );
 }
@@ -507,6 +561,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
               label="Phone"
               value={profile.phoneNumber}
               editable
+              format="phone"
               onSave={(v) => saveField("phoneNumber", v)}
             />
             <Field
@@ -530,6 +585,32 @@ export function ProfileClient({ siteId }: { siteId: string }) {
 
         {/* Right column */}
         <div className="space-y-4">
+          <Section title="Status">
+            <div className="flex items-center gap-3 border-b border-border py-3">
+              {profile.metadata.hasVoiceOfMerchant ? (
+                <>
+                  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12z' fill='%2322c55e'/%3E%3Cpath d='M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z' fill='white'/%3E%3C/svg%3E" alt="" className="h-6 w-6 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium">Verified Owner</p>
+                    <p className="text-[9px] text-muted">Google-verified business listing</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-hover text-muted text-[10px]">?</span>
+                  <div>
+                    <p className="text-xs font-medium text-warning">Not Verified</p>
+                    <p className="text-[9px] text-muted">Complete Google verification to unlock all features</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <Field label="Services Editable" value={profile.metadata.canModifyServiceList ? "Yes" : "No"} />
+            <Field label="Resource ID" value={profile.name.split("/").pop() || profile.name} />
+          </Section>
+
+          <SocialProfilesCard siteId={siteId} />
+
           <Section title="Hours">
             {profile.regularHours.length > 0 ? (
               <div className="space-y-1">
@@ -567,30 +648,6 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                 ))}
               </div>
             )}
-          </Section>
-
-          <Section title="Status">
-            <div className="flex items-center gap-3 border-b border-border py-3">
-              {profile.metadata.hasVoiceOfMerchant ? (
-                <>
-                  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12z' fill='%2322c55e'/%3E%3Cpath d='M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z' fill='white'/%3E%3C/svg%3E" alt="" className="h-6 w-6 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium">Verified Owner</p>
-                    <p className="text-[9px] text-muted">Google-verified business listing</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-hover text-muted text-[10px]">?</span>
-                  <div>
-                    <p className="text-xs font-medium text-warning">Not Verified</p>
-                    <p className="text-[9px] text-muted">Complete Google verification to unlock all features</p>
-                  </div>
-                </>
-              )}
-            </div>
-            <Field label="Services Editable" value={profile.metadata.canModifyServiceList ? "Yes" : "No"} />
-            <Field label="Resource ID" value={profile.name.split("/").pop() || profile.name} />
           </Section>
         </div>
       </div>
