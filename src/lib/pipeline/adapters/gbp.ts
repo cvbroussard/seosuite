@@ -138,7 +138,8 @@ class GbpAdapter implements PlatformAdapter {
 
     if (!res.ok) {
       const errText = await res.text();
-      console.warn("GBP fetchReviews failed:", errText);
+      console.warn(`GBP fetchReviews failed (${res.status}):`, errText.slice(0, 200));
+      console.warn("  URL was:", url.replace(/access_token=[^&]+/, "access_token=REDACTED"));
       return { reviews: [] };
     }
 

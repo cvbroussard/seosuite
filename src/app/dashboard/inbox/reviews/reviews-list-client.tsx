@@ -55,7 +55,7 @@ export function ReviewsListClient({ siteId, initialReviews, initialCounts }: Rev
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="p-4">
       <ReviewFilterBar
         activeStatus={statusFilter}
         activeRating={ratingFilter}

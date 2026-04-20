@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/empty-state";
 
 interface GbpProfile {
@@ -124,7 +124,7 @@ function Field({ label, value, editable, onSave }: {
                 disabled={saving}
                 className="rounded bg-accent px-2 py-0.5 text-[9px] text-white"
               >
-                Save to Google
+                Save
               </button>
               <button
                 onClick={() => { setEditing(false); setEditValue(value); }}
@@ -144,6 +144,165 @@ function Field({ label, value, editable, onSave }: {
         </button>
       )}
     </div>
+  );
+}
+
+interface SiteCategory {
+  id: string;
+  gcid: string;
+  is_primary: boolean;
+  name: string;
+  reasoning: string | null;
+}
+
+function CategoryPicker({ siteId }: { siteId: string }) {
+  const [categories, setCategories] = useState<SiteCategory[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ gcid: string; name: string }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const loadCategories = useCallback(async () => {
+    const res = await fetch(`/api/google/categories?site_id=${siteId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setCategories(data.categories || []);
+    }
+  }, [siteId]);
+
+  useEffect(() => { loadCategories(); }, [loadCategories]);
+
+  async function search(query: string) {
+    setSearchQuery(query);
+    if (query.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const res = await fetch(`/api/google/categories?search=${encodeURIComponent(query)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const existing = new Set(categories.map((c) => c.gcid));
+      setSearchResults((data.categories || []).filter((c: { gcid: string }) => !existing.has(c.gcid)));
+    }
+    setSearching(false);
+  }
+
+  async function addCategory(gcid: string) {
+    const res = await fetch("/api/google/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: siteId, action: "add", gcid }),
+    });
+    if (res.ok) {
+      setSearchQuery("");
+      setSearchResults([]);
+      loadCategories();
+    } else {
+      const data = await res.json();
+      setStatus(data.error || "Failed to add");
+      setTimeout(() => setStatus(null), 3000);
+    }
+  }
+
+  async function removeCategory(gcid: string) {
+    await fetch("/api/google/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: siteId, action: "remove", gcid }),
+    });
+    loadCategories();
+  }
+
+  async function setPrimary(gcid: string) {
+    await fetch("/api/google/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: siteId, action: "set_primary", gcid }),
+    });
+    loadCategories();
+  }
+
+  async function pushToGoogle() {
+    setStatus("Pushing to Google...");
+    const res = await fetch("/api/google/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: siteId, action: "push_to_google" }),
+    });
+    const data = await res.json();
+    setStatus(data.success ? "Synced to Google" : data.error || "Push failed");
+    setTimeout(() => setStatus(null), 3000);
+  }
+
+  const primary = categories.find((c) => c.is_primary);
+  const additional = categories.filter((c) => !c.is_primary);
+
+  return (
+    <Section title="Categories">
+      {/* Current categories */}
+      {categories.length > 0 ? (
+        <div className="space-y-1">
+          {primary && (
+            <div className="flex items-center justify-between border-b border-border py-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium">{primary.name}</span>
+                <span className="rounded border border-border px-1.5 py-0.5 text-[8px] font-medium text-muted">PRIMARY</span>
+              </div>
+              <button onClick={() => removeCategory(primary.gcid)} className="text-[9px] text-muted hover:text-danger">Remove</button>
+            </div>
+          )}
+          {additional.map((cat) => (
+            <div key={cat.gcid} className="flex items-center justify-between border-b border-border py-1.5 last:border-0">
+              <span className="text-xs">{cat.name}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPrimary(cat.gcid)} className="text-[9px] text-accent hover:underline">Make primary</button>
+                <button onClick={() => removeCategory(cat.gcid)} className="text-[9px] text-muted hover:text-danger">Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted mb-2">No categories assigned. Search to add.</p>
+      )}
+
+      {/* Search to add */}
+      <div className="mt-3 relative">
+        <input
+          value={searchQuery}
+          onChange={(e) => search(e.target.value)}
+          placeholder="Search categories..."
+          className="w-full bg-surface-hover px-3 py-1.5 text-xs rounded"
+        />
+        {searchResults.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full rounded border border-border bg-surface shadow-lg max-h-48 overflow-y-auto">
+            {searchResults.map((r) => (
+              <button
+                key={r.gcid}
+                onClick={() => addCategory(r.gcid)}
+                className="w-full px-3 py-2 text-left text-xs hover:bg-surface-hover border-b border-border last:border-0"
+              >
+                {r.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {searching && <p className="mt-1 text-[9px] text-muted">Searching...</p>}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-[9px] text-muted">{categories.length}/10 categories · 1 primary + {Math.max(0, categories.length - 1)} additional</p>
+        <div className="flex items-center gap-2">
+          {status && <span className="text-[9px] text-accent">{status}</span>}
+          {categories.length > 0 && (
+            <button
+              onClick={pushToGoogle}
+              className="rounded bg-accent px-3 py-1 text-[9px] text-white hover:bg-accent/90"
+            >
+              Push to Google
+            </button>
+          )}
+        </div>
+      </div>
+    </Section>
   );
 }
 
@@ -173,7 +332,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
     });
     const data = await res.json();
     if (data.success) {
-      setSaveStatus("Saved to Google");
+      setSaveStatus("Saved — syncs to Google tonight");
       // Refresh local data with the synced version
       if (data.title) setProfile(data);
     } else {
@@ -236,7 +395,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
   const closedDays = DAY_ORDER.filter((d) => !profile.regularHours.some((h) => h.day === d));
 
   return (
-    <div className="p-4 space-y-4 max-w-3xl">
+    <div className="p-4 space-y-4">
       {/* Completeness + sync info */}
       <div className="flex items-center justify-between">
         <ScoreRing score={profile.completeness.score} />
@@ -270,95 +429,99 @@ export function ProfileClient({ siteId }: { siteId: string }) {
         </div>
       )}
 
-      {/* Identity */}
-      <Section title="Business Identity">
-        <Field label="Business Name" value={profile.title} />
-        <Field
-          label="Description"
-          value={profile.description}
-          editable
-          onSave={(v) => saveField("description", v)}
-        />
-        <Field label="Primary Category" value={profile.categories.primary} />
-        {profile.categories.additional.length > 0 && (
-          <Field label="Additional Categories" value={profile.categories.additional.join(", ")} />
-        )}
-        {profile.openingDate && (
-          <Field label="Opening Date" value={profile.openingDate} />
-        )}
-      </Section>
+      {/* Two-column layout */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Left column */}
+        <div className="space-y-4">
+          <Section title="About">
+            <Field label="Business Name" value={profile.title} />
+            <Field
+              label="Description"
+              value={profile.description}
+              editable
+              onSave={(v) => saveField("description", v)}
+            />
+            {profile.openingDate && (
+              <Field label="Opening Date" value={profile.openingDate} />
+            )}
+          </Section>
 
-      {/* Contact */}
-      <Section title="Contact Information">
-        <Field
-          label="Phone"
-          value={profile.phoneNumber}
-          editable
-          onSave={(v) => saveField("phoneNumber", v)}
-        />
-        <Field
-          label="Website"
-          value={profile.websiteUri}
-          editable
-          onSave={(v) => saveField("websiteUri", v)}
-        />
-        <Field label="Address" value={addressStr} />
-      </Section>
+          <CategoryPicker siteId={siteId} />
 
-      {/* Hours */}
-      <Section title="Business Hours">
-        {profile.regularHours.length > 0 ? (
-          <div className="space-y-1">
-            {DAY_ORDER.map((day) => {
-              const hours = profile.regularHours.filter((h) => h.day === day);
-              const isClosed = hours.length === 0;
-              return (
-                <div key={day} className="flex items-center justify-between py-1 border-b border-border last:border-0">
-                  <span className="text-xs w-12">{DAY_SHORT[day]}</span>
-                  {isClosed ? (
-                    <span className="text-xs text-muted">Closed</span>
-                  ) : (
-                    <span className="text-xs">
-                      {hours.map((h) => `${h.openTime} — ${h.closeTime}`).join(", ")}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-muted">No hours set. Adding business hours improves your local search visibility.</p>
-        )}
+          <Section title="Contact">
+            <Field
+              label="Phone"
+              value={profile.phoneNumber}
+              editable
+              onSave={(v) => saveField("phoneNumber", v)}
+            />
+            <Field
+              label="Website"
+              value={profile.websiteUri}
+              editable
+              onSave={(v) => saveField("websiteUri", v)}
+            />
+          </Section>
 
-        {/* Special hours */}
-        {profile.specialHours.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <p className="text-[10px] text-muted mb-2">Special Hours</p>
-            {profile.specialHours.map((h, i) => (
-              <div key={i} className="flex items-center justify-between py-1">
-                <span className="text-xs">{h.date}</span>
-                <span className="text-xs">
-                  {h.isClosed ? "Closed" : `${h.openTime} — ${h.closeTime}`}
-                </span>
+          <Section title="Location">
+            <Field label="Address" value={addressStr} />
+            {profile.serviceArea && (
+              <div className="border-b border-border py-2 last:border-0">
+                <p className="text-[10px] text-muted">Service Area</p>
+                <p className="mt-0.5 text-xs">Service area business — serves customers at their location</p>
               </div>
-            ))}
-          </div>
-        )}
-      </Section>
+            )}
+          </Section>
+        </div>
 
-      {/* Service Area */}
-      {profile.serviceArea && (
-        <Section title="Service Area">
-          <p className="text-xs">Service area business — serves customers at their location</p>
-        </Section>
-      )}
+        {/* Right column */}
+        <div className="space-y-4">
+          <Section title="Hours">
+            {profile.regularHours.length > 0 ? (
+              <div className="space-y-1">
+                {DAY_ORDER.map((day) => {
+                  const hours = profile.regularHours.filter((h) => h.day === day);
+                  const isClosed = hours.length === 0;
+                  return (
+                    <div key={day} className="flex items-center justify-between py-1 border-b border-border last:border-0">
+                      <span className="text-xs w-12">{DAY_SHORT[day]}</span>
+                      {isClosed ? (
+                        <span className="text-xs text-muted">Closed</span>
+                      ) : (
+                        <span className="text-xs">
+                          {hours.map((h) => `${h.openTime} — ${h.closeTime}`).join(", ")}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted">No hours set. Adding business hours improves your local search visibility.</p>
+            )}
 
-      {/* Profile metadata */}
-      <Section title="Profile Status">
-        <Field label="Voice of Merchant" value={profile.metadata.hasVoiceOfMerchant ? "Verified owner" : "Not verified"} />
-        <Field label="Can Modify Services" value={profile.metadata.canModifyServiceList ? "Yes" : "No"} />
-        <Field label="Resource Name" value={profile.name} />
-      </Section>
+            {profile.specialHours.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <p className="text-[10px] text-muted mb-2">Special Hours</p>
+                {profile.specialHours.map((h, i) => (
+                  <div key={i} className="flex items-center justify-between py-1">
+                    <span className="text-xs">{h.date}</span>
+                    <span className="text-xs">
+                      {h.isClosed ? "Closed" : `${h.openTime} — ${h.closeTime}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section title="Status">
+            <Field label="Voice of Merchant" value={profile.metadata.hasVoiceOfMerchant ? "Verified owner" : "Not verified"} />
+            <Field label="Can Modify Services" value={profile.metadata.canModifyServiceList ? "Yes" : "No"} />
+            <Field label="Resource Name" value={profile.name} />
+          </Section>
+        </div>
+      </div>
     </div>
   );
 }

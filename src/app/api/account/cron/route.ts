@@ -73,5 +73,17 @@ export async function POST() {
   `;
   results.exports_cleaned = expiredExports.length;
 
-  return NextResponse.json(results);
+  // 5. Nightly GBP sync — push dirty profiles + categories to Google
+  let gbpPushed = 0;
+  let gbpFailed = 0;
+  try {
+    const { syncDirtySites } = await import("@/lib/gbp/profile");
+    const gbpResult = await syncDirtySites();
+    gbpPushed = gbpResult.pushed;
+    gbpFailed = gbpResult.failed;
+  } catch (err) {
+    console.error("GBP nightly sync error:", err);
+  }
+
+  return NextResponse.json({ ...results, gbp_pushed: gbpPushed, gbp_failed: gbpFailed });
 }

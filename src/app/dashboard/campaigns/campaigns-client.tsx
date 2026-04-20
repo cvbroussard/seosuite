@@ -101,7 +101,7 @@ export function CampaignsClient({ siteId }: Props) {
   const [boostConfirmed, setBoostConfirmed] = useState(false);
 
   return (
-    <div className="p-4 mx-auto max-w-5xl">
+    <div className="p-4">
       {/* Ad Account Header */}
       <div className="mb-4 flex items-center justify-between">
         <div>

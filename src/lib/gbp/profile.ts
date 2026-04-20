@@ -212,8 +212,8 @@ export async function syncProfileFromGoogle(siteId: string): Promise<GbpProfile 
 }
 
 /**
- * Update specific fields on the GBP profile.
- * Pushes to Google AND updates local cache.
+ * Update profile fields locally. Saves to DB cache + marks dirty for nightly sync.
+ * No Google API call — changes push to Google via the nightly GBP sync cron.
  */
 export async function updateProfile(
   siteId: string,
@@ -224,31 +224,66 @@ export async function updateProfile(
     regularHours?: GbpProfile["regularHours"];
   },
 ): Promise<{ success: boolean; error?: string }> {
+  // Read current cached profile
+  const [site] = await sql`SELECT gbp_profile FROM sites WHERE id = ${siteId}`;
+  const cached = (site?.gbp_profile || {}) as Record<string, unknown>;
+
+  if (!cached.title) {
+    return { success: false, error: "No profile cached — sync from Google first" };
+  }
+
+  // Apply updates to local cache
+  if (updates.description !== undefined) cached.description = updates.description;
+  if (updates.phoneNumber !== undefined) cached.phoneNumber = updates.phoneNumber;
+  if (updates.websiteUri !== undefined) cached.websiteUri = updates.websiteUri;
+  if (updates.regularHours !== undefined) cached.regularHours = updates.regularHours;
+
+  cached.synced_at = new Date().toISOString();
+
+  // Save locally + mark dirty
+  await sql`
+    UPDATE sites
+    SET gbp_profile = ${JSON.stringify(cached)}::jsonb,
+        gbp_sync_dirty = true
+    WHERE id = ${siteId}
+  `;
+
+  return { success: true };
+}
+
+/**
+ * Push all pending profile + category changes to Google.
+ * Called by nightly cron for dirty sites, or manually via admin.
+ */
+export async function pushProfileToGoogle(siteId: string): Promise<{ success: boolean; error?: string }> {
   const creds = await getGbpCredentials(siteId);
   if (!creds) return { success: false, error: "No active GBP connection" };
+
+  const [site] = await sql`SELECT gbp_profile FROM sites WHERE id = ${siteId}`;
+  const profile = (site?.gbp_profile || {}) as Record<string, unknown>;
+
+  if (!profile.title) return { success: false, error: "No profile data to push" };
 
   const updateMask: string[] = [];
   const body: Record<string, unknown> = {};
 
-  if (updates.description !== undefined) {
+  // Always push editable fields
+  if (profile.description) {
     updateMask.push("profile.description");
-    body.profile = { description: updates.description };
+    body.profile = { description: profile.description };
   }
-
-  if (updates.phoneNumber !== undefined) {
+  if (profile.phoneNumber) {
     updateMask.push("phoneNumbers");
-    body.phoneNumbers = { primaryPhone: updates.phoneNumber };
+    body.phoneNumbers = { primaryPhone: profile.phoneNumber };
   }
-
-  if (updates.websiteUri !== undefined) {
+  if (profile.websiteUri) {
     updateMask.push("websiteUri");
-    body.websiteUri = updates.websiteUri;
+    body.websiteUri = profile.websiteUri;
   }
-
-  if (updates.regularHours !== undefined) {
+  if ((profile.regularHours as unknown[])?.length) {
     updateMask.push("regularHours");
     body.regularHours = {
-      periods: updates.regularHours.map((h) => ({
+      periods: (profile.regularHours as GbpProfile["regularHours"]).map((h) => ({
         openDay: h.day,
         openTime: parseTime(h.openTime),
         closeDay: h.day,
@@ -257,12 +292,116 @@ export async function updateProfile(
     };
   }
 
-  if (updateMask.length === 0) {
-    return { success: false, error: "No fields to update" };
+  if (updateMask.length > 0) {
+    const res = await fetch(
+      `${BIZ_INFO_API}/${creds.locationPath}?updateMask=${updateMask.join(",")}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${creds.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      const isQuota = err.includes("429") || err.includes("quota") || err.includes("rateLimitExceeded");
+      console.error("GBP profile push failed:", err.slice(0, 200));
+      // Keep dirty flag on quota errors so next nightly run retries
+      if (!isQuota) {
+        await sql`UPDATE sites SET gbp_sync_dirty = false WHERE id = ${siteId}`;
+      }
+      return { success: false, error: isQuota ? "Quota exceeded — will retry tomorrow" : `Profile push failed (${res.status})` };
+    }
   }
 
+  // Also push categories
+  const catResult = await pushCategoriesToGoogle(siteId);
+  if (!catResult.success && catResult.error?.includes("Quota")) {
+    return { success: false, error: "Quota exceeded on categories — will retry tomorrow" };
+  }
+
+  // Clear dirty flag only on full success
+  await sql`UPDATE sites SET gbp_sync_dirty = false WHERE id = ${siteId}`;
+
+  return { success: true };
+}
+
+/**
+ * Nightly sync: push all dirty sites to Google.
+ * Called by cron job.
+ */
+export async function syncDirtySites(): Promise<{ pushed: number; failed: number }> {
+  const dirtySites = await sql`
+    SELECT id, name FROM sites WHERE gbp_sync_dirty = true AND is_active = true
+  `;
+
+  let pushed = 0;
+  let failed = 0;
+
+  for (const site of dirtySites) {
+    const result = await pushProfileToGoogle(site.id as string);
+    if (result.success) {
+      pushed++;
+      console.log(`GBP sync: pushed ${site.name}`);
+    } else {
+      failed++;
+      console.error(`GBP sync failed for ${site.name}: ${result.error}`);
+    }
+  }
+
+  return { pushed, failed };
+}
+
+function formatTime(time: Record<string, number> | undefined): string {
+  if (!time) return "";
+  return `${String(time.hours || 0).padStart(2, "0")}:${String(time.minutes || 0).padStart(2, "0")}`;
+}
+
+function parseTime(time: string): Record<string, number> {
+  const [hours, minutes] = time.split(":").map(Number);
+  return { hours: hours || 0, minutes: minutes || 0 };
+}
+
+/**
+ * Push TracPost's categories to Google Business Profile.
+ * TracPost is the source of truth — Google is the consumer.
+ */
+export async function pushCategoriesToGoogle(siteId: string): Promise<{ success: boolean; error?: string }> {
+  const creds = await getGbpCredentials(siteId);
+  if (!creds) return { success: false, error: "No active GBP connection" };
+
+  const categories = await sql`
+    SELECT sgc.gcid, sgc.is_primary, gc.name
+    FROM site_gbp_categories sgc
+    JOIN gbp_categories gc ON gc.gcid = sgc.gcid
+    WHERE sgc.site_id = ${siteId}
+    ORDER BY sgc.is_primary DESC
+  `;
+
+  if (categories.length === 0) {
+    return { success: false, error: "No categories configured" };
+  }
+
+  const primary = categories.find((c) => c.is_primary);
+  const additional = categories.filter((c) => !c.is_primary);
+
+  const body: Record<string, unknown> = {
+    categories: {
+      primaryCategory: primary
+        ? { categoryId: primary.gcid, displayName: primary.name }
+        : undefined,
+      additionalCategories: additional.map((c) => ({
+        categoryId: c.gcid,
+        displayName: c.name,
+      })),
+    },
+  };
+
   const res = await fetch(
-    `${BIZ_INFO_API}/${creds.locationPath}?updateMask=${updateMask.join(",")}`,
+    `${BIZ_INFO_API}/${creds.locationPath}?updateMask=categories`,
     {
       method: "PATCH",
       headers: {
@@ -275,22 +414,9 @@ export async function updateProfile(
 
   if (!res.ok) {
     const err = await res.text();
-    console.error("GBP profile update failed:", err.slice(0, 200));
-    return { success: false, error: `Update failed (${res.status})` };
+    console.error("GBP category push failed:", err.slice(0, 200));
+    return { success: false, error: `Push failed (${res.status})` };
   }
 
-  // Re-sync from Google to update local cache with confirmed state
-  await syncProfileFromGoogle(siteId);
-
   return { success: true };
-}
-
-function formatTime(time: Record<string, number> | undefined): string {
-  if (!time) return "";
-  return `${String(time.hours || 0).padStart(2, "0")}:${String(time.minutes || 0).padStart(2, "0")}`;
-}
-
-function parseTime(time: string): Record<string, number> {
-  const [hours, minutes] = time.split(":").map(Number);
-  return { hours: hours || 0, minutes: minutes || 0 };
 }
