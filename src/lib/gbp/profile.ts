@@ -82,8 +82,8 @@ async function getGbpCredentials(siteId: string): Promise<{
   if (!gbpAccount) return null;
 
   const accessToken = decrypt(gbpAccount.access_token_encrypted as string);
-  const metadata = gbpAccount.metadata as Record<string, unknown>;
-  const locationPath = buildLocationPath(metadata, gbpAccount.account_id);
+  // v1 Business Information API uses just "locations/{id}" — no accounts prefix
+  const locationPath = gbpAccount.account_id as string;
 
   return { accessToken, locationPath, accountId: gbpAccount.id as string };
 }

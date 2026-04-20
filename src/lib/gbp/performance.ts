@@ -31,11 +31,9 @@ export interface PerformanceData {
   searchKeywords: Array<{ keyword: string; impressions: number }>;
 }
 
-function buildLocationPath(accountMetadata: Record<string, unknown>, platformAccountId: string): string {
-  const gbpAccountId = (accountMetadata?.account_id as string) || "";
-  return gbpAccountId && platformAccountId
-    ? `${gbpAccountId}/${platformAccountId}`
-    : platformAccountId;
+// v1 Performance API uses just "locations/{id}" — no accounts prefix
+function getLocationId(platformAccountId: string): string {
+  return platformAccountId;
 }
 
 async function fetchDailyMetric(
@@ -125,7 +123,7 @@ export async function fetchPerformance(siteId: string): Promise<PerformanceData 
 
   const accessToken = decrypt(gbpAccount.access_token_encrypted as string);
   const metadata = gbpAccount.metadata as Record<string, unknown>;
-  const locationPath = buildLocationPath(metadata, gbpAccount.account_id);
+  const locationPath = getLocationId(gbpAccount.account_id);
 
   const endDate = new Date();
   const startDate = new Date();
