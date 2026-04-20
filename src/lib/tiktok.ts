@@ -17,7 +17,7 @@ export function getTikTokAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_key: process.env.TIKTOK_CLIENT_KEY!,
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback`,
-    scope: "user.info.basic,video.publish,video.upload",
+    scope: "user.info.basic,user.info.stats,user.info.profile,video.publish,video.upload,video.list",
     response_type: "code",
     state,
   });
