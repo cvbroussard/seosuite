@@ -315,6 +315,157 @@ function CategoryPicker({ siteId, onDirty }: { siteId: string; onDirty?: () => v
   );
 }
 
+function ServiceAreaInput({ onAdd }: { onAdd: (place: { placeId: string; placeName: string }) => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Array<{ placeId: string; placeName: string }>>([]);
+  const [searching, setSearching] = useState(false);
+
+  async function search(q: string) {
+    setQuery(q);
+    if (q.length < 3) { setResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/google/places-search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setResults(data.predictions || []);
+      }
+    } catch { /* ignore */ }
+    setSearching(false);
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        onChange={(e) => search(e.target.value)}
+        placeholder="Add a city or region..."
+        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+      />
+      {searching && <p className="mt-1 text-[9px] text-muted">Searching...</p>}
+      {results.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded border border-border bg-surface shadow-lg max-h-40 overflow-y-auto">
+          {results.map((r) => (
+            <button
+              key={r.placeId}
+              onClick={() => {
+                onAdd(r);
+                setQuery("");
+                setResults([]);
+              }}
+              className="w-full px-3 py-2 text-left text-xs hover:bg-surface-hover border-b border-border last:border-0"
+            >
+              {r.placeName}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AskForReviewsCard({ profile, siteId, onStatus }: { profile: GbpProfile; siteId: string; onStatus: (msg: string | null) => void }) {
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const location = profile.address.locality || "";
+  const placeId = (profile as unknown as Record<string, unknown>).placeId as string | undefined;
+  const reviewUrl = placeId
+    ? `https://search.google.com/local/writereview?placeid=${placeId}`
+    : `https://www.google.com/maps/search/${encodeURIComponent(profile.title + (location ? " " + location : ""))}`;
+
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(reviewUrl)}`;
+
+  async function sendReviewRequest() {
+    if (!email.trim() || !email.includes("@")) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/google/review-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: siteId, email: email.trim(), review_url: reviewUrl }),
+      });
+      if (res.ok) {
+        setSent(true);
+        setEmail("");
+        setTimeout(() => setSent(false), 4000);
+      } else {
+        onStatus("Failed to send");
+        setTimeout(() => onStatus(null), 3000);
+      }
+    } catch {
+      onStatus("Failed to send");
+      setTimeout(() => onStatus(null), 3000);
+    }
+    setSending(false);
+  }
+
+  return (
+    <Section title="Ask for Reviews">
+      <p className="text-xs text-muted mb-3">
+        Share this link with customers to collect Google reviews. More reviews improve your local search ranking.
+      </p>
+
+      {/* Review link */}
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          readOnly
+          value={reviewUrl}
+          className="flex-1 min-w-0 rounded-lg border border-border bg-surface-hover px-3 py-1.5 text-[10px] text-muted truncate"
+        />
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(reviewUrl);
+            onStatus("Review link copied");
+            setTimeout(() => onStatus(null), 2000);
+          }}
+          className="rounded bg-accent px-3 py-1.5 text-[10px] font-medium text-white hover:bg-accent/90 whitespace-nowrap"
+        >
+          Copy
+        </button>
+      </div>
+
+      {/* Email request */}
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Customer email"
+          className="flex-1 min-w-0 rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+        />
+        <button
+          onClick={sendReviewRequest}
+          disabled={sending || !email.trim()}
+          className="rounded bg-accent px-3 py-1.5 text-[10px] font-medium text-white hover:bg-accent/90 whitespace-nowrap disabled:opacity-50"
+        >
+          {sending ? "Sending..." : sent ? "Sent!" : "Send Request"}
+        </button>
+      </div>
+      {sent && (
+        <p className="text-[9px] text-success mb-3">Review request sent. The customer will receive an email with a link to leave a review.</p>
+      )}
+
+      {/* QR code */}
+      <div className="flex items-start gap-3">
+        <img src={qrUrl} alt="Review QR code" className="h-20 w-20 rounded border border-border" />
+        <div>
+          <p className="text-[10px] text-muted">QR Code</p>
+          <p className="text-[9px] text-muted mt-0.5">Print or display at your job site. Customers scan to leave a review.</p>
+          <a
+            href={qrUrl}
+            download="review-qr.png"
+            className="mt-1 inline-block text-[9px] text-accent hover:underline"
+          >
+            Download QR
+          </a>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function SocialProfilesCard({ siteId }: { siteId: string }) {
   const [profiles, setProfiles] = useState<Array<{ platform: string; url: string; handle: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -549,9 +700,18 @@ export function ProfileClient({ siteId }: { siteId: string }) {
               editable
               onSave={(v) => saveField("description", v)}
             />
-            {profile.openingDate && (
-              <Field label="Opening Date" value={profile.openingDate} />
-            )}
+            <div className="flex items-center gap-3 border-b border-border py-2 last:border-0">
+              <p className="text-[10px] text-muted whitespace-nowrap">Opening Date</p>
+              <input
+                type="date"
+                value={profile.openingDate || ""}
+                onChange={(e) => {
+                  setProfile((prev) => prev ? { ...prev, openingDate: e.target.value } : prev);
+                  setDirty(true);
+                }}
+                className="flex-1 min-w-0 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+              />
+            </div>
           </Section>
 
           <CategoryPicker siteId={siteId} onDirty={() => setDirty(true)} />
@@ -572,14 +732,143 @@ export function ProfileClient({ siteId }: { siteId: string }) {
             />
           </Section>
 
-          <Section title="Location">
-            <Field label="Address" value={addressStr} />
-            {profile.serviceArea && (
-              <div className="border-b border-border py-2 last:border-0">
-                <p className="text-[10px] text-muted">Service Area</p>
-                <p className="mt-0.5 text-xs">Service area business — serves customers at their location</p>
-              </div>
-            )}
+          <Section title="Business Location">
+            {(() => {
+              const sa = profile.serviceArea as Record<string, unknown> | null;
+              const businessType = (sa?.businessType as string) || "";
+              const showsAddress = businessType === "CUSTOMER_AND_BUSINESS_LOCATION" || (!sa && addressStr);
+              const places = ((sa?.places as Record<string, unknown>)?.placeInfos as Array<Record<string, string>>) || [];
+              const placeNames = places.map((p) => p.placeName).filter(Boolean);
+
+              return (
+                <>
+                  <div className="flex items-center justify-between border-b border-border py-2.5">
+                    <div>
+                      <p className="text-xs">Show business address to customers</p>
+                      <p className="text-[9px] text-muted">
+                        {showsAddress
+                          ? "Your address is visible on your Google listing"
+                          : "Only your service area is shown — no street address"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newType = showsAddress ? "CUSTOMER_LOCATION_ONLY" : "CUSTOMER_AND_BUSINESS_LOCATION";
+                        setProfile((prev) => prev ? {
+                          ...prev,
+                          serviceArea: { ...(prev.serviceArea || {}), businessType: newType },
+                        } : prev);
+                        setDirty(true);
+                      }}
+                      className={`relative h-6 w-11 rounded-full transition-colors ${showsAddress ? "bg-accent" : "bg-gray-300"}`}
+                    >
+                      <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${showsAddress ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+
+                  {showsAddress && (
+                    <div className="border-b border-border py-2 space-y-2">
+                      <p className="text-[10px] text-muted">Address</p>
+                      <input
+                        value={profile.address.addressLines.join(", ")}
+                        onChange={(e) => {
+                          setProfile((prev) => prev ? {
+                            ...prev,
+                            address: { ...prev.address, addressLines: [e.target.value] },
+                          } : prev);
+                          setDirty(true);
+                        }}
+                        placeholder="Street address"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+                      />
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          value={profile.address.locality}
+                          onChange={(e) => {
+                            setProfile((prev) => prev ? {
+                              ...prev,
+                              address: { ...prev.address, locality: e.target.value },
+                            } : prev);
+                            setDirty(true);
+                          }}
+                          placeholder="City"
+                          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+                        />
+                        <input
+                          value={profile.address.administrativeArea}
+                          onChange={(e) => {
+                            setProfile((prev) => prev ? {
+                              ...prev,
+                              address: { ...prev.address, administrativeArea: e.target.value },
+                            } : prev);
+                            setDirty(true);
+                          }}
+                          placeholder="State"
+                          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+                        />
+                        <input
+                          value={profile.address.postalCode}
+                          onChange={(e) => {
+                            setProfile((prev) => prev ? {
+                              ...prev,
+                              address: { ...prev.address, postalCode: e.target.value },
+                            } : prev);
+                            setDirty(true);
+                          }}
+                          placeholder="Zip"
+                          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="py-2">
+                    <p className="text-[10px] text-muted mb-1">Service Area</p>
+                    {places.length > 0 && (
+                      <div className="space-y-1 mb-2">
+                        {places.map((place, i) => (
+                          <div key={i} className="flex items-center justify-between border-b border-border py-1 last:border-0">
+                            <span className="text-xs">{place.placeName}</span>
+                            <button
+                              onClick={() => {
+                                const updatedPlaces = places.filter((_, j) => j !== i);
+                                setProfile((prev) => prev ? {
+                                  ...prev,
+                                  serviceArea: {
+                                    ...(prev.serviceArea || {}),
+                                    businessType: showsAddress ? "CUSTOMER_AND_BUSINESS_LOCATION" : "CUSTOMER_LOCATION_ONLY",
+                                    places: { placeInfos: updatedPlaces },
+                                  },
+                                } : prev);
+                                setDirty(true);
+                              }}
+                              className="text-[9px] text-muted hover:text-danger"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <ServiceAreaInput
+                      onAdd={(place) => {
+                        const updatedPlaces = [...places, place];
+                        setProfile((prev) => prev ? {
+                          ...prev,
+                          serviceArea: {
+                            ...(prev.serviceArea || {}),
+                            businessType: showsAddress ? "CUSTOMER_AND_BUSINESS_LOCATION" : "CUSTOMER_LOCATION_ONLY",
+                            regionCode: "US",
+                            places: { placeInfos: updatedPlaces },
+                          },
+                        } : prev);
+                        setDirty(true);
+                      }}
+                    />
+                  </div>
+                </>
+              );
+            })()}
           </Section>
         </div>
 
@@ -610,6 +899,8 @@ export function ProfileClient({ siteId }: { siteId: string }) {
           </Section>
 
           <SocialProfilesCard siteId={siteId} />
+
+          <AskForReviewsCard profile={profile} siteId={siteId} onStatus={setPushStatus} />
 
           <Section title="Hours">
             {profile.regularHours.length > 0 ? (
