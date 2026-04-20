@@ -1,13 +1,13 @@
-import { EmptyState } from "@/components/empty-state";
+import { getSession } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { ProfileClient } from "./profile-client";
 
-export default function ProfilePage() {
-  return (
-    <div className="p-6">
-      <EmptyState
-        icon="◇"
-        title="Profile"
-        description="Manage your Google Business Profile — hours, description, categories, and attributes. Coming soon."
-      />
-    </div>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function GoogleProfilePage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (!session.activeSiteId) redirect("/dashboard");
+
+  return <ProfileClient siteId={session.activeSiteId} />;
 }
