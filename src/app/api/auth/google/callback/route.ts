@@ -2,18 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeGoogleCode, discoverGbpLocations } from "@/lib/google";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
-import { oauthSuccessUrl, oauthErrorUrl } from "@/lib/oauth-redirect";
+import { oauthErrorUrl } from "@/lib/oauth-redirect";
 
 /**
  * GET /api/auth/google/callback?code=xxx&state=xxx
  *
  * Google redirects here after the user authorizes. We:
  * 1. Exchange code for access + refresh tokens
- * 2. Discover GBP locations
- * 3. Store credentials in gbp_credentials
- * 4. Store locations in gbp_locations
- * 5. Create social_accounts entry for each location
- * 6. Redirect to dashboard or admin
+ * 2. Store credentials in gbp_credentials
+ * 3. Discover GBP locations
+ * 4. Store all social_accounts (tokens shared across locations)
+ * 5. Redirect to location picker for site assignment
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -21,7 +20,6 @@ export async function GET(req: NextRequest) {
   const stateParam = searchParams.get("state");
   const error = searchParams.get("error");
 
-  // Try to parse source early for error redirects
   let source: string | undefined;
   if (stateParam) {
     try {
@@ -46,13 +44,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Exchange code for tokens
     const { accessToken, refreshToken, expiresIn, email, googleAccountId } =
       await exchangeGoogleCode(code);
 
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Store credentials in gbp_credentials
+    // Store credentials
     await sql`
       INSERT INTO gbp_credentials (
         site_id, google_account_id, google_email,
@@ -62,7 +59,7 @@ export async function GET(req: NextRequest) {
       VALUES (
         ${state.site_id}, ${googleAccountId}, ${email},
         ${encrypt(accessToken)}, ${encrypt(refreshToken)}, ${expiresAt},
-        ${"{business.manage,userinfo.email}"},
+        ${"{business.manage,userinfo.email,webmasters.readonly}"},
         true
       )
       ON CONFLICT (site_id)
@@ -77,12 +74,13 @@ export async function GET(req: NextRequest) {
         updated_at = NOW()
     `;
 
-    // Discover GBP locations
+    // Discover locations
     const locations = await discoverGbpLocations(accessToken);
 
-    // Store locations and create social_accounts entries
+    // Create/update social_accounts for ALL discovered locations
+    // (tokens are shared — same Google account manages all locations)
+    const locationIds: string[] = [];
     for (const loc of locations) {
-      // Store in gbp_locations
       await sql`
         INSERT INTO gbp_locations (
           site_id, external_id, gbp_account_id, gbp_location_id,
@@ -95,7 +93,6 @@ export async function GET(req: NextRequest) {
         ON CONFLICT DO NOTHING
       `;
 
-      // Create social_account for the pipeline to publish through
       const socialAccount = await sql`
         INSERT INTO social_accounts (
           subscription_id, platform, account_name, account_id,
@@ -114,7 +111,6 @@ export async function GET(req: NextRequest) {
             location_id: loc.locationId,
             location_name: loc.locationName,
             address: loc.address,
-            site_id: state.site_id,
           })}
         )
         ON CONFLICT (subscription_id, platform, account_id)
@@ -129,22 +125,9 @@ export async function GET(req: NextRequest) {
         RETURNING id
       `;
 
-      // Link to site (was missing — caused GBP to not show in connections)
       if (socialAccount.length > 0) {
-        await sql`
-          INSERT INTO site_social_links (site_id, social_account_id)
-          VALUES (${state.site_id}, ${socialAccount[0].id})
-          ON CONFLICT DO NOTHING
-        `;
+        locationIds.push(socialAccount[0].id as string);
       }
-    }
-
-    // Pull and cache GBP profile on initial connection
-    try {
-      const { syncProfileFromGoogle } = await import("@/lib/gbp/profile");
-      await syncProfileFromGoogle(state.site_id);
-    } catch (err) {
-      console.error("GBP profile initial sync failed:", err);
     }
 
     // Log usage
@@ -156,9 +139,41 @@ export async function GET(req: NextRequest) {
       })})
     `;
 
-    const locationNames = locations.map((l) => l.locationName).join(",");
+    // If only 1 location, auto-link to the initiating site and skip picker
+    if (locations.length === 1 && locationIds.length === 1) {
+      await sql`
+        INSERT INTO site_social_links (site_id, social_account_id)
+        VALUES (${state.site_id}, ${locationIds[0]})
+        ON CONFLICT DO NOTHING
+      `;
+
+      // Sync profile
+      try {
+        const { syncProfileFromGoogle } = await import("@/lib/gbp/profile");
+        await syncProfileFromGoogle(state.site_id);
+      } catch { /* non-fatal */ }
+
+      const isAdmin = source === "admin";
+      const base = isAdmin ? "/admin/sites/" + state.site_id : "/dashboard/accounts";
+      return NextResponse.redirect(
+        new URL(`${base}?connected=${encodeURIComponent(locations[0].locationName)}`, req.url)
+      );
+    }
+
+    // Multiple locations — redirect to picker
+    // Works from both admin and tenant dashboard
+    const pickerParams = new URLSearchParams({
+      subscription_id: state.subscription_id,
+      source: source || "dashboard",
+      initiating_site_id: state.site_id,
+    });
+
+    const pickerBase = source === "admin"
+      ? "/admin/google-location-picker"
+      : "/dashboard/google/location-picker";
+
     return NextResponse.redirect(
-      oauthSuccessUrl(state.source, locationNames || "Google Business")
+      new URL(`${pickerBase}?${pickerParams}`, req.url)
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
