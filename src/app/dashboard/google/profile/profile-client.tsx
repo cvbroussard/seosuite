@@ -558,25 +558,6 @@ export function ProfileClient({ siteId }: { siteId: string }) {
       .finally(() => setLoading(false));
   }, [siteId]);
 
-  // Intercept nav-away when dirty — block link clicks, show inline warning
-  const [navBlocked, setNavBlocked] = useState(false);
-  const [blockedHref, setBlockedHref] = useState<string | null>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (!dirty) return;
-      const target = (e.target as HTMLElement).closest("a");
-      if (target && target.href && !target.href.includes("/google/profile")) {
-        e.preventDefault();
-        e.stopPropagation();
-        setBlockedHref(target.href);
-        setNavBlocked(true);
-      }
-    }
-    document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
-  }, [dirty]);
-
   async function saveField(field: string, value: string) {
     const res = await fetch("/api/google/profile", {
       method: "POST",
@@ -862,31 +843,6 @@ export function ProfileClient({ siteId }: { siteId: string }) {
           </button>
         </div>
       </div>
-
-      {/* Nav-away warning */}
-      {navBlocked && (
-        <div className="mx-4 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 flex items-center justify-between">
-          <p className="text-xs text-warning">You have unpushed changes that won&apos;t reach Google until you push.</p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setNavBlocked(false);
-                setDirty(false);
-                if (blockedHref) window.location.href = blockedHref;
-              }}
-              className="rounded px-3 py-1 text-[10px] text-muted hover:text-foreground"
-            >
-              Leave anyway
-            </button>
-            <button
-              onClick={() => { setNavBlocked(false); setBlockedHref(null); }}
-              className="rounded bg-warning px-3 py-1 text-[10px] font-medium text-white"
-            >
-              Stay and push
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Missing fields alert */}
       {profile.completeness.missing.length > 0 && (
