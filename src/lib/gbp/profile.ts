@@ -320,7 +320,9 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
   }
 
   if (updateMask.length > 0) {
-    console.log("GBP push:", updateMask.join(", "), "→", JSON.stringify(body).slice(0, 300));
+    console.log("GBP push to:", `${BIZ_INFO_API}/${creds.locationPath}`);
+    console.log("GBP push fields:", updateMask.join(", "));
+    console.log("GBP push body:", JSON.stringify(body).slice(0, 500));
     const res = await fetch(
       `${BIZ_INFO_API}/${creds.locationPath}?updateMask=${updateMask.join(",")}`,
       {
@@ -337,8 +339,13 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
       const err = await res.text();
       const isQuota = err.includes("429") || err.includes("quota") || err.includes("rateLimitExceeded");
       console.error("GBP profile push failed:", err.slice(0, 300));
+      console.error("GBP push attempted fields:", updateMask.join(", "));
       // Keep dirty flag on ALL errors so user can retry
-      return { success: false, error: isQuota ? "Quota exceeded — will retry" : `Push failed: ${err.slice(0, 100)}` };
+      return {
+        success: false,
+        error: isQuota ? "Quota exceeded — will retry" : `Push failed (${res.status}): ${err.slice(0, 150)}`,
+        debug: { fields: updateMask, status: res.status },
+      };
     }
   }
 
