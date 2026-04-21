@@ -307,23 +307,20 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
     }
   }
   const address = profile.address as GbpProfile["address"] | undefined;
-  if (address?.addressLines?.length || address?.locality) {
+  const hasAddress = address?.addressLines?.some((l) => l.trim()) || address?.locality?.trim();
+  if (hasAddress) {
     updateMask.push("storefrontAddress");
     body.storefrontAddress = {
-      addressLines: address.addressLines,
-      locality: address.locality,
-      administrativeArea: address.administrativeArea,
-      postalCode: address.postalCode,
-      regionCode: address.regionCode || "US",
+      addressLines: address!.addressLines.filter((l) => l.trim()),
+      locality: address!.locality,
+      administrativeArea: address!.administrativeArea,
+      postalCode: address!.postalCode,
+      regionCode: address!.regionCode || "US",
     };
-  }
-  const serviceArea = profile.serviceArea as Record<string, unknown> | undefined;
-  if (serviceArea?.businessType) {
-    updateMask.push("serviceArea");
-    body.serviceArea = serviceArea;
   }
 
   if (updateMask.length > 0) {
+    console.log("GBP push:", updateMask.join(", "), "→", JSON.stringify(body).slice(0, 300));
     const res = await fetch(
       `${BIZ_INFO_API}/${creds.locationPath}?updateMask=${updateMask.join(",")}`,
       {
