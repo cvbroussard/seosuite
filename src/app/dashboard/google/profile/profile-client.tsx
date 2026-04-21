@@ -390,10 +390,11 @@ function AskForReviewsCard({ profile, siteId, onStatus }: { profile: GbpProfile;
   const [sent, setSent] = useState(false);
 
   const location = profile.address.locality || "";
+  const storedReviewUri = (profile as unknown as Record<string, unknown>).reviewUri as string | undefined;
   const placeId = (profile as unknown as Record<string, unknown>).placeId as string | undefined;
-  const reviewUrl = placeId
-    ? `https://search.google.com/local/writereview?placeid=${placeId}`
-    : `https://www.google.com/maps/search/${encodeURIComponent(profile.title + (location ? " " + location : ""))}`;
+  const reviewUrl = storedReviewUri
+    || (placeId ? `https://search.google.com/local/writereview?placeid=${placeId}` : null)
+    || `https://www.google.com/maps/search/${encodeURIComponent(profile.title + (location ? " " + location : ""))}`;
 
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(reviewUrl)}`;
 
