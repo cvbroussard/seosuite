@@ -299,6 +299,29 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
       })),
     };
   }
+  if (profile.openingDate) {
+    const [year, month, day] = (profile.openingDate as string).split("-").map(Number);
+    if (year && month && day) {
+      updateMask.push("openInfo");
+      body.openInfo = { openingDate: { year, month, day }, status: "OPEN" };
+    }
+  }
+  const address = profile.address as GbpProfile["address"] | undefined;
+  if (address?.addressLines?.length || address?.locality) {
+    updateMask.push("storefrontAddress");
+    body.storefrontAddress = {
+      addressLines: address.addressLines,
+      locality: address.locality,
+      administrativeArea: address.administrativeArea,
+      postalCode: address.postalCode,
+      regionCode: address.regionCode || "US",
+    };
+  }
+  const serviceArea = profile.serviceArea as Record<string, unknown> | undefined;
+  if (serviceArea?.businessType) {
+    updateMask.push("serviceArea");
+    body.serviceArea = serviceArea;
+  }
 
   if (updateMask.length > 0) {
     const res = await fetch(
