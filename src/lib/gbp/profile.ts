@@ -339,12 +339,9 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
     if (!res.ok) {
       const err = await res.text();
       const isQuota = err.includes("429") || err.includes("quota") || err.includes("rateLimitExceeded");
-      console.error("GBP profile push failed:", err.slice(0, 200));
-      // Keep dirty flag on quota errors so next nightly run retries
-      if (!isQuota) {
-        await sql`UPDATE sites SET gbp_sync_dirty = false WHERE id = ${siteId}`;
-      }
-      return { success: false, error: isQuota ? "Quota exceeded — will retry tomorrow" : `Profile push failed (${res.status})` };
+      console.error("GBP profile push failed:", err.slice(0, 300));
+      // Keep dirty flag on ALL errors so user can retry
+      return { success: false, error: isQuota ? "Quota exceeded — will retry" : `Push failed: ${err.slice(0, 100)}` };
     }
   }
 
