@@ -234,21 +234,25 @@ export async function updateProfile(
     return { success: false, error: "No profile cached — sync from Google first" };
   }
 
-  // Apply updates to local cache
-  if (updates.title !== undefined) cached.title = updates.title;
-  if (updates.description !== undefined) cached.description = updates.description;
-  if (updates.phoneNumber !== undefined) cached.phoneNumber = updates.phoneNumber;
-  if (updates.websiteUri !== undefined) cached.websiteUri = updates.websiteUri;
-  if (updates.openingDate !== undefined) cached.openingDate = updates.openingDate;
-  if (updates.regularHours !== undefined) cached.regularHours = updates.regularHours;
+  // Apply updates to local cache + track which fields changed
+  const changedFields: string[] = [];
+  if (updates.title !== undefined) { cached.title = updates.title; changedFields.push("title"); }
+  if (updates.description !== undefined) { cached.description = updates.description; changedFields.push("profile.description"); }
+  if (updates.phoneNumber !== undefined) { cached.phoneNumber = updates.phoneNumber; changedFields.push("phoneNumbers"); }
+  if (updates.websiteUri !== undefined) { cached.websiteUri = updates.websiteUri; changedFields.push("websiteUri"); }
+  if (updates.openingDate !== undefined) { cached.openingDate = updates.openingDate; changedFields.push("openInfo"); }
+  if (updates.regularHours !== undefined) { cached.regularHours = updates.regularHours; changedFields.push("regularHours"); }
 
   cached.synced_at = new Date().toISOString();
 
-  // Save locally + mark dirty
+  // Save locally + append dirty fields (deduped)
   await sql`
     UPDATE sites
     SET gbp_profile = ${JSON.stringify(cached)}::jsonb,
-        gbp_sync_dirty = true
+        gbp_sync_dirty = true,
+        gbp_dirty_fields = (
+          SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(gbp_dirty_fields, '{}') || ${changedFields}::text[]))
+        )
     WHERE id = ${siteId}
   `;
 
@@ -259,36 +263,40 @@ export async function updateProfile(
  * Push all pending profile + category changes to Google.
  * Called by nightly cron for dirty sites, or manually via admin.
  */
-export async function pushProfileToGoogle(siteId: string): Promise<{ success: boolean; error?: string }> {
+export async function pushProfileToGoogle(siteId: string): Promise<{ success: boolean; error?: string; pushed?: string[] }> {
   const creds = await getGbpCredentials(siteId);
   if (!creds) return { success: false, error: "No active GBP connection" };
 
-  const [site] = await sql`SELECT gbp_profile FROM sites WHERE id = ${siteId}`;
+  const [site] = await sql`SELECT gbp_profile, gbp_dirty_fields FROM sites WHERE id = ${siteId}`;
   const profile = (site?.gbp_profile || {}) as Record<string, unknown>;
+  const dirtyFields = new Set((site?.gbp_dirty_fields || []) as string[]);
 
   if (!profile.title) return { success: false, error: "No profile data to push" };
+
+  // If no specific dirty fields tracked, check for categories only
+  const hasDirtyProfile = dirtyFields.size > 0;
 
   const updateMask: string[] = [];
   const body: Record<string, unknown> = {};
 
-  // Always push editable fields
-  if (profile.title) {
+  // Only push fields that actually changed
+  if (dirtyFields.has("title") && profile.title) {
     updateMask.push("title");
     body.title = profile.title;
   }
-  if (profile.description) {
+  if (dirtyFields.has("profile.description") && profile.description) {
     updateMask.push("profile.description");
     body.profile = { description: profile.description };
   }
-  if (profile.phoneNumber) {
+  if (dirtyFields.has("phoneNumbers") && profile.phoneNumber) {
     updateMask.push("phoneNumbers");
     body.phoneNumbers = { primaryPhone: profile.phoneNumber };
   }
-  if (profile.websiteUri) {
+  if (dirtyFields.has("websiteUri") && profile.websiteUri) {
     updateMask.push("websiteUri");
     body.websiteUri = profile.websiteUri;
   }
-  if ((profile.regularHours as unknown[])?.length) {
+  if (dirtyFields.has("regularHours") && (profile.regularHours as unknown[])?.length) {
     updateMask.push("regularHours");
     body.regularHours = {
       periods: (profile.regularHours as GbpProfile["regularHours"]).map((h) => ({
@@ -299,24 +307,31 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
       })),
     };
   }
-  if (profile.openingDate) {
+  if (dirtyFields.has("openInfo") && profile.openingDate) {
     const [year, month, day] = (profile.openingDate as string).split("-").map(Number);
     if (year && month && day) {
       updateMask.push("openInfo");
       body.openInfo = { openingDate: { year, month, day }, status: "OPEN" };
     }
   }
-  const address = profile.address as GbpProfile["address"] | undefined;
-  const hasAddress = address?.addressLines?.some((l) => l.trim()) || address?.locality?.trim();
-  if (hasAddress) {
-    updateMask.push("storefrontAddress");
-    body.storefrontAddress = {
-      addressLines: address!.addressLines.filter((l) => l.trim()),
-      locality: address!.locality,
-      administrativeArea: address!.administrativeArea,
-      postalCode: address!.postalCode,
-      regionCode: address!.regionCode || "US",
-    };
+  if (dirtyFields.has("storefrontAddress")) {
+    const address = profile.address as GbpProfile["address"] | undefined;
+    const hasAddress = address?.addressLines?.some((l) => l.trim()) || address?.locality?.trim();
+    if (hasAddress) {
+      updateMask.push("storefrontAddress");
+      body.storefrontAddress = {
+        addressLines: address!.addressLines.filter((l) => l.trim()),
+        locality: address!.locality,
+        administrativeArea: address!.administrativeArea,
+        postalCode: address!.postalCode,
+        regionCode: address!.regionCode || "US",
+      };
+    }
+  }
+
+  // Also check if categories are dirty
+  if (dirtyFields.has("categories")) {
+    // Categories pushed separately via pushCategoriesToGoogle
   }
 
   if (updateMask.length > 0) {
@@ -345,16 +360,18 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
     }
   }
 
-  // Also push categories
-  const catResult = await pushCategoriesToGoogle(siteId);
-  if (!catResult.success && catResult.error?.includes("Quota")) {
-    return { success: false, error: "Quota exceeded on categories — will retry tomorrow" };
+  // Also push categories if dirty
+  if (dirtyFields.has("categories")) {
+    const catResult = await pushCategoriesToGoogle(siteId);
+    if (!catResult.success && catResult.error?.includes("Quota")) {
+      return { success: false, error: "Quota exceeded on categories — will retry" };
+    }
   }
 
-  // Clear dirty flag only on full success
-  await sql`UPDATE sites SET gbp_sync_dirty = false WHERE id = ${siteId}`;
+  // Clear dirty flag + dirty fields on full success
+  await sql`UPDATE sites SET gbp_sync_dirty = false, gbp_dirty_fields = '{}' WHERE id = ${siteId}`;
 
-  return { success: true };
+  return { success: true, pushed: updateMask.length > 0 ? updateMask : ["categories"] };
 }
 
 /**

@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       VALUES (${site_id}, ${gcid}, ${isPrimary}, 'operator')
       ON CONFLICT DO NOTHING
     `;
-    await sql`UPDATE sites SET gbp_sync_dirty = true WHERE id = ${site_id}`;
+    await sql`UPDATE sites SET gbp_sync_dirty = true, gbp_dirty_fields = (SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(gbp_dirty_fields, '{}') || ARRAY['categories']))) WHERE id = ${site_id}`;
 
     return NextResponse.json({ success: true });
   }
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
         )
       `;
     }
-    await sql`UPDATE sites SET gbp_sync_dirty = true WHERE id = ${site_id}`;
+    await sql`UPDATE sites SET gbp_sync_dirty = true, gbp_dirty_fields = (SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(gbp_dirty_fields, '{}') || ARRAY['categories']))) WHERE id = ${site_id}`;
 
     return NextResponse.json({ success: true });
   }
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     await sql`
       UPDATE site_gbp_categories SET is_primary = true WHERE site_id = ${site_id} AND gcid = ${gcid}
     `;
-    await sql`UPDATE sites SET gbp_sync_dirty = true WHERE id = ${site_id}`;
+    await sql`UPDATE sites SET gbp_sync_dirty = true, gbp_dirty_fields = (SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(gbp_dirty_fields, '{}') || ARRAY['categories']))) WHERE id = ${site_id}`;
 
     return NextResponse.json({ success: true });
   }
