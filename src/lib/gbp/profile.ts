@@ -222,6 +222,7 @@ export async function updateProfile(
     description?: string;
     phoneNumber?: string;
     websiteUri?: string;
+    openingDate?: string;
     regularHours?: GbpProfile["regularHours"];
   },
 ): Promise<{ success: boolean; error?: string }> {
@@ -238,6 +239,7 @@ export async function updateProfile(
   if (updates.description !== undefined) cached.description = updates.description;
   if (updates.phoneNumber !== undefined) cached.phoneNumber = updates.phoneNumber;
   if (updates.websiteUri !== undefined) cached.websiteUri = updates.websiteUri;
+  if (updates.openingDate !== undefined) cached.openingDate = updates.openingDate;
   if (updates.regularHours !== undefined) cached.regularHours = updates.regularHours;
 
   cached.synced_at = new Date().toISOString();

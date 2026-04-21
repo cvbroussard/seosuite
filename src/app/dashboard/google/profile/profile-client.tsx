@@ -536,6 +536,10 @@ export function ProfileClient({ siteId }: { siteId: string }) {
   const [pushStatus, setPushStatus] = useState<string | null>(null);
   const [editingHeroName, setEditingHeroName] = useState(false);
   const [heroNameValue, setHeroNameValue] = useState("");
+  const [editingHeroDate, setEditingHeroDate] = useState(false);
+  const [heroDateValue, setHeroDateValue] = useState("");
+  const [editingHeroDesc, setEditingHeroDesc] = useState(false);
+  const [heroDescValue, setHeroDescValue] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -667,8 +671,50 @@ export function ProfileClient({ siteId }: { siteId: string }) {
           )}
         </div>
 
+        {/* Since label — top left */}
+        <div className="absolute top-3 left-4 z-10">
+          {editingHeroDate ? (
+            <div className="flex items-center gap-1 rounded bg-black/40 px-2 py-1 backdrop-blur-sm">
+              <span className="text-[10px] text-white/70">Since</span>
+              <input
+                type="date"
+                value={heroDateValue}
+                onChange={(e) => setHeroDateValue(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && heroDateValue) {
+                    saveField("openingDate", heroDateValue);
+                    setEditingHeroDate(false);
+                  }
+                  if (e.key === "Escape") setEditingHeroDate(false);
+                }}
+                style={{ color: "white", backgroundColor: "transparent" }}
+                className="border border-white/20 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:border-white/50"
+              />
+              <button onClick={() => { if (heroDateValue) { saveField("openingDate", heroDateValue); } setEditingHeroDate(false); }} className="rounded bg-white/20 px-1.5 py-0.5 text-white/80 hover:bg-white/30 hover:text-white text-[10px]">✓</button>
+              <button onClick={() => setEditingHeroDate(false)} className="rounded bg-white/10 px-1.5 py-0.5 text-white/50 hover:bg-white/20 hover:text-white/80 text-[10px]">✕</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setHeroDateValue(profile.openingDate || ""); setEditingHeroDate(true); }}
+              className="flex items-center gap-1 rounded bg-black/30 px-2 py-1 backdrop-blur-sm transition-colors hover:bg-black/50"
+            >
+              <span className="text-[10px] text-white/70">Since</span>
+              <span className="text-[10px] font-medium text-white/90">
+                {profile.openingDate
+                  ? new Date(profile.openingDate + "T00:00:00").getFullYear()
+                  : "—"}
+              </span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/0 group-hover:text-white/40 hover:!text-white transition-colors ml-0.5">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
         {/* Identity overlay */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12">
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
           <div className="flex items-end gap-4">
             {/* Logo */}
             <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border-2 border-white/20 bg-surface shadow-lg">
@@ -681,7 +727,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
               )}
             </div>
 
-            {/* Business info */}
+            {/* Business info — left */}
             <div className="flex-1 min-w-0 pb-0.5">
               <div className="flex items-center gap-2">
                 {editingHeroName ? (
@@ -741,6 +787,50 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                 {profile.categories.primary}
                 {profile.address.locality ? ` · ${profile.address.locality}, ${profile.address.administrativeArea}` : ""}
               </p>
+            </div>
+
+            {/* Description — right */}
+            <div className="hidden lg:block w-80 flex-shrink-0 pb-0.5">
+              {editingHeroDesc ? (
+                <div className="flex flex-col gap-1">
+                  <textarea
+                    ref={(el) => {
+                      if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+                    }}
+                    value={heroDescValue}
+                    onChange={(e) => {
+                      setHeroDescValue(e.target.value);
+                      const el = e.target;
+                      el.style.height = "auto";
+                      el.style.height = el.scrollHeight + "px";
+                    }}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setEditingHeroDesc(false);
+                    }}
+                    style={{ color: "white", backgroundColor: "rgba(0,0,0,0.4)" }}
+                    className="w-full resize-none border border-white/20 rounded px-2 py-1 text-xs leading-relaxed focus:outline-none focus:border-white/50 backdrop-blur-sm"
+                  />
+                  <div className="flex items-center gap-1 justify-end">
+                    <span className="text-[9px] text-white/40">{heroDescValue.length}/750</span>
+                    <button onClick={() => { if (heroDescValue.trim()) { saveField("description", heroDescValue.trim()); } setEditingHeroDesc(false); }} className="rounded bg-white/20 px-1.5 py-0.5 text-white/80 hover:bg-white/30 hover:text-white text-[10px]">✓</button>
+                    <button onClick={() => setEditingHeroDesc(false)} className="rounded bg-white/10 px-1.5 py-0.5 text-white/50 hover:bg-white/20 hover:text-white/80 text-[10px]">✕</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setHeroDescValue(profile.description || ""); setEditingHeroDesc(true); }}
+                  className="text-left w-full flex items-start gap-1.5"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5 text-white/0 group-hover:text-white/40 hover:!text-white transition-colors">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  <p className="text-xs text-white/50 line-clamp-3 leading-relaxed group-hover:text-white/60 transition-colors flex-1">
+                    {profile.description || "Add a business description..."}
+                  </p>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -811,28 +901,6 @@ export function ProfileClient({ siteId }: { siteId: string }) {
       <div className="px-4 grid grid-cols-2 gap-4">
         {/* Left column */}
         <div className="space-y-4">
-          <Section title="About">
-            <Field label="Business Name" value={profile.title} editable onSave={(v) => saveField("title", v)} />
-            <Field
-              label="Description"
-              value={profile.description}
-              editable
-              onSave={(v) => saveField("description", v)}
-            />
-            <div className="flex items-center gap-3 border-b border-border py-2 last:border-0">
-              <p className="text-[10px] text-muted whitespace-nowrap">Opening Date</p>
-              <input
-                type="date"
-                value={profile.openingDate || ""}
-                onChange={(e) => {
-                  setProfile((prev) => prev ? { ...prev, openingDate: e.target.value } : prev);
-                  setDirty(true);
-                }}
-                className="flex-1 min-w-0 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
-              />
-            </div>
-          </Section>
-
           <CategoryPicker siteId={siteId} onDirty={() => setDirty(true)} />
 
           <Section title="Contact">
@@ -1001,28 +1069,81 @@ export function ProfileClient({ siteId }: { siteId: string }) {
           <AskForReviewsCard profile={profile} siteId={siteId} onStatus={setPushStatus} />
 
           <Section title="Hours">
-            {profile.regularHours.length > 0 ? (
-              <div className="space-y-1">
-                {DAY_ORDER.map((day) => {
-                  const hours = profile.regularHours.filter((h) => h.day === day);
-                  const isClosed = hours.length === 0;
-                  return (
-                    <div key={day} className="flex items-center justify-between py-1 border-b border-border last:border-0">
-                      <span className="text-xs w-12">{DAY_SHORT[day]}</span>
-                      {isClosed ? (
+            <div className="space-y-1">
+              {DAY_ORDER.map((day) => {
+                const hours = profile.regularHours.filter((h) => h.day === day);
+                const isClosed = hours.length === 0;
+                const openTime = hours[0]?.openTime || "09:00";
+                const closeTime = hours[0]?.closeTime || "17:00";
+
+                function updateHours(open: string, close: string) {
+                  setProfile((prev) => {
+                    if (!prev) return prev;
+                    const updated = prev.regularHours.filter((h) => h.day !== day);
+                    updated.push({ day, openTime: open, closeTime: close });
+                    return { ...prev, regularHours: updated };
+                  });
+                  setDirty(true);
+                }
+
+                function toggleClosed() {
+                  if (isClosed) {
+                    updateHours("09:00", "17:00");
+                  } else {
+                    setProfile((prev) => {
+                      if (!prev) return prev;
+                      return { ...prev, regularHours: prev.regularHours.filter((h) => h.day !== day) };
+                    });
+                    setDirty(true);
+                  }
+                }
+
+                return (
+                  <div key={day} className="group/hour flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                    <span className="text-xs w-10 font-medium">{DAY_SHORT[day]}</span>
+                    {isClosed ? (
+                      <div className="flex items-center gap-2">
                         <span className="text-xs text-muted">Closed</span>
-                      ) : (
-                        <span className="text-xs">
-                          {hours.map((h) => `${h.openTime} — ${h.closeTime}`).join(", ")}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-muted">No hours set. Adding business hours improves your local search visibility.</p>
-            )}
+                        <button
+                          onClick={toggleClosed}
+                          className="text-gray-400 transition-colors group-hover/hour:text-muted hover:!text-accent"
+                          title="Set hours"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="time"
+                          value={openTime}
+                          onChange={(e) => updateHours(e.target.value, closeTime)}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-xs w-[5.5rem] focus:border-accent focus:outline-none"
+                        />
+                        <span className="text-[10px] text-muted">—</span>
+                        <input
+                          type="time"
+                          value={closeTime}
+                          onChange={(e) => updateHours(openTime, e.target.value)}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-xs w-[5.5rem] focus:border-accent focus:outline-none"
+                        />
+                        <button
+                          onClick={toggleClosed}
+                          className="text-gray-400 transition-colors group-hover/hour:text-muted hover:!text-danger"
+                          title="Set as closed"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             {profile.specialHours.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border">

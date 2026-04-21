@@ -15,7 +15,7 @@ export default async function GoogleLayout({
 
   return (
     <div className="flex flex-col">
-      <div className="border-b border-border px-4 pt-4">
+      <div className="border-b border-border px-4 pt-1">
         <h1 className="mb-3 text-lg font-medium">Google</h1>
         <GoogleTabs />
       </div>
