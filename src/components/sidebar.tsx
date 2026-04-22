@@ -112,34 +112,26 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
     return mod.subs.filter((s) => MANAGER_SUB_PATHS.has(s.path));
   }
 
-  // Track which modules are expanded — auto-expand the one containing the active page
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const initial = new Set<string>();
+  // Single-expand — only one module open at a time
+  const [expanded, setExpanded] = useState<string | null>(() => {
     for (const mod of MODULES) {
-      if (moduleContainsActive(mod)) initial.add(mod.label);
+      if (moduleContainsActive(mod)) return mod.label;
     }
-    return initial;
+    return null;
   });
 
-  // Update expanded state when pathname changes
   useEffect(() => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      for (const mod of MODULES) {
-        if (moduleContainsActive(mod)) next.add(mod.label);
+    for (const mod of MODULES) {
+      if (moduleContainsActive(mod)) {
+        setExpanded(mod.label);
+        return;
       }
-      return next;
-    });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   function toggleModule(label: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
+    setExpanded((prev) => prev === label ? null : label);
   }
 
   return (
@@ -170,7 +162,7 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
                 const subs = filteredSubs(mod);
                 if (subs.length === 0 && isManager) return null;
 
-                const isExpanded = expanded.has(mod.label);
+                const isExpanded = expanded === mod.label;
                 const containsActive = moduleContainsActive(mod);
 
                 return (
