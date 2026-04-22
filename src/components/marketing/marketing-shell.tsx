@@ -1,4 +1,5 @@
 import type { TenantContext, SlotKey } from "@/lib/tenant-site";
+import Script from "next/script";
 import {
   blogHubUrl,
   projectsHubUrl,
@@ -45,7 +46,7 @@ function googleFontsUrl(fonts: string[]): string | null {
  * for the home/about/work/contact pages.
  */
 export default async function MarketingShell({ ctx, activePage, children }: MarketingShellProps) {
-  const { siteName, theme, logoUrl, location, phone, email, tagline, pageConfig } = ctx;
+  const { siteName, theme, logoUrl, location, phone, email, tagline, pageConfig, ga4MeasurementId } = ctx;
   const hostMode = await detectHostMode();
 
   // Build nav from page_config — respect enabled flag and label overrides.
@@ -92,6 +93,18 @@ export default async function MarketingShell({ ctx, activePage, children }: Mark
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link rel="stylesheet" href={fontsUrl} />
+        </>
+      )}
+
+      {ga4MeasurementId && (
+        <>
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${ga4MeasurementId}`} strategy="afterInteractive" />
+          <Script id="ga4-init" strategy="afterInteractive">
+            {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${ga4MeasurementId}');`}
+          </Script>
         </>
       )}
 

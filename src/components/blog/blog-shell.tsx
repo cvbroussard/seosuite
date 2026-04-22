@@ -1,4 +1,5 @@
 import { blogHubUrl, projectsHubUrl } from "@/lib/urls";
+import Script from "next/script";
 
 export interface BlogTheme {
   primaryColor?: string;
@@ -30,6 +31,7 @@ interface BlogShellProps {
   phone?: string | null;
   websiteUrl?: string | null;
   socialLinks?: Array<{ platform: string; url: string }>;
+  ga4MeasurementId?: string | null;
   aside?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -73,6 +75,7 @@ export default function BlogShell({
   phone,
   websiteUrl,
   socialLinks,
+  ga4MeasurementId,
   aside,
   children,
 }: BlogShellProps) {
@@ -116,6 +119,19 @@ export default function BlogShell({
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link rel="stylesheet" href={fontsUrl} />
+        </>
+      )}
+
+      {/* GA4 */}
+      {ga4MeasurementId && (
+        <>
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${ga4MeasurementId}`} strategy="afterInteractive" />
+          <Script id="ga4-blog-init" strategy="afterInteractive">
+            {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${ga4MeasurementId}');`}
+          </Script>
         </>
       )}
 

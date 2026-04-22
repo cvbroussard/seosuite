@@ -52,7 +52,7 @@ export default async function HubPage({ params }: Props) {
   const [posts, blogSettings, siteRow, logoAsset] = await Promise.all([
     getBlogPosts(site.siteId, 20),
     sql`SELECT nav_links, theme FROM blog_settings WHERE site_id = ${site.siteId}`,
-    sql`SELECT url, location, brand_playbook, business_phone, business_email, business_logo FROM sites WHERE id = ${site.siteId}`,
+    sql`SELECT url, location, brand_playbook, business_phone, business_email, business_logo, ga4_measurement_id FROM sites WHERE id = ${site.siteId}`,
     sql`
       SELECT storage_url FROM media_assets
       WHERE site_id = ${site.siteId}
@@ -130,6 +130,7 @@ export default async function HubPage({ params }: Props) {
       location={siteLocation}
       phone={businessPhone}
       websiteUrl={websiteUrl}
+      ga4MeasurementId={(siteInfo.ga4_measurement_id as string) || null}
       aside={
         <BlogAside
           siteSlug={siteSlug}
