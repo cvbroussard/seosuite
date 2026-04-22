@@ -7,6 +7,7 @@ import { VisualTab } from "./tabs/visual";
 import { PublishingTab } from "./tabs/publishing";
 import { WebsiteTab } from "./tabs/website";
 import { ActionsTab } from "./tabs/actions";
+import { SeoTab } from "./tabs/seo";
 import type { PageConfig, WorkContent } from "@/lib/tenant-site";
 
 const TABS = [
@@ -15,6 +16,7 @@ const TABS = [
   { key: "visual", label: "Visual" },
   { key: "publishing", label: "Publishing" },
   { key: "website", label: "Website" },
+  { key: "seo", label: "SEO" },
   { key: "actions", label: "Actions" },
 ] as const;
 
@@ -172,6 +174,9 @@ export function SiteTabs(props: SiteTabsProps) {
           heroAssetCandidates={props.heroAssetCandidates}
           currentHeroAssetId={props.currentHeroAssetId}
         />
+      )}
+      {activeTab === "seo" && (
+        <SeoTab siteId={props.siteId} />
       )}
       {activeTab === "actions" && (
         <ActionsTab
