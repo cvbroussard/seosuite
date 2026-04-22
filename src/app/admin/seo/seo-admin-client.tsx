@@ -129,6 +129,9 @@ export function SeoAdminClient({ sites }: { sites: SiteInfo[] }) {
     setQueries([]);
     setPages([]);
     setExpanded(null);
+    setScoring(null);
+    setVerifyResult(null);
+    setSyncResult(null);
 
     Promise.all([
       fetch(`/api/admin/sites/${selectedSiteId}/page-scores`).then(r => r.ok ? r.json() : { scores: [] }),
