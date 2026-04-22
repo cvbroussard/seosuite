@@ -45,7 +45,7 @@ const siteNav: NavItem[] = [
       { label: "Acquisition", path: "/analytics/acquisition" },
       { label: "Engagement", path: "/analytics/engagement" },
       { label: "Audience", path: "/analytics/audience" },
-      { label: "Search", path: "/analytics/search" },
+      { label: "Local", path: "/analytics/local" },
       { label: "Conversions", path: "/analytics/conversions" },
     ],
   },

@@ -8,7 +8,7 @@ const TABS = [
   { key: "acquisition", label: "Acquisition", path: "/analytics/acquisition" },
   { key: "engagement", label: "Engagement", path: "/analytics/engagement" },
   { key: "audience", label: "Audience", path: "/analytics/audience" },
-  { key: "search", label: "Search", path: "/analytics/search" },
+  { key: "local", label: "Local", path: "/analytics/local" },
   { key: "conversions", label: "Conversions", path: "/analytics/conversions" },
 ];
 

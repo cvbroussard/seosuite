@@ -40,7 +40,7 @@ function mergeTimelines(search: DailyMetric[], maps: DailyMetric[], clicks: Dail
     .map(([date, vals]) => ({ date, ...vals }));
 }
 
-export function SearchClient({ siteId }: { siteId: string }) {
+export function LocalClient({ siteId }: { siteId: string }) {
   const [data, setData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
 
