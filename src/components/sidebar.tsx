@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 interface SiteInfo {
   id: string;
@@ -9,82 +10,84 @@ interface SiteInfo {
   url: string;
 }
 
-interface NavItem {
+interface SubItem {
+  label: string;
+  path: string;
+}
+
+interface Module {
   label: string;
   path: string;
   icon: string;
-  children?: { label: string; path: string }[];
+  subs: SubItem[];
 }
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-const siteGroups: NavGroup[] = [
+const MODULES: Module[] = [
   {
     label: "Configure",
-    items: [
-      { label: "Brand", path: "/brand", icon: "◇" },
-      { label: "Connections", path: "/accounts", icon: "◉" },
-      { label: "Google Profile", path: "/google/profile", icon: "G" },
-      { label: "Entities", path: "/entities", icon: "◫" },
-      { label: "Settings", path: "/settings", icon: "⚙" },
+    path: "/configure",
+    icon: "⚙",
+    subs: [
+      { label: "Brand", path: "/brand" },
+      { label: "Connections", path: "/accounts" },
+      { label: "Google Profile", path: "/google/profile" },
+      { label: "Entities", path: "/entities" },
+      { label: "Settings", path: "/settings" },
     ],
   },
   {
     label: "Publish",
-    items: [
-      { label: "Capture", path: "/capture", icon: "◎" },
-      { label: "Media", path: "/media", icon: "▣" },
-      { label: "Blog", path: "/blog", icon: "✎" },
-      { label: "Unipost", path: "/unipost", icon: "◈" },
-      { label: "Calendar", path: "/calendar", icon: "▦" },
-      { label: "Photos", path: "/google/photos", icon: "▤" },
+    path: "/publish",
+    icon: "◎",
+    subs: [
+      { label: "Capture", path: "/capture" },
+      { label: "Media", path: "/media" },
+      { label: "Blog", path: "/blog" },
+      { label: "Unipost", path: "/unipost" },
+      { label: "Calendar", path: "/calendar" },
+      { label: "Photos", path: "/google/photos" },
     ],
   },
   {
     label: "Promote",
-    items: [
-      { label: "Campaigns", path: "/campaigns", icon: "▶" },
+    path: "/promote",
+    icon: "▶",
+    subs: [
+      { label: "Campaigns", path: "/campaigns" },
     ],
   },
   {
     label: "Engage",
-    items: [
-      { label: "Inbox", path: "/inbox", icon: "▤" },
-      { label: "Reviews", path: "/google/reviews", icon: "★" },
-      { label: "Spotlight", path: "/spotlight", icon: "✦" },
+    path: "/engage",
+    icon: "✦",
+    subs: [
+      { label: "Inbox", path: "/inbox" },
+      { label: "Reviews", path: "/google/reviews" },
+      { label: "Spotlight", path: "/spotlight" },
     ],
   },
   {
     label: "Quantify",
-    items: [
-      {
-        label: "Analytics", path: "/analytics", icon: "▥",
-        children: [
-          { label: "Overview", path: "/analytics" },
-          { label: "Acquisition", path: "/analytics/acquisition" },
-          { label: "Engagement", path: "/analytics/engagement" },
-          { label: "Audience", path: "/analytics/audience" },
-          { label: "Local", path: "/analytics/local" },
-          { label: "Conversions", path: "/analytics/conversions" },
-        ],
-      },
-      { label: "SEO", path: "/seo", icon: "◇" },
-      { label: "GBP Performance", path: "/google/performance", icon: "G" },
+    path: "/quantify",
+    icon: "▥",
+    subs: [
+      { label: "Analytics", path: "/analytics" },
+      { label: "SEO", path: "/seo" },
+      { label: "GBP Performance", path: "/google/performance" },
     ],
   },
 ];
 
-const accountNav: NavItem[] = [
+const ACCOUNT_NAV = [
   { label: "My Account", path: "/account", icon: "◯" },
   { label: "Team", path: "/account/team", icon: "◱" },
   { label: "Subscription", path: "/account/subscription", icon: "◈" },
 ];
 
-const MANAGER_PATHS = new Set(["", "/brand", "/calendar", "/inbox", "/blog", "/entities", "/media", "/capture"]);
-const MANAGER_ACCOUNT_PATHS = new Set(["/account"]);
+const MANAGER_SUB_PATHS = new Set([
+  "/brand", "/calendar", "/inbox", "/blog", "/entities", "/media", "/capture",
+  "/account",
+]);
 
 interface SidebarProps {
   userName: string;
@@ -95,24 +98,31 @@ interface SidebarProps {
 
 export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: SidebarProps) {
   const pathname = usePathname();
+  const [hoveredModule, setHoveredModule] = useState<string | null>(null);
 
   const isSubdomain =
     typeof window !== "undefined" &&
     window.location.hostname === "studio.tracpost.com";
   const prefix = isSubdomain ? "" : "/dashboard";
-
   const isManager = role === "manager";
 
-  const filteredAccountNav = isManager
-    ? accountNav.filter((item) => MANAGER_ACCOUNT_PATHS.has(item.path))
-    : accountNav;
+  function isModuleActive(mod: Module): boolean {
+    const hubPath = prefix + mod.path;
+    if (pathname === hubPath || pathname === hubPath + "/") return true;
+    return mod.subs.some((sub) => {
+      const full = prefix + sub.path;
+      return pathname === full || pathname === full + "/" || pathname.startsWith(full + "/");
+    });
+  }
 
-  const accountLinks = filteredAccountNav.map((item) => ({ ...item, href: prefix + item.path || "/" }));
+  function isSubActive(subPath: string): boolean {
+    const full = prefix + subPath;
+    return pathname === full || pathname === full + "/" || pathname.startsWith(full + "/");
+  }
 
-  function isActive(itemPath: string): boolean {
-    const fullPath = prefix + itemPath;
-    if (itemPath === "") return pathname === prefix || pathname === prefix + "/";
-    return pathname === fullPath || pathname === fullPath + "/" || pathname.startsWith(fullPath + "/");
+  function filteredSubs(mod: Module): SubItem[] {
+    if (!isManager) return mod.subs;
+    return mod.subs.filter((s) => MANAGER_SUB_PATHS.has(s.path));
   }
 
   return (
@@ -120,11 +130,11 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
       <nav className="flex flex-1 flex-col px-2 py-3">
         {activeSiteId ? (
           <>
-            {/* Home */}
+            {/* Dashboard home */}
             <Link
               href={prefix || "/"}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 mb-1 transition-colors ${
-                isActive("")
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 mb-2 transition-colors ${
+                pathname === prefix || pathname === prefix + "/"
                   ? "bg-accent-muted text-accent"
                   : "text-muted hover:bg-surface-hover hover:text-foreground"
               }`}
@@ -133,64 +143,75 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
               Dashboard
             </Link>
 
-            {/* Grouped nav */}
-            {siteGroups.map((group) => {
-              const items = isManager
-                ? group.items.filter((item) => MANAGER_PATHS.has(item.path))
-                : group.items;
+            {/* Module links */}
+            <div className="flex flex-col gap-0.5">
+              {MODULES.map((mod) => {
+                const subs = filteredSubs(mod);
+                if (subs.length === 0 && isManager) return null;
 
-              if (items.length === 0) return null;
+                const active = isModuleActive(mod);
+                const hovered = hoveredModule === mod.label;
 
-              return (
-                <div key={group.label} className="mt-3">
-                  <p className="px-3 mb-1 text-[9px] font-medium uppercase tracking-wider text-muted">
-                    {group.label}
-                  </p>
-                  <div className="flex flex-col gap-0.5">
-                    {items.map((item) => {
-                      const href = prefix + item.path;
-                      const active = isActive(item.path);
-                      return (
-                        <div key={href}>
+                return (
+                  <div
+                    key={mod.label}
+                    className="relative"
+                    onMouseEnter={() => { if (!active) setHoveredModule(mod.label); }}
+                    onMouseLeave={() => setHoveredModule(null)}
+                  >
+                    {/* Module link */}
+                    <Link
+                      href={prefix + mod.path}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                        active
+                          ? "bg-accent-muted text-accent"
+                          : "text-muted hover:bg-surface-hover hover:text-foreground"
+                      }`}
+                    >
+                      <span className="text-xs">{mod.icon}</span>
+                      {mod.label}
+                    </Link>
+
+                    {/* Flyout on hover (when NOT active) */}
+                    {hovered && !active && subs.length > 0 && (
+                      <div className="absolute left-full top-0 ml-1 z-50 w-44 rounded-lg border border-border bg-surface shadow-lg py-1">
+                        {subs.map((sub) => (
                           <Link
-                            href={href}
-                            className={`flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                              active
-                                ? "bg-accent-muted text-accent"
-                                : "text-muted hover:bg-surface-hover hover:text-foreground"
-                            }`}
+                            key={sub.path}
+                            href={prefix + sub.path}
+                            className="block px-3 py-1.5 text-xs text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
                           >
-                            <span className="text-xs">{item.icon}</span>
-                            {item.label}
+                            {sub.label}
                           </Link>
-                          {active && item.children && (
-                            <div className="ml-6 flex flex-col gap-0.5 py-0.5">
-                              {item.children.map((child) => {
-                                const childPath = prefix + child.path;
-                                const childActive = pathname === childPath || pathname === childPath + "/";
-                                return (
-                                  <Link
-                                    key={childPath}
-                                    href={childPath}
-                                    className={`rounded-md px-3 py-1 text-xs transition-colors ${
-                                      childActive
-                                        ? "text-accent font-medium"
-                                        : "text-muted hover:text-foreground"
-                                    }`}
-                                  >
-                                    {child.label}
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Expanded sub-links (when active) */}
+                    {active && subs.length > 0 && (
+                      <div className="ml-5 flex flex-col gap-0.5 py-0.5 border-l border-border/50">
+                        {subs.map((sub) => {
+                          const subActive = isSubActive(sub.path);
+                          return (
+                            <Link
+                              key={sub.path}
+                              href={prefix + sub.path}
+                              className={`rounded-md px-3 py-1 text-xs transition-colors ${
+                                subActive
+                                  ? "text-accent font-medium"
+                                  : "text-muted hover:text-foreground"
+                              }`}
+                            >
+                              {sub.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
 
             <div className="mx-3 my-3 border-t border-border" />
           </>
@@ -202,13 +223,13 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
 
         {/* Account nav */}
         <div className="flex flex-col gap-0.5">
-          {accountLinks.map((item) => {
-            const fullPath = prefix + item.path;
-            const active = pathname === fullPath || pathname === fullPath + "/";
+          {(isManager ? ACCOUNT_NAV.filter(i => i.path === "/account") : ACCOUNT_NAV).map((item) => {
+            const href = prefix + item.path;
+            const active = pathname === href || pathname === href + "/";
             return (
               <Link
-                key={item.href}
-                href={item.href}
+                key={href}
+                href={href}
                 className={`flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors ${
                   active
                     ? "bg-accent-muted text-accent"
