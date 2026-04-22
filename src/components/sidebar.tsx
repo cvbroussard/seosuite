@@ -183,7 +183,7 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
                 const containsActive = moduleContainsActive(mod);
 
                 return (
-                  <div key={mod.label}>
+                  <div key={mod.label} className={isExpanded ? "bg-surface-hover rounded-lg -mx-1 px-1" : ""}>
                     {isExpanded && <div className="my-1 border-t border-border" />}
                     {/* Module toggle */}
                     <button
