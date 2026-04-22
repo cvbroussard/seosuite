@@ -1,7 +1,7 @@
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { SeoDashboardClient } from "./seo-dashboard";
+import { SeoOverviewClient } from "./seo-overview";
 
 export const dynamic = "force-dynamic";
 
@@ -13,74 +13,63 @@ export default async function SeoPage() {
     return (
       <div className="mx-auto max-w-4xl">
         <h1 className="mb-1 text-lg font-semibold">SEO</h1>
-        <p className="py-12 text-center text-sm text-muted">
-          Add a site first.
-        </p>
+        <p className="py-12 text-center text-sm text-muted">Add a site first.</p>
       </div>
     );
   }
 
   const siteId = session.activeSiteId;
 
-  const [audits, contentRows, siteRows] = await Promise.all([
+  const [siteRows, pageScores, searchData, contentRows] = await Promise.all([
+    sql`SELECT id, name, url FROM sites WHERE id = ${siteId}`,
+
     sql`
-      SELECT id, page_type, url, seo_score, issues, created_at
-      FROM seo_audits
+      SELECT url, performance, seo, accessibility, best_practices, scored_at
+      FROM page_scores
       WHERE site_id = ${siteId}
-      ORDER BY created_at DESC
-      LIMIT 50
+      ORDER BY url ASC
     `,
+
     sql`
-      SELECT id, page_type, page_id, meta_title, meta_description,
-             og_title, og_description, structured_data, status, updated_at
+      SELECT query, SUM(impressions)::int AS impressions, SUM(clicks)::int AS clicks,
+             ROUND(AVG(position)::numeric, 1) AS avg_position
+      FROM search_performance
+      WHERE site_id = ${siteId}
+        AND date >= (CURRENT_DATE - INTERVAL '28 days')
+      GROUP BY query
+      ORDER BY impressions DESC
+      LIMIT 10
+    `,
+
+    sql`
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE status = 'active')::int AS active
       FROM seo_content
       WHERE site_id = ${siteId}
-      ORDER BY updated_at DESC
-      LIMIT 50
-    `,
-    sql`
-      SELECT id, name, url FROM sites WHERE id = ${siteId}
     `,
   ]);
 
   const site = siteRows[0];
+  const contentStats = contentRows[0] || { total: 0, active: 0 };
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="mb-1 text-lg font-semibold">SEO</h1>
-      <p className="mb-8 text-sm text-muted">
-        On-page SEO injection and audit results
-      </p>
-
-      <SeoDashboardClient
-        siteId={siteId}
-        siteName={(site?.name as string) || ""}
-        siteUrl={(site?.url as string) || ""}
-        audits={audits as AuditRow[]}
-        content={contentRows as ContentRow[]}
-      />
-    </div>
+    <SeoOverviewClient
+      siteName={(site?.name as string) || ""}
+      pageScores={pageScores as Array<{
+        url: string;
+        performance: number;
+        seo: number;
+        accessibility: number;
+        best_practices: number;
+        scored_at: string;
+      }>}
+      topQueries={searchData as Array<{
+        query: string;
+        impressions: number;
+        clicks: number;
+        avg_position: number;
+      }>}
+      contentStats={{ total: contentStats.total as number, active: contentStats.active as number }}
+    />
   );
-}
-
-export interface AuditRow {
-  id: string;
-  page_type: string | null;
-  url: string | null;
-  seo_score: number | null;
-  issues: string[] | null;
-  created_at: string;
-}
-
-export interface ContentRow {
-  id: string;
-  page_type: string | null;
-  page_id: string | null;
-  meta_title: string | null;
-  meta_description: string | null;
-  og_title: string | null;
-  og_description: string | null;
-  structured_data: unknown;
-  status: string | null;
-  updated_at: string;
 }
