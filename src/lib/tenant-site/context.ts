@@ -35,6 +35,7 @@ export interface TenantContext {
   websiteUrl: string | null;
   customDomain: string | null;
   ga4MeasurementId: string | null;
+  gscVerificationToken: string | null;
   theme: TenantTheme;
   pageConfig: PageConfig;
 }
@@ -59,7 +60,7 @@ export async function loadTenantContext(siteSlug: string): Promise<TenantContext
   const [row] = await sql`
     SELECT s.id, s.name, s.blog_slug, s.business_type, s.location, s.url,
            s.business_phone, s.business_email, s.business_logo, s.business_favicon,
-           s.brand_playbook, s.page_config, s.ga4_measurement_id,
+           s.brand_playbook, s.page_config, s.ga4_measurement_id, s.gsc_verification_token,
            bs.custom_domain, bs.theme
     FROM sites s
     LEFT JOIN blog_settings bs ON bs.site_id = s.id
@@ -105,6 +106,7 @@ export async function loadTenantContext(siteSlug: string): Promise<TenantContext
     websiteUrl: (row.url as string) || null,
     customDomain: (row.custom_domain as string) || null,
     ga4MeasurementId: (row.ga4_measurement_id as string) || null,
+    gscVerificationToken: (row.gsc_verification_token as string) || null,
     theme,
     pageConfig,
   };

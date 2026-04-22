@@ -17,6 +17,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/webmasters.readonly",
   "https://www.googleapis.com/auth/analytics.readonly",
+  "https://www.googleapis.com/auth/siteverification",
 ];
 
 /**

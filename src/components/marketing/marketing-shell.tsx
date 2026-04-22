@@ -46,7 +46,7 @@ function googleFontsUrl(fonts: string[]): string | null {
  * for the home/about/work/contact pages.
  */
 export default async function MarketingShell({ ctx, activePage, children }: MarketingShellProps) {
-  const { siteName, theme, logoUrl, location, phone, email, tagline, pageConfig, ga4MeasurementId } = ctx;
+  const { siteName, theme, logoUrl, location, phone, email, tagline, pageConfig, ga4MeasurementId, gscVerificationToken } = ctx;
   const hostMode = await detectHostMode();
 
   // Build nav from page_config — respect enabled flag and label overrides.
@@ -106,6 +106,10 @@ gtag('js', new Date());
 gtag('config', '${ga4MeasurementId}');`}
           </Script>
         </>
+      )}
+
+      {gscVerificationToken && (
+        <meta name="google-site-verification" content={gscVerificationToken} />
       )}
 
       <header className="ws-header">

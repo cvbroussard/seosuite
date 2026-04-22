@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { decrypt } from "@/lib/crypto";
 import { fetchSearchAnalytics, syncSearchPerformance } from "@/lib/gsc/search-console";
+import { autoVerifyDomain } from "@/lib/gsc/verify-site";
 
 /**
  * GET /api/admin/sites/[siteId]/search-console?days=28
@@ -101,6 +103,35 @@ export async function POST(
     const days = body.days || 28;
     const stored = await syncSearchPerformance(siteId, days);
     return NextResponse.json({ success: true, stored });
+  }
+
+  if (body.action === "verify") {
+    // Get the site's custom domain and GBP access token
+    const [site] = await sql`
+      SELECT bs.custom_domain
+      FROM sites s
+      LEFT JOIN blog_settings bs ON bs.site_id = s.id
+      WHERE s.id = ${siteId}
+    `;
+    const customDomain = site?.custom_domain as string | null;
+    if (!customDomain) {
+      return NextResponse.json({ error: "No custom domain configured" }, { status: 400 });
+    }
+
+    const [account] = await sql`
+      SELECT sa.access_token_encrypted, sa.refresh_token_encrypted
+      FROM social_accounts sa
+      JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+      WHERE ssl.site_id = ${siteId} AND sa.platform = 'gbp' AND sa.status = 'active'
+      LIMIT 1
+    `;
+    if (!account) {
+      return NextResponse.json({ error: "No active GBP connection" }, { status: 400 });
+    }
+
+    const accessToken = decrypt(account.access_token_encrypted as string);
+    const result = await autoVerifyDomain(siteId, accessToken, customDomain);
+    return NextResponse.json(result);
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

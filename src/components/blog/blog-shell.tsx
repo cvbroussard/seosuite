@@ -32,6 +32,7 @@ interface BlogShellProps {
   websiteUrl?: string | null;
   socialLinks?: Array<{ platform: string; url: string }>;
   ga4MeasurementId?: string | null;
+  gscVerificationToken?: string | null;
   aside?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -76,6 +77,7 @@ export default function BlogShell({
   websiteUrl,
   socialLinks,
   ga4MeasurementId,
+  gscVerificationToken,
   aside,
   children,
 }: BlogShellProps) {
@@ -133,6 +135,10 @@ gtag('js', new Date());
 gtag('config', '${ga4MeasurementId}');`}
           </Script>
         </>
+      )}
+
+      {gscVerificationToken && (
+        <meta name="google-site-verification" content={gscVerificationToken} />
       )}
 
       {/* Site Header */}

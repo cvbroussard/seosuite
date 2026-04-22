@@ -91,7 +91,7 @@ export default async function ArticlePage({ params }: Props) {
   // Fetch shell data
   const [blogSettings, siteRow, logoAsset, allPosts] = await Promise.all([
     sql`SELECT nav_links, theme FROM blog_settings WHERE site_id = ${site.siteId}`,
-    sql`SELECT url, location, brand_playbook, business_phone, business_email, business_logo, ga4_measurement_id FROM sites WHERE id = ${site.siteId}`,
+    sql`SELECT url, location, brand_playbook, business_phone, business_email, business_logo, ga4_measurement_id, gsc_verification_token FROM sites WHERE id = ${site.siteId}`,
     sql`
       SELECT storage_url FROM media_assets
       WHERE site_id = ${site.siteId}
@@ -172,6 +172,7 @@ export default async function ArticlePage({ params }: Props) {
       phone={businessPhone}
       websiteUrl={websiteUrl}
       ga4MeasurementId={(siteInfo.ga4_measurement_id as string) || null}
+      gscVerificationToken={(siteInfo.gsc_verification_token as string) || null}
       aside={
         <BlogAside
           siteSlug={siteSlug}
