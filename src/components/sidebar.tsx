@@ -42,8 +42,8 @@ const MODULES: Module[] = [
     label: "Configure",
     icon: ICONS.configure,
     subs: [
-      { label: "Brand", path: "/brand" },
       { label: "Connections", path: "/accounts" },
+      { label: "Brand", path: "/brand" },
       { label: "Google Profile", path: "/google/profile" },
       { label: "Entities", path: "/entities" },
       { label: "Settings", path: "/settings" },
@@ -57,8 +57,8 @@ const MODULES: Module[] = [
       { label: "Media", path: "/media" },
       { label: "Blog", path: "/blog" },
       { label: "Unipost", path: "/unipost" },
-      { label: "Calendar", path: "/calendar" },
       { label: "GBP Photos", path: "/google/photos" },
+      { label: "Calendar", path: "/calendar" },
     ],
   },
   {
