@@ -1,13 +1,13 @@
-import { EmptyState } from "@/components/empty-state";
+import { getSession } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { EngagementClient } from "./engagement-client";
 
-export default function Page() {
-  return (
-    <div className="p-6">
-      <EmptyState
-        icon="▥"
-        title="Coming soon"
-        description="This analytics view is being built."
-      />
-    </div>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function EngagementPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (!session.activeSiteId) redirect("/dashboard");
+
+  return <EngagementClient siteId={session.activeSiteId} />;
 }
