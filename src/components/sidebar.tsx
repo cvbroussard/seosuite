@@ -58,7 +58,7 @@ const MODULES: Module[] = [
       { label: "Blog", path: "/blog" },
       { label: "Unipost", path: "/unipost" },
       { label: "Calendar", path: "/calendar" },
-      { label: "Photos", path: "/google/photos" },
+      { label: "GBP Photos", path: "/google/photos" },
     ],
   },
   {
