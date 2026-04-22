@@ -149,7 +149,7 @@ export function LocationPickerClient({ pendingConnections, sites }: Props) {
 
         <div className="mt-4 flex justify-end">
           <button
-            onClick={() => router.push("/dashboard/accounts")}
+            onClick={() => router.push("/admin/provisioning")}
             className={`rounded px-4 py-2 text-xs font-medium ${
               allDone
                 ? "bg-accent text-white hover:bg-accent/90"

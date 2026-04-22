@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { GeoMap, lookupCoords, type MapMarker } from "@/components/analytics/geo-map";
 
 interface CityData {
   city: string;
   region: string;
   users: number;
+  lat?: number;
+  lng?: number;
 }
 
 interface DeviceData {
@@ -46,6 +49,19 @@ export function AudienceClient({ siteId }: { siteId: string }) {
       .finally(() => setLoading(false));
   }, [siteId, days]);
 
+  const mapMarkers: MapMarker[] = useMemo(() => {
+    if (!geography) return [];
+    return geography
+      .map((city) => {
+        const coords = city.lat && city.lng
+          ? [city.lat, city.lng] as [number, number]
+          : lookupCoords(city.city);
+        if (!coords) return null;
+        return { city: city.city, region: city.region, lat: coords[0], lng: coords[1], users: city.users };
+      })
+      .filter((m): m is MapMarker => m !== null);
+  }, [geography]);
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -75,6 +91,11 @@ export function AudienceClient({ siteId }: { siteId: string }) {
           <option value={90}>Last 90 days</option>
         </select>
       </div>
+
+      {/* Geographic map */}
+      {mapMarkers.length > 0 && (
+        <GeoMap markers={mapMarkers} height={420} />
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         {/* Geography — top cities */}

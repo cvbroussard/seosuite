@@ -2,7 +2,7 @@ import { sql } from "@/lib/db";
 import Link from "next/link";
 
 interface Alert {
-  type: "new_subscriber" | "token_expiring" | "pipeline_error";
+  type: "new_subscriber" | "token_expiring" | "pipeline_error" | "gbp_pending";
   severity: "warning" | "danger" | "info";
   title: string;
   detail: string;
@@ -13,7 +13,7 @@ interface Alert {
 export async function AdminAlerts() {
   const alerts: Alert[] = [];
 
-  const [newSubscribers, expiringTokens] = await Promise.all([
+  const [newSubscribers, expiringTokens, pendingGbp] = await Promise.all([
     // Sites with provisioning explicitly requested by subscriber
     sql`
       SELECT sub.id AS subscription_id, u.name AS subscriber_name,
@@ -37,6 +37,14 @@ export async function AdminAlerts() {
         AND sa.token_expires_at < NOW() + INTERVAL '7 days'
         AND sa.token_expires_at > NOW()
       ORDER BY sa.token_expires_at ASC
+    `,
+    // Pending GBP location assignments
+    sql`
+      SELECT sa.id, sa.account_name, sa.metadata, sa.created_at
+      FROM social_accounts sa
+      WHERE sa.platform = 'gbp'
+        AND sa.status = 'pending_assignment'
+      ORDER BY sa.created_at DESC
     `,
   ]);
 
@@ -68,6 +76,19 @@ export async function AdminAlerts() {
       detail: `${token.platform} — ${daysLeft}d left — ${token.subscriber_name}`,
       href: `/admin/subscribers/${token.subscription_id}`,
       timestamp: token.token_expires_at as string,
+    });
+  }
+
+  for (const gbp of pendingGbp) {
+    const meta = (gbp.metadata || {}) as Record<string, unknown>;
+    const locationCount = ((meta.discovered_locations || []) as unknown[]).length;
+    alerts.push({
+      type: "gbp_pending",
+      severity: "warning",
+      title: "Pick GBP location",
+      detail: `${meta.initiating_site_name || gbp.account_name} — ${locationCount} location${locationCount !== 1 ? "s" : ""} found`,
+      href: `/admin/google/location-picker`,
+      timestamp: gbp.created_at as string,
     });
   }
 

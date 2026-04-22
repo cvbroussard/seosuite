@@ -1,27 +1,21 @@
 import { sql } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { LocationPickerClient } from "./location-picker-client";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Admin-only location picker for GBP connections.
- * Shows pending GBP connections and lets the operator assign
- * the correct location to the correct site.
- */
 export default async function LocationPickerPage({
   searchParams,
 }: {
   searchParams: Promise<{ site_id?: string }>;
 }) {
-  const session = await getSession();
-  if (!session) redirect("/login");
+  const jar = await cookies();
+  if (jar.get("tp_admin")?.value !== "authenticated") redirect("/login");
 
   const params = await searchParams;
   const siteId = params.site_id;
 
-  // Get pending GBP connections for this site or all sites
   const pending = siteId
     ? await sql`
         SELECT sa.id, sa.account_name, sa.metadata
@@ -36,18 +30,24 @@ export default async function LocationPickerPage({
         FROM social_accounts sa
         WHERE sa.platform = 'gbp'
           AND sa.status = 'pending_assignment'
-          AND sa.subscription_id = ${session.subscriptionId}
       `;
 
   if (pending.length === 0) {
-    redirect(siteId ? `/admin/sites/${siteId}` : "/dashboard/accounts");
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-4">
+        <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-card text-center">
+          <span className="text-2xl">G</span>
+          <h2 className="mt-1 text-lg font-medium">No Pending Assignments</h2>
+          <p className="mt-2 text-xs text-muted">
+            All Google Business connections have been assigned to their sites.
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  // Get all sites for the dropdown
   const sites = await sql`
-    SELECT id, name FROM sites
-    WHERE subscription_id = ${session.subscriptionId} AND is_active = true
-    ORDER BY name
+    SELECT id, name FROM sites WHERE is_active = true ORDER BY name
   `;
 
   const pendingConnections = pending.map((p) => {
