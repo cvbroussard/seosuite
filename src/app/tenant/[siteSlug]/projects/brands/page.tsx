@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { resolveBlogSiteBySlug, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
@@ -123,7 +124,7 @@ export default async function BrandsHubPage({ params }: Props) {
                 className="br-card"
               >
                 {coverImage ? (
-                  <img src={coverImage} alt={String(brand.name)} className="br-card-img" />
+                  <Image src={coverImage} alt={String(brand.name)} className="br-card-img" width={400} height={300} sizes="(max-width: 768px) 50vw, 25vw" quality={75} />
                 ) : (
                   <div className="br-card-img-empty" />
                 )}

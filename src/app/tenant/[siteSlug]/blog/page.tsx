@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { resolveBlogSiteBySlug, getBlogPosts, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import { generateHubSchema } from "@/lib/blog/schema";
@@ -168,10 +169,14 @@ export default async function HubPage({ params }: Props) {
                 className="bs-article-card"
               >
                 {ogImage && (
-                  <img
+                  <Image
                     src={ogImage}
                     alt={String(post.title)}
                     className="bs-article-thumb"
+                    width={640}
+                    height={360}
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    quality={75}
                   />
                 )}
                 <h2 className="bs-article-title">

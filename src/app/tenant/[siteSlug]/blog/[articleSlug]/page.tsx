@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { resolveBlogSiteBySlug, resolveBlogSite, getBlogPost, getBlogPosts, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import { generateArticleSchema } from "@/lib/blog/schema";
@@ -202,7 +203,7 @@ export default async function ArticlePage({ params }: Props) {
             className="bs-hero-media"
           />
         ) : ogImage ? (
-          <img src={ogImage} alt={title} className="bs-hero-media" />
+          <Image src={ogImage} alt={title} className="bs-hero-media" width={1200} height={675} priority sizes="100vw" quality={75} />
         ) : null}
 
         <header className="bs-article-header">

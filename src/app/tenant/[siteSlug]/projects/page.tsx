@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { resolveBlogSiteBySlug, getCustomDomain, getBlogPosts, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
@@ -165,7 +166,7 @@ export default async function ProjectsIndexPage({ params }: Props) {
                 className="bs-project-card"
               >
                 {coverImage ? (
-                  <img src={coverImage} alt={String(project.name)} className="bs-project-cover" />
+                  <Image src={coverImage} alt={String(project.name)} className="bs-project-cover" width={640} height={360} sizes="(max-width: 768px) 100vw, 50vw" quality={75} />
                 ) : (
                   <div className="bs-project-cover-empty" />
                 )}

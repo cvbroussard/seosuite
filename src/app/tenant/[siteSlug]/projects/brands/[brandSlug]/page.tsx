@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { resolveBlogSiteBySlug, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
@@ -211,7 +212,7 @@ export default async function BrandDetailPage({ params }: Props) {
 
       {/* Hero */}
       {heroUrl && (
-        <img src={heroUrl} alt={String(brand.name)} className="br-hero" />
+        <Image src={heroUrl} alt={String(brand.name)} className="br-hero" width={1200} height={675} priority sizes="100vw" quality={75} />
       )}
 
       {/* Header */}
@@ -247,7 +248,7 @@ export default async function BrandDetailPage({ params }: Props) {
                   className="br-project-item"
                 >
                   {cover && (
-                    <img src={cover} alt={String(p.name)} className="br-project-thumb" />
+                    <Image src={cover} alt={String(p.name)} className="br-project-thumb" width={120} height={80} sizes="120px" quality={75} />
                   )}
                   <div>
                     <span className="br-project-name">{String(p.name)}</span>
@@ -279,7 +280,7 @@ export default async function BrandDetailPage({ params }: Props) {
                   className="br-article-item"
                 >
                   {ogImg && (
-                    <img src={ogImg} alt={String(a.title)} className="br-article-thumb" />
+                    <Image src={ogImg} alt={String(a.title)} className="br-article-thumb" width={120} height={80} sizes="120px" quality={75} />
                   )}
                   <div>
                     <span className="br-article-title">{String(a.title)}</span>
@@ -307,7 +308,7 @@ export default async function BrandDetailPage({ params }: Props) {
               const caption = a.context_note ? String(a.context_note) : null;
               return (
                 <div key={String(a.id)} className="br-gallery-item">
-                  <img src={String(a.storage_url)} alt={caption || ""} loading="lazy" />
+                  <Image src={String(a.storage_url)} alt={caption || ""} width={400} height={400} sizes="(max-width: 640px) 50vw, 33vw" quality={75} />
                   {caption && (
                     <p className="br-gallery-caption">{caption}</p>
                   )}

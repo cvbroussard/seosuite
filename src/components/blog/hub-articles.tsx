@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { blogArticleUrl } from "@/lib/urls";
 
 interface BlogPost {
@@ -33,13 +34,14 @@ export default function HubArticles({ posts, siteSlug, customDomain }: HubArticl
               style={{ textDecoration: "none", color: "inherit", display: "flex", gap: 16 }}
             >
               {post.og_image_url && (
-                <img
+                <Image
                   src={post.og_image_url}
                   alt={post.title}
-                  loading="lazy"
+                  width={80}
+                  height={80}
+                  sizes="80px"
+                  quality={75}
                   style={{
-                    width: 80,
-                    height: 80,
                     borderRadius: "var(--blog-radius)",
                     objectFit: "cover",
                     flexShrink: 0,

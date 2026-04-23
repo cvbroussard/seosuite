@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { resolveBlogSiteBySlug, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
@@ -238,7 +239,7 @@ export default async function ProjectPage({ params }: Props) {
       {/* Hero with overlay */}
       {heroUrl && (
         <div className="pj-hero">
-          <img src={heroUrl} alt={String(project.name)} className="pj-hero-img" />
+          <Image src={heroUrl} alt={String(project.name)} className="pj-hero-img" width={1200} height={675} priority sizes="100vw" quality={75} />
           <div className="pj-hero-overlay">
             <h1 className="pj-hero-title">{String(project.name)}</h1>
             {project.description && (
@@ -307,7 +308,7 @@ export default async function ProjectPage({ params }: Props) {
                     {isVideo ? (
                       <video src={String(asset.storage_url)} controls preload="metadata" />
                     ) : (
-                      <img src={String(asset.storage_url)} alt={altText} loading="lazy" />
+                      <Image src={String(asset.storage_url)} alt={altText} width={640} height={480} sizes="(max-width: 768px) 100vw, 50vw" quality={75} />
                     )}
                   </div>
                   <div className="pj-featured-text">
@@ -326,7 +327,7 @@ export default async function ProjectPage({ params }: Props) {
                     {(asset.media_type as string) === "video" ? (
                       <video src={String(asset.storage_url)} controls preload="metadata" />
                     ) : (
-                      <img src={String(asset.storage_url)} alt="" loading="lazy" />
+                      <Image src={String(asset.storage_url)} alt="" width={400} height={400} sizes="(max-width: 640px) 50vw, 33vw" quality={75} />
                     )}
                   </div>
                 ))}
