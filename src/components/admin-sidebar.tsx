@@ -12,6 +12,7 @@ const baseNav = [
   { label: "Connections", path: "/social", icon: "◉" },
   { label: "Google", path: "/google/location-picker", icon: "G" },
   { label: "Content Queue", path: "/content", icon: "▤" },
+  { label: "Products", path: "/products", icon: "◆" },
   { label: "SEO", path: "/seo", icon: "◇" },
   { label: "Usage & Billing", path: "/usage", icon: "◈" },
   { label: "Logs", path: "/logs", icon: "▧" },

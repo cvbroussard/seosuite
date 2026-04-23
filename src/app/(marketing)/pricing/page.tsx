@@ -1,71 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { sql } from "@/lib/db";
 
 export const metadata: Metadata = {
   title: "Pricing — TracPost",
   description: "Simple pricing for AI-powered content automation. Growth $99/mo, Authority $219/mo. 14-day free trial.",
 };
 
-const PLANS = [
-  {
-    name: "Growth",
-    price: "$99",
-    tagline: "Your content engine, running.",
-    features: [
-      "10 blog posts per month",
-      "4 topic clusters",
-      "5 personas (Cast of Characters)",
-      "Monthly SEO audit",
-      "1 site (channel)",
-      "All 8 platforms",
-      "AI brand playbook",
-      "Autopilot publishing",
-    ],
-    cta: "Start 14-day trial",
-    highlight: false,
-    ctaStyle: "outline" as const,
-  },
-  {
-    name: "Authority",
-    price: "$219",
-    tagline: "Own your category.",
-    features: [
-      "Unlimited blog posts",
-      "All topic clusters",
-      "Unlimited personas",
-      "Weekly SEO audit",
-      "Up to 5 sites (channels)",
-      "All 8 platforms",
-      "AI brand playbook",
-      "Manual scheduling control",
-      "Blog import with redirect preservation",
-    ],
-    cta: "Start 14-day trial",
-    highlight: true,
-    ctaStyle: "primary" as const,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    tagline: "Scale across clients and locations.",
-    features: [
-      "Everything in Authority",
-      "Unlimited sites (channels)",
-      "Multi-brand management",
-      "Dedicated brand playbook per client",
-      "Agency dashboard",
-      "Priority support + SLA",
-      "Custom integrations",
-      "SSO / team access controls",
-      "Dedicated account manager",
-    ],
-    cta: "Talk to us",
-    highlight: false,
-    ctaStyle: "outline" as const,
-  },
-];
+export const revalidate = 300;
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const products = await sql`
+    SELECT name, tagline, price, frequency, features, cta_text, cta_href, highlight, sort_order
+    FROM products
+    WHERE is_active = true
+    ORDER BY sort_order ASC
+  `;
+
   return (
     <>
       <section className="mp-section">
@@ -80,30 +31,39 @@ export default function PricingPage() {
           </p>
 
           <div className="mp-pricing-grid">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.name}
-                className={`mp-plan-card ${plan.highlight ? "mp-plan-highlight" : ""}`}
-              >
-                <h2 className="mp-plan-name">{plan.name}</h2>
-                <p className="mp-plan-tagline">{plan.tagline}</p>
-                <p className="mp-plan-price">
-                  <span className="mp-plan-amount">{plan.price}</span>
-                  <span className="mp-plan-period">/month</span>
-                </p>
-                <ul className="mp-plan-features">
-                  {plan.features.map((f) => (
-                    <li key={f}>{f}</li>
-                  ))}
-                </ul>
-                <Link
-                  href={plan.name === "Enterprise" ? "/contact" : "/pricing"}
-                  className={plan.ctaStyle === "primary" ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
+            {products.map((plan) => {
+              const features = (plan.features as string[]) || [];
+              const ctaHref = (plan.cta_href as string) || "/signup";
+              const isHighlight = plan.highlight as boolean;
+
+              return (
+                <div
+                  key={plan.name as string}
+                  className={`mp-plan-card ${isHighlight ? "mp-plan-highlight" : ""}`}
                 >
-                  {plan.cta}
-                </Link>
-              </div>
-            ))}
+                  {isHighlight && (
+                    <span className="mp-plan-badge">Most popular</span>
+                  )}
+                  <h2 className="mp-plan-name">{plan.name as string}</h2>
+                  <p className="mp-plan-tagline">{plan.tagline as string}</p>
+                  <p className="mp-plan-price">
+                    <span className="mp-plan-amount">{plan.price as string}</span>
+                    <span className="mp-plan-period">{plan.frequency as string}</span>
+                  </p>
+                  <ul className="mp-plan-features">
+                    {features.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    href={ctaHref}
+                    className={isHighlight ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
+                  >
+                    {plan.cta_text as string}
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -141,11 +101,25 @@ const pricingStyles = `
     text-align: left;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
   .mp-plan-highlight {
     border-color: #1a1a1a;
     border-width: 2px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  .mp-plan-badge {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 16px;
+    border-radius: 20px;
+    white-space: nowrap;
   }
   .mp-plan-name {
     font-size: 24px;
@@ -173,11 +147,20 @@ const pricingStyles = `
     flex: 1;
   }
   .mp-plan-features li {
-    padding: 8px 0;
     font-size: 14px;
     color: #374151;
+    padding: 6px 0;
     border-bottom: 1px solid #f3f4f6;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .mp-plan-features li::before {
+    content: "✓";
+    color: #22c55e;
+    font-weight: 600;
+    flex-shrink: 0;
   }
   .mp-plan-features li:last-child { border-bottom: none; }
-  .mp-plan-cta { width: 100%; text-align: center; }
+  .mp-plan-cta { display: block; text-align: center; width: 100%; }
 `;
