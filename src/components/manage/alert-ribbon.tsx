@@ -42,6 +42,8 @@ export function AlertRibbon() {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [panOffset, setPanOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [tooltipLocked, setTooltipLocked] = useState(false);
+  const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef<{ x: number; offset: number } | null>(null);
   const graphRef = useRef<HTMLDivElement>(null);
 
@@ -195,7 +197,7 @@ export function AlertRibbon() {
             const range = rangeEnd - rangeStart;
             const pxToMs = range / rect.width;
             setPanOffset(dragStartRef.current.offset + dx * pxToMs);
-          } else {
+          } else if (!tooltipLocked) {
             const rect = e.currentTarget.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const pct = (x / rect.width) * 100;
@@ -211,8 +213,12 @@ export function AlertRibbon() {
         onMouseLeave={() => {
           setIsDragging(false);
           dragStartRef.current = null;
-          setCursorX(null);
-          setCursorPct(null);
+          if (!tooltipLocked) {
+            tooltipTimeoutRef.current = setTimeout(() => {
+              setCursorX(null);
+              setCursorPct(null);
+            }, 300);
+          }
         }}
       >
         {loading ? (
@@ -247,19 +253,19 @@ export function AlertRibbon() {
             {CATEGORIES.map(cat => (
               <g key={cat.key}>
                 <line
-                  x1="60" x2="100%"
+                  x1="80" x2="100%"
                   y1={categoryY[cat.key]} y2={categoryY[cat.key]}
                   stroke={cat.color}
-                  strokeOpacity={0.12}
+                  strokeOpacity={0.3}
                   strokeWidth={1}
                 />
                 <text
                   x={4}
                   y={categoryY[cat.key] + 4}
                   fill={cat.color}
-                  fontSize={9}
+                  fontSize={11}
                   fontWeight={500}
-                  opacity={counts[cat.key] ? 0.9 : 0.35}
+                  opacity={counts[cat.key] ? 1 : 0.4}
                 >
                   {cat.label}
                   {counts[cat.key] ? ` (${counts[cat.key]})` : ""}
@@ -331,19 +337,37 @@ export function AlertRibbon() {
           <div
             className="ribbon-tooltip"
             style={{ left: tooltipPos.x + 16, top: tooltipPos.y + 8 }}
+            onMouseEnter={() => {
+              if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+              setTooltipLocked(true);
+            }}
+            onMouseLeave={() => {
+              setTooltipLocked(false);
+              setCursorX(null);
+              setCursorPct(null);
+            }}
           >
             <p className="ribbon-tooltip-time">{timeLabel}</p>
             <div className="ribbon-tooltip-events">
               {nearby.slice(0, 5).map(evt => {
                 const dotColor = CATEGORIES.find(c => c.key === evt.category)?.color || "#94a3b8";
                 return (
-                  <div key={evt.id} className="ribbon-tooltip-event">
+                  <a
+                    key={evt.id}
+                    href={evt.href}
+                    className="ribbon-tooltip-event"
+                    onClick={() => {
+                      setTooltipLocked(false);
+                      setCursorX(null);
+                      setCursorPct(null);
+                    }}
+                  >
                     <span className="ribbon-tooltip-dot" style={{ background: dotColor }} />
                     <div>
                       <p className="ribbon-tooltip-title">{evt.title}</p>
                       <p className="ribbon-tooltip-detail">{evt.detail}</p>
                     </div>
-                  </div>
+                  </a>
                 );
               })}
               {nearby.length > 5 && (
@@ -431,7 +455,6 @@ const ribbonStyles = `
     padding: 10px 14px;
     max-width: 300px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    pointer-events: none;
   }
   .ribbon-tooltip-time {
     font-size: 10px;
@@ -449,6 +472,15 @@ const ribbonStyles = `
     display: flex;
     align-items: flex-start;
     gap: 8px;
+    text-decoration: none;
+    color: inherit;
+    padding: 4px 6px;
+    margin: -4px -6px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .ribbon-tooltip-event:hover {
+    background: rgba(255,255,255,0.08);
   }
   .ribbon-tooltip-dot {
     width: 8px;
