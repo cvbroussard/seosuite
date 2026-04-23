@@ -1,5 +1,16 @@
 "use client";
 import { ManagePage } from "@/components/manage/manage-page";
 export default function Page() {
-  return <ManagePage title="PageSpeed" requireSite>{({ siteId }) => <div className="p-6"><p className="text-xs text-muted">PageSpeed for site {siteId}</p></div>}</ManagePage>;
+  return (
+    <ManagePage title="Pagespeed" requireSite>
+      {({ siteId }) => (
+        <div className="p-4">
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+            <h3 className="text-sm font-medium">Pagespeed</h3>
+            <p className="text-[10px] text-muted mt-1">Pagespeed management — wiring in progress.</p>
+          </div>
+        </div>
+      )}
+    </ManagePage>
+  );
 }
