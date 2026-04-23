@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/topbar";
+import { ManageProvider } from "./manage-context";
 import { AlertRibbon } from "./alert-ribbon";
 
 interface Subscriber {
@@ -273,7 +274,15 @@ export function ManageShell({
               </>
             )}
           </div>
-          {children}
+          <ManageProvider value={{
+            subscriberId: selectedSubscriberId,
+            siteId: selectedSiteId,
+            subscriberName: selectedSubscriber?.name || null,
+            siteName: selectedSite?.name || null,
+            plan: selectedSubscriber?.plan || null,
+          }}>
+            {children}
+          </ManageProvider>
         </main>
       </div>
     </div>
