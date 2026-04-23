@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 interface AlertEvent {
   id: string;
@@ -40,9 +40,14 @@ export function AlertRibbon() {
   const [cursorX, setCursorX] = useState<number | null>(null);
   const [cursorPct, setCursorPct] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [panOffset, setPanOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; offset: number } | null>(null);
+  const graphRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoading(true);
+    setPanOffset(0);
     fetch(`/api/manage/alerts?range=${timeFilter}`)
       .then(r => r.ok ? r.json() : { events: [] })
       .then(data => setEvents(data.events || []))
@@ -72,8 +77,11 @@ export function AlertRibbon() {
         start = t;
       }
     }
-    return { rangeStart: start.getTime(), rangeEnd: now.getTime() };
-  }, [timeFilter]);
+    return {
+      rangeStart: start.getTime() - panOffset,
+      rangeEnd: now.getTime() - panOffset,
+    };
+  }, [timeFilter, panOffset]);
 
   function xPercent(timestamp: string): number {
     const t = new Date(timestamp).getTime();
@@ -172,16 +180,37 @@ export function AlertRibbon() {
       </div>
 
       <div
-        className="ribbon-graph"
+        ref={graphRef}
+        className={`ribbon-graph ${isDragging ? "ribbon-dragging" : ""}`}
+        onMouseDown={(e) => {
+          setIsDragging(true);
+          dragStartRef.current = { x: e.clientX, offset: panOffset };
+          setCursorX(null);
+          setCursorPct(null);
+        }}
         onMouseMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const pct = (x / rect.width) * 100;
-          setCursorX(x);
-          setCursorPct(pct);
-          setTooltipPos({ x: e.clientX, y: rect.bottom });
+          if (isDragging && dragStartRef.current) {
+            const dx = dragStartRef.current.x - e.clientX;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const range = rangeEnd - rangeStart;
+            const pxToMs = range / rect.width;
+            setPanOffset(dragStartRef.current.offset + dx * pxToMs);
+          } else {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const pct = (x / rect.width) * 100;
+            setCursorX(x);
+            setCursorPct(pct);
+            setTooltipPos({ x: e.clientX, y: rect.bottom });
+          }
+        }}
+        onMouseUp={() => {
+          setIsDragging(false);
+          dragStartRef.current = null;
         }}
         onMouseLeave={() => {
+          setIsDragging(false);
+          dragStartRef.current = null;
           setCursorX(null);
           setCursorPct(null);
         }}
@@ -379,6 +408,11 @@ const ribbonStyles = `
   .ribbon-graph {
     padding: 4px 16px 8px;
     position: relative;
+    cursor: grab;
+    user-select: none;
+  }
+  .ribbon-dragging {
+    cursor: grabbing;
   }
   .ribbon-svg { display: block; }
 
