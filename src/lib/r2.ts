@@ -35,6 +35,7 @@ export async function createPresignedUpload(opts: {
     Bucket: BUCKET,
     Key: opts.key,
     ContentType: opts.contentType,
+    CacheControl: "public, max-age=31536000, immutable",
     ...(opts.maxSizeBytes && { ContentLength: opts.maxSizeBytes }),
   });
 
@@ -62,6 +63,7 @@ export async function uploadBufferToR2(
       Key: key,
       Body: body,
       ContentType: contentType,
+      CacheControl: "public, max-age=31536000, immutable",
     })
   );
   return `${PUBLIC_DOMAIN}/${key}`;
