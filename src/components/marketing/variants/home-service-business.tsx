@@ -14,7 +14,7 @@ export default function HomeServiceBusiness({ data, prefix }: Props) {
   return (
     <>
       <section className="ws-hero">
-        {data.heroImage && <img src={data.heroImage} alt="" className="ws-hero-bg" />}
+        {data.heroImage && <img src={data.heroImage} alt={data.heroTitle || ""} className="ws-hero-bg" width={1920} height={1080} fetchPriority="high" />}
         <div className="ws-hero-overlay">
           <div className="ws-container ws-hero-content">
             <h1 className="ws-hero-title">{data.heroTitle}</h1>
@@ -46,7 +46,7 @@ export default function HomeServiceBusiness({ data, prefix }: Props) {
               {data.services.map((service, i) => (
                 <div key={i} className="ws-service-card">
                   {service.image && (
-                    <img src={service.image} alt={service.title} className="ws-service-img" />
+                    <img src={service.image} alt={service.title} className="ws-service-img" width={640} height={360} loading="lazy" />
                   )}
                   <h3 className="ws-service-name">{service.title}</h3>
                   <p className="ws-service-desc">{service.description}</p>
@@ -67,7 +67,7 @@ export default function HomeServiceBusiness({ data, prefix }: Props) {
             <div className="ws-gallery">
               {data.galleryImages.slice(0, 6).map((img, i) => (
                 <a key={i} href={`${prefix}/work`} className="ws-gallery-item">
-                  <img src={img.url} alt={img.alt} />
+                  <img src={img.url} alt={img.alt || ""} width={400} height={400} loading="lazy" />
                 </a>
               ))}
             </div>
@@ -170,7 +170,8 @@ const serviceBusinessStyles = `
   }
   .ws-service-desc {
     font-size: 14px;
-    color: var(--ws-muted);
+    color: var(--ws-text);
+    opacity: 0.7;
     padding: 0 16px 16px;
     line-height: 1.6;
   }

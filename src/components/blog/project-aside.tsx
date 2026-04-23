@@ -82,7 +82,7 @@ export function ProjectHubAside({
               return (
                 <a key={p.slug} href={href} className="pj-aside-nav-item">
                   {p.coverImage && (
-                    <img src={p.coverImage} alt={p.name} className="pj-aside-thumb" />
+                    <img src={p.coverImage} alt={p.name} className="pj-aside-thumb" width={80} height={60} loading="lazy" />
                   )}
                   <div>
                     <span className="pj-aside-nav-name">{p.name}</span>
@@ -161,7 +161,7 @@ export function ProjectDetailAside({
             {prev && (
               <a href={prev.slug} className="pj-sibling">
                 {prev.coverImage && (
-                  <img src={prev.coverImage} alt={prev.name} className="pj-sibling-img" />
+                  <img src={prev.coverImage} alt={prev.name} className="pj-sibling-img" width={120} height={80} loading="lazy" />
                 )}
                 <div>
                   <span className="pj-sibling-dir">&larr; Previous</span>
@@ -172,7 +172,7 @@ export function ProjectDetailAside({
             {next && (
               <a href={next.slug} className="pj-sibling">
                 {next.coverImage && (
-                  <img src={next.coverImage} alt={next.name} className="pj-sibling-img" />
+                  <img src={next.coverImage} alt={next.name} className="pj-sibling-img" width={120} height={80} loading="lazy" />
                 )}
                 <div>
                   <span className="pj-sibling-dir">Next &rarr;</span>

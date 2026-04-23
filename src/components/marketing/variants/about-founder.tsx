@@ -37,7 +37,7 @@ export default function AboutFounder({ data, prefix }: Props) {
           <div className="ws-container">
             <div className="ws-founder-body">
               {data.aboutHero && (
-                <img src={data.aboutHero} alt="" className="ws-founder-portrait" />
+                <img src={data.aboutHero} alt="About" className="ws-founder-portrait" width={400} height={500} loading="lazy" />
               )}
               <div
                 className="ws-founder-story"

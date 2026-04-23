@@ -17,7 +17,7 @@ export default function AboutSoloPractitioner({ data, siteSlug, customDomain }: 
   return (
     <>
       <section className="ws-about-hero">
-        {data.aboutHero && <img src={data.aboutHero} alt="" className="ws-about-hero-bg" />}
+        {data.aboutHero && <img src={data.aboutHero} alt="About" className="ws-about-hero-bg" width={1920} height={1080} fetchPriority="high" />}
         <div className="ws-about-hero-overlay">
           <div className="ws-container">
             <h1 className="ws-about-title">{data.headline}</h1>

@@ -146,7 +146,7 @@ gtag('config', '${ga4MeasurementId}');`}
         <div className="bs-header-inner">
           <a href={navLinks[0]?.href || "/"} className="bs-brand" aria-label={siteName}>
             {theme.logoUrl ? (
-              <img src={theme.logoUrl} alt={siteName} className="bs-logo" />
+              <img src={theme.logoUrl} alt={siteName} className="bs-logo" width={160} height={40} />
             ) : (
               <span className="bs-site-name">{siteName}</span>
             )}

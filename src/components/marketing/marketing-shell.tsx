@@ -116,7 +116,7 @@ gtag('config', '${ga4MeasurementId}');`}
         <div className="ws-container ws-header-inner">
           <a href="/" className="ws-brand" aria-label={siteName}>
             {logoUrl ? (
-              <img src={logoUrl} alt={siteName} className="ws-logo" />
+              <img src={logoUrl} alt={siteName} className="ws-logo" width={200} height={40} />
             ) : (
               <span className="ws-brand-name">{siteName}</span>
             )}
@@ -221,11 +221,17 @@ const shellStyles = `
   .ws-nav-link {
     font-size: 15px;
     font-weight: 500;
-    color: var(--ws-muted);
+    color: var(--ws-text);
+    opacity: 0.6;
     text-decoration: none;
-    transition: color 0.15s;
+    transition: color 0.15s, opacity 0.15s;
+    padding: 12px 0;
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
   }
-  .ws-nav-link:hover, .ws-nav-active { color: var(--ws-primary); }
+  .ws-nav-link:hover { opacity: 1; }
+  .ws-nav-active { color: var(--ws-primary); opacity: 1; }
 
   /* Footer */
   .ws-footer {
@@ -254,12 +260,12 @@ const shellStyles = `
     font-style: italic;
     max-width: 400px;
   }
-  .ws-footer-contact { font-size: 13px; color: var(--ws-muted); margin-top: 8px; }
-  .ws-footer-nav { display: flex; flex-direction: column; gap: 8px; }
-  .ws-footer-link { font-size: 14px; color: var(--ws-muted); text-decoration: none; }
-  .ws-footer-link:hover { color: var(--ws-accent); }
+  .ws-footer-contact { font-size: 14px; color: var(--ws-text); margin-top: 8px; opacity: 0.7; }
+  .ws-footer-nav { display: flex; flex-direction: column; gap: 4px; }
+  .ws-footer-link { font-size: 14px; color: var(--ws-text); text-decoration: none; opacity: 0.7; padding: 8px 0; min-height: 44px; display: inline-flex; align-items: center; }
+  .ws-footer-link:hover { color: var(--ws-accent); opacity: 1; }
   .ws-powered { margin-top: 16px; font-size: 11px; }
-  .ws-powered a { color: var(--ws-muted); text-decoration: none; opacity: 0.6; }
+  .ws-powered a { color: var(--ws-text); text-decoration: none; opacity: 0.5; }
   .ws-powered a:hover { opacity: 1; }
   .ws-copyright {
     padding-top: 16px;
@@ -292,7 +298,8 @@ const shellStyles = `
   }
   .ws-section-subtitle {
     font-size: 17px;
-    color: var(--ws-muted);
+    color: var(--ws-text);
+    opacity: 0.7;
     max-width: 600px;
     line-height: 1.6;
     margin-bottom: 40px;
