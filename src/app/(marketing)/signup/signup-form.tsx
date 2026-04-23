@@ -168,7 +168,7 @@ const formStyles = `
     width: 100%;
     padding: 12px 14px;
     font-size: 15px;
-    border: 2px solid #e5e7eb;
+    border: 1px solid #c5cbd3;
     border-radius: 8px;
     background: #f9fafb;
     color: #374151;
