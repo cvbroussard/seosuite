@@ -218,12 +218,14 @@ export function ManageShell({
             {NAV_GROUPS.map(group => {
               const isExpanded = expandedGroup === group.label;
               const containsActive = groupContainsActive(group);
+              const disabled = selectedSubscriberId === "all";
 
               return (
-                <div key={group.label}>
+                <div key={group.label} className={disabled ? "opacity-30 pointer-events-none" : ""}>
                   {isExpanded && <div className="my-1 border-t border-border" />}
                   <button
                     onClick={() => setExpandedGroup(isExpanded ? null : group.label)}
+                    disabled={disabled}
                     className={`flex w-full items-center gap-2 rounded px-2.5 py-[7px] text-[13px] transition-colors ${
                       containsActive ? "text-foreground font-medium" : "text-muted hover:text-foreground"
                     }`}
