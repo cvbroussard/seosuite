@@ -43,6 +43,7 @@ export function ProductsClient() {
   const [saving, setSaving] = useState(false);
   const [featureInput, setFeatureInput] = useState("");
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [stripeAction, setStripeAction] = useState<string | null>(null);
 
   useEffect(() => { loadProducts(); }, []);
 
@@ -129,6 +130,25 @@ export function ProductsClient() {
       setCreating(false);
     }
     setSaving(false);
+  }
+
+  async function stripeSync(id: string, action: "create_stripe" | "sync_stripe") {
+    setStripeAction(action);
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadProducts();
+        if (data.stripe_price_id && editing) {
+          setEditing({ ...editing, stripe_price_id: data.stripe_price_id });
+        }
+      }
+    } catch { /* ignore */ }
+    setStripeAction(null);
   }
 
   async function deactivate(id: string) {
@@ -290,6 +310,39 @@ export function ProductsClient() {
                 <input type="checkbox" checked={editing.highlight} onChange={e => updateField("highlight", e.target.checked)} />
                 Highlight (most popular badge)
               </label>
+
+              {/* Stripe actions */}
+              {!creating && (
+                <div className="rounded border border-border bg-background p-3">
+                  <p className="text-[10px] text-muted mb-2">Stripe</p>
+                  <div className="flex items-center gap-2">
+                    {editing.stripe_price_id ? (
+                      <>
+                        <span className="rounded bg-success/10 px-2 py-0.5 text-[10px] text-success">Linked</span>
+                        <span className="text-[9px] text-muted font-mono truncate flex-1">{editing.stripe_price_id}</span>
+                        <button
+                          onClick={() => stripeSync(editing.id, "sync_stripe")}
+                          disabled={stripeAction !== null}
+                          className="text-[10px] text-accent hover:underline disabled:opacity-50"
+                        >
+                          {stripeAction === "sync_stripe" ? "Syncing..." : "Sync name"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="rounded bg-warning/10 px-2 py-0.5 text-[10px] text-warning">Not linked</span>
+                        <button
+                          onClick={() => stripeSync(editing.id, "create_stripe")}
+                          disabled={stripeAction !== null || !editing.price.match(/\d/)}
+                          className="rounded bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                        >
+                          {stripeAction === "create_stripe" ? "Creating..." : "Create in Stripe"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Features with drag-and-drop + visibility */}
               <div>

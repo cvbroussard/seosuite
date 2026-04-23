@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { sql } from "@/lib/db";
+import { CheckoutButton } from "@/components/marketing-platform/checkout-button";
 
 export const metadata: Metadata = {
   title: "Pricing — TracPost",
@@ -11,7 +12,7 @@ export const revalidate = 300;
 
 export default async function PricingPage() {
   const products = await sql`
-    SELECT name, tagline, price, frequency, features, cta_text, cta_href, highlight, sort_order
+    SELECT id, name, tagline, price, frequency, features, cta_text, cta_href, highlight, sort_order, stripe_price_id
     FROM products
     WHERE is_active = true
     ORDER BY sort_order ASC
@@ -56,12 +57,20 @@ export default async function PricingPage() {
                       <li key={i}>{f.text}</li>
                     ))}
                   </ul>
-                  <Link
-                    href={ctaHref}
-                    className={isHighlight ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
-                  >
-                    {plan.cta_text as string}
-                  </Link>
+                  {plan.stripe_price_id && !plan.cta_href ? (
+                    <CheckoutButton
+                      productId={plan.id as string}
+                      label={plan.cta_text as string}
+                      className={isHighlight ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
+                    />
+                  ) : (
+                    <Link
+                      href={ctaHref}
+                      className={isHighlight ? "mp-btn-primary mp-btn-lg mp-plan-cta" : "mp-btn-outline mp-btn-lg mp-plan-cta"}
+                    >
+                      {plan.cta_text as string}
+                    </Link>
+                  )}
                 </div>
               );
             })}
