@@ -129,17 +129,93 @@ function SiteOverviewContent({ siteId }: { siteId: string }) {
   );
 }
 
+interface SubscriberData {
+  subscriber: { id: string; name: string; email: string; plan: string; isActive: boolean; createdAt: string };
+  sites: Array<{
+    id: string; name: string; url: string | null; customDomain: string | null;
+    autopilot: boolean; status: string; assets: number; published: number; connections: number;
+  }>;
+}
+
+function SubscriberOverview({ subscriberId }: { subscriberId: string }) {
+  const [data, setData] = useState<SubscriberData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    setData(null);
+    fetch(`/api/manage/subscriber?id=${subscriberId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setData(d))
+      .finally(() => setLoading(false));
+  }, [subscriberId]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!data) return <p className="p-6 text-xs text-muted">Failed to load subscriber.</p>;
+
+  const { subscriber, sites } = data;
+  const totalAssets = sites.reduce((s, x) => s + x.assets, 0);
+  const totalPublished = sites.reduce((s, x) => s + x.published, 0);
+  const totalConnections = sites.reduce((s, x) => s + x.connections, 0);
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Rollup stats */}
+      <div className="grid grid-cols-4 gap-2">
+        <Stat label="Sites" value={sites.length} />
+        <Stat label="Total Assets" value={totalAssets} />
+        <Stat label="Published" value={totalPublished} accent />
+        <Stat label="Connections" value={totalConnections} />
+      </div>
+
+      {/* Subscriber info */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+          <h3 className="text-sm font-medium mb-3">Subscriber</h3>
+          <Row label="Email" value={subscriber.email || "—"} />
+          <Row label="Since" value={new Date(subscriber.createdAt).toLocaleDateString()} />
+        </div>
+
+        {/* Sites list */}
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+          <h3 className="text-sm font-medium mb-3">Sites ({sites.length})</h3>
+          <div className="space-y-2">
+            {sites.map(site => (
+              <div key={site.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                <div>
+                  <p className="text-xs font-medium">{site.name}</p>
+                  <p className="text-[10px] text-muted">{site.customDomain || site.url || "No domain"}</p>
+                </div>
+                <div className="flex items-center gap-3 text-[10px]">
+                  <span>{site.assets} assets</span>
+                  <span className="text-success">{site.published} published</span>
+                  <span className={`rounded px-1.5 py-0.5 ${
+                    site.status === "complete" ? "bg-success/10 text-success"
+                    : site.status === "in_progress" ? "bg-accent/10 text-accent"
+                    : "bg-muted/10 text-muted"
+                  }`}>{site.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ManageDashboard() {
   const { subscriberId, siteId } = useManageContext();
 
   if (subscriberId === "all") return null;
-  if (siteId === "all") {
-    return (
-      <div className="p-6">
-        <p className="text-xs text-muted">Select a site to view the overview.</p>
-      </div>
-    );
-  }
+  if (siteId === "all") return <SubscriberOverview subscriberId={subscriberId} />;
 
   return <SiteOverviewContent siteId={siteId} />;
 }
