@@ -87,13 +87,66 @@ export function AlertRibbon() {
     categoryY[cat.key] = 28 + i * 28;
   });
 
-  const totalHeight = 28 + CATEGORIES.length * 28 + 10;
+  const totalHeight = 28 + CATEGORIES.length * 28 + 20;
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const e of events) c[e.category] = (c[e.category] || 0) + 1;
     return c;
   }, [events]);
+
+  // Time ticks for x-axis markers
+  const timeTicks = useMemo(() => {
+    const ticks: Array<{ pct: number; label: string }> = [];
+    const range = rangeEnd - rangeStart;
+    if (range <= 0) return ticks;
+
+    if (timeFilter === "today" || timeFilter === "yesterday") {
+      // Every 3 hours
+      const base = new Date(rangeStart);
+      base.setMinutes(0, 0, 0);
+      const hour = base.getHours();
+      const nextTick = new Date(base);
+      nextTick.setHours(hour - (hour % 3) + 3);
+      while (nextTick.getTime() < rangeEnd) {
+        const pct = ((nextTick.getTime() - rangeStart) / range) * 100;
+        if (pct > 2 && pct < 98) {
+          const h = nextTick.getHours();
+          const label = h === 0 ? "12am" : h === 12 ? "12pm" : h > 12 ? `${h - 12}pm` : `${h}am`;
+          ticks.push({ pct, label });
+        }
+        nextTick.setHours(nextTick.getHours() + 3);
+      }
+    } else if (timeFilter === "7d") {
+      // Daily
+      const base = new Date(rangeStart);
+      base.setHours(0, 0, 0, 0);
+      base.setDate(base.getDate() + 1);
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      while (base.getTime() < rangeEnd) {
+        const pct = ((base.getTime() - rangeStart) / range) * 100;
+        if (pct > 2 && pct < 98) {
+          ticks.push({ pct, label: days[base.getDay()] });
+        }
+        base.setDate(base.getDate() + 1);
+      }
+    } else {
+      // Weekly
+      const base = new Date(rangeStart);
+      base.setHours(0, 0, 0, 0);
+      const dayOfWeek = base.getDay();
+      base.setDate(base.getDate() + (7 - dayOfWeek));
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      while (base.getTime() < rangeEnd) {
+        const pct = ((base.getTime() - rangeStart) / range) * 100;
+        if (pct > 2 && pct < 98) {
+          ticks.push({ pct, label: `${months[base.getMonth()]} ${base.getDate()}` });
+        }
+        base.setDate(base.getDate() + 7);
+      }
+    }
+    return ticks;
+  }, [timeFilter, rangeStart, rangeEnd]);
 
   return (
     <div className="ribbon-wrap">
@@ -124,6 +177,29 @@ export function AlertRibbon() {
           </div>
         ) : (
           <svg width="100%" height={totalHeight} className="ribbon-svg">
+            {/* Time tick marks */}
+            {timeTicks.map(tick => (
+              <g key={tick.pct}>
+                <line
+                  x1={`${tick.pct}%`} x2={`${tick.pct}%`}
+                  y1={12} y2={totalHeight - 4}
+                  stroke="currentColor"
+                  strokeOpacity={0.06}
+                  strokeWidth={1}
+                />
+                <text
+                  x={`${tick.pct}%`}
+                  y={totalHeight}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  fontSize={8}
+                  opacity={0.3}
+                >
+                  {tick.label}
+                </text>
+              </g>
+            ))}
+
             {CATEGORIES.map(cat => (
               <g key={cat.key}>
                 <line
