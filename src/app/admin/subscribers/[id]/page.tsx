@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SiteActions } from "./site-actions";
+import { BillingCard } from "./billing-card";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,9 @@ export default async function SubscriberDetail({
           <span>Since {new Date(subscriber.created_at).toLocaleDateString()}</span>
         </div>
       </div>
+
+      {/* Billing */}
+      <BillingCard subscriptionId={id} />
 
       {/* Sites */}
       <section className="mb-8">
