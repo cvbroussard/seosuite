@@ -37,8 +37,9 @@ export function AlertRibbon() {
   const [timeFilter, setTimeFilter] = useState("7d");
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredEvent, setHoveredEvent] = useState<AlertEvent | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [cursorX, setCursorX] = useState<number | null>(null);
+  const [cursorPct, setCursorPct] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     setLoading(true);
@@ -170,7 +171,21 @@ export function AlertRibbon() {
         </div>
       </div>
 
-      <div className="ribbon-graph">
+      <div
+        className="ribbon-graph"
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const pct = (x / rect.width) * 100;
+          setCursorX(x);
+          setCursorPct(pct);
+          setTooltipPos({ x: e.clientX, y: rect.bottom });
+        }}
+        onMouseLeave={() => {
+          setCursorX(null);
+          setCursorPct(null);
+        }}
+      >
         {loading ? (
           <div style={{ height: totalHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
@@ -242,18 +257,23 @@ export function AlertRibbon() {
                     fill={dotColor}
                     opacity={0.85}
                     className="ribbon-dot"
-                    onMouseEnter={(e) => {
-                      setHoveredEvent(evt);
-                      setMousePos({ x: e.clientX, y: e.clientY });
-                    }}
-                    onMouseLeave={() => setHoveredEvent(null)}
-                    onClick={() => {
-                      if (evt.href) window.location.href = evt.href;
-                    }}
                   />
                 </g>
               );
             })}
+
+            {/* Cursor line */}
+            {cursorX !== null && (
+              <line
+                x1={cursorX} x2={cursorX}
+                y1={8} y2={totalHeight - 8}
+                stroke="currentColor"
+                strokeOpacity={0.25}
+                strokeWidth={1}
+                strokeDasharray="3,3"
+                pointerEvents="none"
+              />
+            )}
 
             {events.length === 0 && (
               <text x="50%" y={totalHeight / 2} textAnchor="middle" fill="#6b7280" fontSize={12} opacity={0.5}>
@@ -264,20 +284,46 @@ export function AlertRibbon() {
         )}
       </div>
 
-      {hoveredEvent && (
-        <div
-          className="ribbon-tooltip"
-          style={{ left: mousePos.x + 12, top: mousePos.y - 20 }}
-        >
-          <p className="ribbon-tooltip-title">{hoveredEvent.title}</p>
-          <p className="ribbon-tooltip-detail">{hoveredEvent.detail}</p>
-          <p className="ribbon-tooltip-time">
-            {new Date(hoveredEvent.timestamp).toLocaleString("en-US", {
-              month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-            })}
-          </p>
-        </div>
-      )}
+      {/* Tooltip — shows events near the cursor */}
+      {cursorPct !== null && (() => {
+        const snapRange = timeFilter === "30d" ? 3 : timeFilter === "7d" ? 4 : 6;
+        const nearby = events.filter(evt => {
+          const x = xPercent(evt.timestamp);
+          return Math.abs(x - cursorPct) < snapRange;
+        });
+        if (nearby.length === 0) return null;
+
+        const cursorTime = new Date(rangeStart + (cursorPct / 100) * (rangeEnd - rangeStart));
+        const timeLabel = cursorTime.toLocaleString("en-US", {
+          month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+        });
+
+        return (
+          <div
+            className="ribbon-tooltip"
+            style={{ left: tooltipPos.x + 16, top: tooltipPos.y + 8 }}
+          >
+            <p className="ribbon-tooltip-time">{timeLabel}</p>
+            <div className="ribbon-tooltip-events">
+              {nearby.slice(0, 5).map(evt => {
+                const dotColor = CATEGORIES.find(c => c.key === evt.category)?.color || "#94a3b8";
+                return (
+                  <div key={evt.id} className="ribbon-tooltip-event">
+                    <span className="ribbon-tooltip-dot" style={{ background: dotColor }} />
+                    <div>
+                      <p className="ribbon-tooltip-title">{evt.title}</p>
+                      <p className="ribbon-tooltip-detail">{evt.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {nearby.length > 5 && (
+                <p className="ribbon-tooltip-detail">+{nearby.length - 5} more</p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <style dangerouslySetInnerHTML={{ __html: ribbonStyles }} />
     </div>
@@ -349,23 +395,42 @@ const ribbonStyles = `
     color: #fff;
     border-radius: 8px;
     padding: 10px 14px;
-    max-width: 280px;
+    max-width: 300px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     pointer-events: none;
-  }
-  .ribbon-tooltip-title {
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 3px;
-  }
-  .ribbon-tooltip-detail {
-    font-size: 11px;
-    color: #94a3b8;
-    line-height: 1.4;
-    margin-bottom: 4px;
   }
   .ribbon-tooltip-time {
     font-size: 10px;
     color: #6b7280;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #333;
+  }
+  .ribbon-tooltip-events {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ribbon-tooltip-event {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .ribbon-tooltip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+  .ribbon-tooltip-title {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  .ribbon-tooltip-detail {
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.3;
   }
 `;
