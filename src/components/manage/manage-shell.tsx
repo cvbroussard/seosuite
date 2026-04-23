@@ -170,9 +170,7 @@ export function ManageShell({
         {/* Left nav with context pickers */}
         <aside className="flex h-full w-56 flex-col border-r border-border bg-surface overflow-y-auto">
           <div className="px-3 pt-4 pb-2 space-y-2">
-            {/* Subscriber picker */}
             <div>
-              <label className="block text-[9px] uppercase tracking-wider text-muted mb-1 px-1">Subscriber</label>
               <select
                 value={selectedSubscriberId}
                 onChange={e => handleSubscriberChange(e.target.value)}
@@ -185,9 +183,7 @@ export function ManageShell({
               </select>
             </div>
 
-            {/* Site picker */}
             <div>
-              <label className="block text-[9px] uppercase tracking-wider text-muted mb-1 px-1">Site</label>
               <select
                 value={selectedSiteId}
                 onChange={e => handleSiteChange(e.target.value)}
