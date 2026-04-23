@@ -91,14 +91,14 @@ export async function GET(req: NextRequest) {
       LIMIT 20
     `,
 
-    // Content + Billing — from notifications table
+    // Content + Billing — from notifications table (may not exist yet)
     sql`
       SELECT id, category, severity, title, body, metadata, created_at AS timestamp
       FROM notifications
       WHERE created_at >= ${sinceStr}
       ORDER BY created_at DESC
       LIMIT 50
-    `,
+    `.catch(() => []),
   ]);
 
   const events: Array<{
