@@ -5,20 +5,20 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const h = await headers();
   const host = (h.get("host") || "").toLowerCase().split(":")[0];
 
-  // Preview subdomain must not be indexed — it serves unreleased tenant
-  // content and would split ranking signals from the production domain.
   if (host === "preview.tracpost.com" || host === "staging.tracpost.com") {
     return {
       rules: { userAgent: "*", disallow: "/" },
     };
   }
 
+  const origin = host === "localhost" ? "http://localhost:3000" : `https://${host}`;
+
   return {
     rules: {
       userAgent: "*",
-      allow: "/blog/",
+      allow: "/",
       disallow: ["/dashboard/", "/admin/", "/api/"],
     },
-    sitemap: "https://tracpost.com/blog/sitemap.xml",
+    sitemap: `${origin}/sitemap.xml`,
   };
 }
