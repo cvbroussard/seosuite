@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const origin = customDomain ? `https://${customDomain}` : `https://preview.tracpost.com/${siteSlug}`;
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="${origin}/sitemap-style.xsl"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
     <loc>${origin}/sitemap-pages.xml</loc>

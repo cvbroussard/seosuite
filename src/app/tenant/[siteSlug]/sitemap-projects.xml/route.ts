@@ -36,7 +36,10 @@ export async function GET(_req: Request, { params }: RouteParams) {
     <priority>0.6</priority>
   </url>`).join("");
 
+  const origin = customDomain ? `https://${customDomain}` : `https://preview.tracpost.com/${siteSlug}`;
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="${origin}/sitemap-style.xsl"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${hubUrl}</loc>
