@@ -31,7 +31,7 @@ export default function WorkPricingTiers({ headline, subheadline, tiers }: Props
                   key={i}
                   className={`ws-tier ${tier.highlight ? "ws-tier-highlight" : ""}`}
                 >
-                  <h3 className="ws-tier-title">{tier.title}</h3>
+                  <h2 className="ws-tier-title">{tier.title}</h2>
                   {tier.description && <p className="ws-tier-desc">{tier.description}</p>}
                   <p className="ws-tier-price">{tier.price}</p>
                   {tier.features.length > 0 && (

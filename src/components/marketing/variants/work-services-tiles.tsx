@@ -29,7 +29,7 @@ export default function WorkServicesTiles({ headline, subheadline, tiles }: Prop
                 <div key={i} className="ws-tile">
                   {tile.image && <img src={tile.image} alt={tile.title} className="ws-tile-img" width={640} height={360} loading="lazy" />}
                   {tile.icon && !tile.image && <div className="ws-tile-icon">{tile.icon}</div>}
-                  <h3 className="ws-tile-title">{tile.title}</h3>
+                  <h2 className="ws-tile-title">{tile.title}</h2>
                   <p className="ws-tile-desc">{tile.description}</p>
                   {tile.cta && (
                     <a href={tile.cta.href} className="ws-tile-cta">
