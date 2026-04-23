@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Image from "next/image";
+import { ProjectTimeline } from "@/components/blog/project-timeline";
 import { resolveBlogSiteBySlug, getCustomDomain, getFavicon } from "@/lib/blog";
 import { sql } from "@/lib/db";
 import BlogShell, { type BlogTheme, type NavLink } from "@/components/blog/blog-shell";
@@ -284,58 +285,35 @@ export default async function ProjectPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Timeline sections */}
-      {Array.from(timeline.entries()).map(([month, { id, assets: monthAssets }]) => {
-        const captioned = monthAssets.filter((a) => a.context_note);
-        const uncaptioned = monthAssets.filter((a) => !a.context_note);
-
-        return (
-          <section key={month} id={id} className="pj-month">
-            <h2 className="pj-month-title">{month}</h2>
-
-            {/* Featured moments — captioned assets in two-column layout */}
-            {captioned.map((asset) => {
-              const isVideo = (asset.media_type as string) === "video";
-              const displayCaption = asset.display_caption ? String(asset.display_caption) : String(asset.context_note);
-              const altText = asset.alt_text ? String(asset.alt_text) : displayCaption;
-              const dateTaken = asset.date_taken
-                ? new Date(asset.date_taken as string).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                : null;
-
-              return (
-                <div key={String(asset.id)} className="pj-featured">
-                  <div className="pj-featured-media">
-                    {isVideo ? (
-                      <video src={String(asset.storage_url)} controls preload="metadata" />
-                    ) : (
-                      <Image src={String(asset.storage_url)} alt={altText} width={640} height={480} sizes="(max-width: 768px) 100vw, 50vw" quality={75} />
-                    )}
-                  </div>
-                  <div className="pj-featured-text">
-                    <p className="pj-featured-caption">{displayCaption}</p>
-                    {dateTaken && <span className="pj-featured-date">{dateTaken}</span>}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Gallery grid — uncaptioned assets */}
-            {uncaptioned.length > 0 && (
-              <div className="pj-gallery">
-                {uncaptioned.map((asset) => (
-                  <div key={String(asset.id)} className="pj-gallery-item">
-                    {(asset.media_type as string) === "video" ? (
-                      <video src={String(asset.storage_url)} controls preload="metadata" />
-                    ) : (
-                      <Image src={String(asset.storage_url)} alt="" width={400} height={400} sizes="(max-width: 640px) 50vw, 33vw" quality={75} />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
+      {/* Timeline — progressive loading: first month visible, rest on demand */}
+      <ProjectTimeline
+        sections={Array.from(timeline.entries()).map(([month, { id, assets: monthAssets }]) => ({
+          month,
+          id,
+          captioned: monthAssets
+            .filter((a) => a.context_note)
+            .map((a) => ({
+              id: String(a.id),
+              storage_url: String(a.storage_url),
+              context_note: a.context_note ? String(a.context_note) : null,
+              display_caption: a.display_caption ? String(a.display_caption) : null,
+              alt_text: a.alt_text ? String(a.alt_text) : null,
+              date_taken: a.date_taken ? String(a.date_taken) : null,
+              media_type: String(a.media_type),
+            })),
+          uncaptioned: monthAssets
+            .filter((a) => !a.context_note)
+            .map((a) => ({
+              id: String(a.id),
+              storage_url: String(a.storage_url),
+              context_note: null,
+              display_caption: null,
+              alt_text: null,
+              date_taken: a.date_taken ? String(a.date_taken) : null,
+              media_type: String(a.media_type),
+            })),
+        }))}
+      />
 
       <style dangerouslySetInnerHTML={{ __html: projectStyles }} />
     </BlogShell>
@@ -542,6 +520,45 @@ const projectStyles = `
 
   .pj-gallery-item:hover img {
     transform: scale(1.05);
+  }
+
+  .pj-gallery-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: calc(var(--bs-radius) / 2);
+    background: color-mix(in srgb, var(--bs-primary) 6%, var(--bs-bg));
+    border: 1px solid var(--bs-border);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bs-muted);
+    cursor: pointer;
+    aspect-ratio: 1;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .pj-gallery-more:hover {
+    color: var(--bs-accent);
+    border-color: var(--bs-accent);
+  }
+
+  .pj-load-more {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    margin-bottom: 32px;
+    border: 1px solid var(--bs-border);
+    border-radius: var(--bs-radius);
+    background: color-mix(in srgb, var(--bs-primary) 3%, var(--bs-bg));
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bs-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .pj-load-more:hover {
+    color: var(--bs-accent);
+    border-color: var(--bs-accent);
   }
 
   @media (max-width: 640px) {
