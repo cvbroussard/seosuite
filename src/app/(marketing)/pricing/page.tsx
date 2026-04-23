@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { sql } from "@/lib/db";
-import { CheckoutButton } from "@/components/marketing-platform/checkout-button";
 
 export const metadata: Metadata = {
   title: "Pricing — TracPost",
@@ -59,17 +58,18 @@ export default async function PricingPage() {
                   </ul>
                   {plan.stripe_price_id && !plan.cta_href ? (
                     <div className="mp-plan-actions">
-                      <CheckoutButton
-                        productId={plan.id as string}
-                        label={plan.cta_text as string}
+                      <Link
+                        href={`/signup?plan=${(plan.name as string).toLowerCase()}`}
                         className="mp-btn-primary mp-btn-lg mp-plan-cta"
-                      />
-                      <CheckoutButton
-                        productId={plan.id as string}
-                        label="Subscribe now"
-                        skipTrial
+                      >
+                        {plan.cta_text as string}
+                      </Link>
+                      <Link
+                        href={`/signup?plan=${(plan.name as string).toLowerCase()}&subscribe=true`}
                         className="mp-btn-outline mp-btn-lg mp-plan-cta"
-                      />
+                      >
+                        Subscribe now
+                      </Link>
                     </div>
                   ) : (
                     <Link

@@ -8,7 +8,7 @@ import { stripe } from "@/lib/stripe";
  * Creates a Stripe Checkout session with 14-day trial and redirects.
  */
 export async function POST(req: NextRequest) {
-  const { product_id, skip_trial } = await req.json();
+  const { product_id, skip_trial, customer_email } = await req.json();
 
   if (!product_id) {
     return NextResponse.json({ error: "product_id required" }, { status: 400 });
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     payment_method_types: ["card"],
     line_items: [{ price: product.stripe_price_id as string, quantity: 1 }],
     ...(trialDays ? { subscription_data: { trial_period_days: trialDays } } : {}),
+    ...(customer_email ? { customer_email } : {}),
     success_url: `${origin}/setup?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/pricing`,
     allow_promotion_codes: true,
