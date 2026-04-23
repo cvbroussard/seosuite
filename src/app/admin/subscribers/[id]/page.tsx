@@ -71,7 +71,9 @@ export default async function SubscriberDetail({
       </div>
 
       {/* Billing */}
-      <BillingCard subscriptionId={id} />
+      <div className="mb-8">
+        <BillingCard subscriptionId={id} />
+      </div>
 
       {/* Sites */}
       <section className="mb-8">
