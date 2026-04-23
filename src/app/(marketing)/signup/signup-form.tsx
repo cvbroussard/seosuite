@@ -128,18 +128,20 @@ const formStyles = `
     width: 100%;
     padding: 12px 14px;
     font-size: 15px;
-    border: 1px solid #d1d5db;
+    border: 2px solid #e5e7eb;
     border-radius: 8px;
-    background: #fff;
-    color: #1a1a1a;
-    transition: border-color 0.15s;
+    background: #f9fafb;
+    color: #374151;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
   }
   .su-field input:focus {
     outline: none;
     border-color: #1a1a1a;
-    box-shadow: 0 0 0 3px rgba(26,26,26,0.05);
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 0 0 3px rgba(26,26,26,0.06);
   }
-  .su-field input::placeholder { color: #9ca3af; }
+  .su-field input::placeholder { color: #b0b8c4; }
 
   .su-submit {
     width: 100%;
