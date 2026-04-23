@@ -234,7 +234,7 @@ export function AlertRibbon() {
                   x1={`${tick.pct}%`} x2={`${tick.pct}%`}
                   y1={12} y2={totalHeight - 4}
                   stroke="currentColor"
-                  strokeOpacity={0.06}
+                  strokeOpacity={0.15}
                   strokeWidth={1}
                 />
                 <text
@@ -243,7 +243,7 @@ export function AlertRibbon() {
                   textAnchor="middle"
                   fill="currentColor"
                   fontSize={8}
-                  opacity={0.3}
+                  opacity={0.5}
                 >
                   {tick.label}
                 </text>
