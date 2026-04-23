@@ -168,27 +168,27 @@ const formStyles = `
     width: 100%;
     padding: 12px 14px;
     font-size: 15px;
-    border: 1px solid #c5cbd3;
+    border: 1px solid #c5cbd3 !important;
     border-radius: 8px;
-    background: #f9fafb;
+    background: #f9fafb !important;
     color: #374151;
     transition: border-color 0.15s, background 0.15s, color 0.15s;
   }
   .su-field input:focus {
     outline: none;
-    border-color: #1a1a1a;
-    background: #fff;
+    border-color: #1a1a1a !important;
+    background: #fff !important;
     color: #111827;
     box-shadow: 0 0 0 3px rgba(26,26,26,0.06);
   }
   .su-field input::placeholder { color: #b0b8c4; }
 
   .su-field-error input {
-    border-color: #ef4444;
-    background: #fef2f2;
+    border-color: #ef4444 !important;
+    background: #fef2f2 !important;
   }
   .su-field-error input:focus {
-    border-color: #ef4444;
+    border-color: #ef4444 !important;
     box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
   }
   .su-error {
