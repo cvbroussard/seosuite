@@ -46,6 +46,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Brand Playbook", path: "/brand" },
       { label: "Site Controls", path: "/sites" },
       { label: "Website", path: "/website" },
+      { label: "Corrections", path: "/corrections" },
+      { label: "Quality Gates", path: "/quality" },
     ],
   },
   {
@@ -54,8 +56,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Pipeline", path: "/pipeline" },
       { label: "Media", path: "/media" },
       { label: "Blog", path: "/blog" },
-      { label: "Corrections", path: "/corrections" },
-      { label: "Quality Gates", path: "/quality" },
     ],
   },
   {
