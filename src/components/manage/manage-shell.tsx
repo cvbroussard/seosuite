@@ -251,6 +251,25 @@ export function ManageShell({
 
         {/* Content area */}
         <main className="flex-1 overflow-y-auto">
+          {/* Context header */}
+          <div className="flex items-center gap-3 border-b border-border px-5 py-3">
+            {selectedSubscriber ? (
+              <>
+                <h1 className="text-sm font-semibold">{selectedSubscriber.name}</h1>
+                {selectedSite && selectedSiteId !== "all" && (
+                  <>
+                    <span className="text-xs text-muted">/</span>
+                    <span className="text-sm">{selectedSite.name}</span>
+                  </>
+                )}
+                <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+                  {selectedSubscriber.plan}
+                </span>
+              </>
+            ) : (
+              <h1 className="text-sm text-muted">Select a subscriber to get started</h1>
+            )}
+          </div>
           {children}
         </main>
       </div>
