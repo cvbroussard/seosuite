@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const projectUrls = projects.map((p) => `
   <url>
     <loc>${publicProjectUrl(siteSlug, p.slug as string, customDomain)}</loc>
-    <lastmod>${new Date(p.updated_at as string).toISOString()}</lastmod>
+    <lastmod>${p.updated_at ? new Date(p.updated_at as string).toISOString() : new Date().toISOString()}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>`).join("");
