@@ -255,7 +255,8 @@ const shellStyles = `
   }
   .ws-footer-tagline {
     font-size: 14px;
-    color: var(--ws-muted);
+    color: var(--ws-text);
+    opacity: 0.8;
     margin-top: 6px;
     font-style: italic;
     max-width: 400px;
@@ -270,7 +271,7 @@ const shellStyles = `
   .ws-copyright {
     padding-top: 16px;
     font-size: 12px;
-    color: var(--ws-muted);
+    color: var(--ws-text);
     opacity: 0.6;
   }
 

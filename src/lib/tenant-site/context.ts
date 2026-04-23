@@ -40,6 +40,17 @@ export interface TenantContext {
   pageConfig: PageConfig;
 }
 
+function ensureContrast(hex: string): string {
+  // Darken muted colors that don't meet WCAG AA 4.5:1 on white.
+  // Light grays like #6b7280 (4.56:1) barely pass — clamp to #4b5563 (7.15:1).
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  if (luminance > 0.4) return "#4b5563";
+  return hex;
+}
+
 const DEFAULT_THEME: TenantTheme = {
   primaryColor: "#1a1a1a",
   accentColor: "#3b82f6",
@@ -81,7 +92,7 @@ export async function loadTenantContext(siteSlug: string): Promise<TenantContext
     accentColor: rawTheme.accentColor || DEFAULT_THEME.accentColor,
     backgroundColor: rawTheme.backgroundColor || DEFAULT_THEME.backgroundColor,
     textColor: rawTheme.textColor || DEFAULT_THEME.textColor,
-    mutedColor: rawTheme.mutedColor || DEFAULT_THEME.mutedColor,
+    mutedColor: ensureContrast(rawTheme.mutedColor || DEFAULT_THEME.mutedColor),
     borderColor: rawTheme.borderColor || DEFAULT_THEME.borderColor,
     fontFamily: rawTheme.fontFamily || DEFAULT_THEME.fontFamily,
     headingFontFamily:
