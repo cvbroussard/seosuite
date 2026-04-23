@@ -129,6 +129,15 @@ export function ManageShell({
     setSubscriberSearch("");
   }
 
+  // Set subscriber when site is selected
+  function handleSiteChange(siteId: string) {
+    setSelectedSiteId(siteId);
+    if (siteId !== "all") {
+      const site = sites.find(s => s.id === siteId);
+      if (site) setSelectedSubscriberId(site.subscriptionId);
+    }
+  }
+
   const selectedSubscriber = subscribers.find(s => s.id === selectedSubscriberId);
   const selectedSite = sites.find(s => s.id === selectedSiteId);
 
@@ -178,7 +187,7 @@ export function ManageShell({
               <label className="block text-[9px] uppercase tracking-wider text-muted mb-1 px-1">Site</label>
               <select
                 value={selectedSiteId}
-                onChange={e => setSelectedSiteId(e.target.value)}
+                onChange={e => handleSiteChange(e.target.value)}
                 className="w-full rounded border border-border bg-background px-2 py-1.5 text-[13px] focus:border-accent focus:outline-none"
               >
                 <option value="all">All sites ({filteredSites.length})</option>
