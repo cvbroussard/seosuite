@@ -7,7 +7,6 @@ import {
   WorkContentEditor,
 } from "@/app/admin/sites/[siteId]/website-pane";
 import type { PageConfig, WorkContent } from "@/lib/tenant-site";
-import { normalizePageConfig } from "@/lib/tenant-site/page-config";
 
 interface WebsiteData {
   site: {
@@ -50,7 +49,7 @@ function WebsiteContent({ siteId }: { siteId: string }) {
 
   if (!data) return <p className="p-6 text-xs text-muted">Failed to load website data.</p>;
 
-  const pageConfig = normalizePageConfig(data.site.page_config, data.site.business_type || null);
+  const pageConfig = (data.site.page_config || []) as PageConfig;
   const workContent = (data.site.work_content || {}) as WorkContent;
   const workVariant = pageConfig.find(s => s.key === "work")?.variant || "services_tiles";
 

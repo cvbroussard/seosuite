@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { normalizePageConfig } from "@/lib/tenant-site/page-config";
 
 /**
  * GET /api/manage/site?site_id=xxx&view=overview|publishing|visual|website
@@ -108,7 +109,14 @@ export async function GET(req: NextRequest) {
       WHERE s.id = ${siteId}
     `;
 
-    return NextResponse.json({ site });
+    const pageConfig = normalizePageConfig(site?.page_config, (site?.business_type as string) || null);
+
+    return NextResponse.json({
+      site: {
+        ...site,
+        page_config: pageConfig,
+      },
+    });
   }
 
   if (view === "corrections") {
