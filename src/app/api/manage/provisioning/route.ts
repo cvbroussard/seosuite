@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const tasks = await sql`
     SELECT task_key, title, owner, depends_on, status, milestone,
-           sort_order, started_at, completed_at, notes
+           sort_order, step_label, started_at, completed_at, notes
     FROM provisioning_tasks
     WHERE subscription_id = ${subscriberId}
     ORDER BY sort_order ASC

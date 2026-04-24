@@ -9,6 +9,7 @@ interface Task {
   depends_on: string[];
   status: string;
   milestone: string | null;
+  step_label: string | null;
   sort_order: number;
   started_at: string | null;
   completed_at: string | null;
@@ -109,6 +110,9 @@ export function ProvisioningPipeline({ subscriberId }: { subscriberId: string })
                 }`} />
                 {i < tasks.length - 1 && <div className="w-px h-2 bg-border -mb-3" />}
               </div>
+
+              {/* Step label */}
+              <span className="text-[10px] text-muted w-5 text-right shrink-0">{task.step_label}</span>
 
               {/* Task info */}
               <div className="flex-1 min-w-0">
