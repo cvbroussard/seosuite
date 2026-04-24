@@ -2,53 +2,33 @@
 
 import { useState, useEffect } from "react";
 import { ManagePage } from "@/components/manage/manage-page";
+import { CorrectionsPanel } from "@/app/admin/sites/[siteId]/website-pane";
 
-interface SiteSettings {
-  site: {
-    image_style: string | null;
-    image_variations: string[] | null;
-    image_processing_mode: string | null;
-    inline_upload_count: number;
-    inline_ai_count: number;
-    content_vibe: string | null;
-  };
-}
-
-function SiteControlsContent({ siteId }: { siteId: string }) {
-  const [data, setData] = useState<SiteSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+function CopyGenContent({ siteId }: { siteId: string }) {
   const [contentVibe, setContentVibe] = useState("");
-  const [imageStyle, setImageStyle] = useState("");
-  const [processingMode, setProcessingMode] = useState("auto");
-  const [saving, setSaving] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     fetch(`/api/manage/site?site_id=${siteId}&view=visual`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        setData(d);
-        if (d?.site) {
-          setContentVibe(d.site.content_vibe || "");
-          setImageStyle(d.site.image_style || "");
-          setProcessingMode(d.site.image_processing_mode || "auto");
-        }
-      })
+      .then(d => { if (d?.site) setContentVibe(d.site.content_vibe || ""); })
       .finally(() => setLoading(false));
   }, [siteId]);
 
-  async function saveSection(section: string, payload: Record<string, unknown>) {
-    setSaving(section);
-    setSaved(null);
+  async function saveVibe() {
+    setSaving(true);
+    setSaved(false);
     await fetch("/api/admin/image-style", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteId, ...payload }),
+      body: JSON.stringify({ siteId, contentVibe }),
     });
-    setSaving(null);
-    setSaved(section);
-    setTimeout(() => setSaved(null), 2000);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   if (loading) {
@@ -74,23 +54,30 @@ function SiteControlsContent({ siteId }: { siteId: string }) {
         />
         <div className="mt-2 flex items-center gap-2">
           <button
-            onClick={() => saveSection("vibe", { contentVibe, style: imageStyle, variations: data?.site.image_variations || [], processingMode })}
-            disabled={saving === "vibe"}
+            onClick={saveVibe}
+            disabled={saving}
             className="bg-accent px-3 py-1 text-[10px] font-medium text-white rounded hover:bg-accent-hover disabled:opacity-50"
           >
             Save
           </button>
-          {saved === "vibe" && <span className="text-[10px] text-success">Saved</span>}
+          {saved && <span className="text-[10px] text-success">Saved</span>}
         </div>
+      </div>
+
+      {/* Content corrections */}
+      <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+        <h3 className="text-sm font-medium mb-1">Content Corrections</h3>
+        <p className="text-[10px] text-muted mb-3">Tenant-requested adjustments injected into all future generation prompts.</p>
+        <CorrectionsPanel siteId={siteId} />
       </div>
     </div>
   );
 }
 
-export default function ManageSitesPage() {
+export default function ManageCopyGenPage() {
   return (
-    <ManagePage title="Site Controls" requireSite>
-      {({ siteId }) => <SiteControlsContent siteId={siteId} />}
+    <ManagePage title="Copy Generation" requireSite>
+      {({ siteId }) => <CopyGenContent siteId={siteId} />}
     </ManagePage>
   );
 }
