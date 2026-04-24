@@ -61,7 +61,7 @@ export function MarketingFooter() {
 
           {FOOTER_COLUMNS.map((col) => (
             <div key={col.title} className="mp-footer-col">
-              <h4 className="mp-footer-col-title">{col.title}</h4>
+              <p className="mp-footer-col-title">{col.title}</p>
               <ul className="mp-footer-col-links">
                 {col.links.map((link) => (
                   <li key={link.label}>
