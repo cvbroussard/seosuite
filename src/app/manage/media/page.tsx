@@ -133,11 +133,11 @@ function MediaContent({ siteId }: { siteId: string }) {
             <Image
               src={asset.url}
               alt={asset.context || ""}
-              width={160}
-              height={160}
-              sizes="(max-width: 1200px) 14vw, 140px"
+              width={120}
+              height={120}
+              sizes="120px"
               quality={50}
-              className="w-full aspect-square object-cover"
+              style={{ width: "100%", height: "auto", aspectRatio: "1", objectFit: "cover" }}
             />
             <span className="absolute top-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[8px] font-mono text-white">
               {asset.quality ? Math.round(asset.quality * 100) : "—"}
