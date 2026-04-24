@@ -33,12 +33,6 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Provision",
-    items: [
-      { label: "Pipeline", path: "/provisioning" },
-    ],
-  },
-  {
     label: "Configure",
     items: [
       { label: "Brand Playbook", path: "/brand" },
@@ -212,6 +206,17 @@ export function ManageShell({
               }`}
             >
               Overview
+            </Link>
+            <Link
+              href="/manage/provisioning"
+              onClick={() => setExpandedGroup(null)}
+              className={`rounded px-2.5 py-[7px] text-[13px] transition-colors mb-1 ${
+                pathname.startsWith("/manage/provisioning")
+                  ? "text-foreground font-medium bg-surface-hover"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Provision Pipeline
             </Link>
             {NAV_GROUPS.map(group => {
               const isExpanded = expandedGroup === group.label;
