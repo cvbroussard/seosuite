@@ -130,12 +130,26 @@ function MediaContent({ siteId }: { siteId: string }) {
               selected?.id === asset.id ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-accent/50"
             }`}
           >
-            <img
-              src={asset.url}
-              alt={asset.context || ""}
-              loading="lazy"
-              style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: "0" }}
-            />
+            {asset.type === "video" ? (
+              <>
+                <video
+                  src={asset.url}
+                  preload="metadata"
+                  muted
+                  style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: "0" }}
+                />
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="rounded-full bg-black/50 p-1.5 text-white text-[10px]">▶</span>
+                </span>
+              </>
+            ) : (
+              <img
+                src={asset.url}
+                alt={asset.context || ""}
+                loading="lazy"
+                style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: "0" }}
+              />
+            )}
             <span className="absolute top-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[8px] font-mono text-white">
               {asset.quality ? Math.round(asset.quality * 100) : "—"}
             </span>
