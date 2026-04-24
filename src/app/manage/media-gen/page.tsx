@@ -22,6 +22,7 @@ function MediaGenContent({ siteId }: { siteId: string }) {
   const [loading, setLoading] = useState(true);
   const [imageStyle, setImageStyle] = useState("");
   const [processingMode, setProcessingMode] = useState("auto");
+  const [variations, setVariations] = useState<string[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -35,6 +36,7 @@ function MediaGenContent({ siteId }: { siteId: string }) {
         if (d?.site) {
           setImageStyle(d.site.image_style || "");
           setProcessingMode(d.site.image_processing_mode || "auto");
+          setVariations(d.site.image_variations || []);
         }
       })
       .finally(() => setLoading(false));
@@ -138,6 +140,48 @@ function MediaGenContent({ siteId }: { siteId: string }) {
           initialHeroAssetId={data.site.hero_asset_id || null}
           candidates={data.heroAssets}
         />
+      </div>
+
+      {/* Composition variations */}
+      <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+        <h3 className="text-sm font-medium mb-3">Composition Variations ({variations.length})</h3>
+        <div className="space-y-1.5 mb-2">
+          {variations.map((v, i) => (
+            <div key={i} className="flex gap-1.5">
+              <span className="mt-1.5 text-[10px] text-muted">{i + 1}.</span>
+              <input
+                value={v}
+                onChange={e => {
+                  const updated = [...variations];
+                  updated[i] = e.target.value;
+                  setVariations(updated);
+                }}
+                className="flex-1 rounded border border-border bg-background px-2 py-1 text-[10px] focus:border-accent focus:outline-none"
+              />
+              <button
+                onClick={() => setVariations(variations.filter((_, idx) => idx !== i))}
+                className="text-[10px] text-muted hover:text-danger px-1"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {variations.length < 8 && (
+            <button onClick={() => setVariations([...variations, ""])} className="text-[10px] text-accent hover:underline">
+              + Add
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveSection("variations", { style: imageStyle, contentVibe: data.site.content_vibe, variations, processingMode })}
+            disabled={saving === "variations"}
+            className="bg-accent px-3 py-1 text-[10px] font-medium text-white rounded hover:bg-accent-hover disabled:opacity-50"
+          >
+            Save
+          </button>
+          {saved === "variations" && <span className="text-[10px] text-success">Saved</span>}
+        </div>
       </div>
 
       {/* Render pipeline */}
