@@ -164,7 +164,9 @@ function MediaContent({ siteId }: { siteId: string }) {
         ))}
       </div>
 
-      {selected && (() => {
+      {selected && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setSelected(null)}>
+        <div className="w-full max-w-2xl mx-4" onClick={e => e.stopPropagation()}>
+      {(() => {
         const idx = filtered.findIndex(a => a.id === selected.id);
         const hasPrev = idx > 0;
         const hasNext = idx < filtered.length - 1;
@@ -232,6 +234,8 @@ function MediaContent({ siteId }: { siteId: string }) {
           </div>
         );
       })()}
+        </div>
+      </div>)}
     </div>
   );
 }
