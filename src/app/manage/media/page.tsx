@@ -212,9 +212,13 @@ function MediaContent({ siteId }: { siteId: string }) {
                   <label className="block text-[10px] text-muted mb-1">Context Note</label>
                   <textarea
                     value={editNote}
-                    onChange={e => setEditNote(e.target.value)}
-                    rows={3}
-                    className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs focus:border-accent focus:outline-none"
+                    onChange={e => {
+                      setEditNote(e.target.value);
+                      e.target.style.height = "auto";
+                      e.target.style.height = e.target.scrollHeight + "px";
+                    }}
+                    ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+                    className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs focus:border-accent focus:outline-none resize-none overflow-hidden"
                     placeholder="Describe what's in this photo..."
                   />
                 </div>
