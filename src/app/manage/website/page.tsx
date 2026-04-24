@@ -5,6 +5,8 @@ import { ManagePage } from "@/components/manage/manage-page";
 import {
   PageLayoutEditor,
   WorkContentEditor,
+  RegenerateCopyButton,
+  RegenerateServicesButton,
 } from "@/app/admin/sites/[siteId]/website-pane";
 import type { PageConfig, WorkContent } from "@/lib/tenant-site";
 
@@ -153,12 +155,24 @@ function WebsiteContent({ siteId }: { siteId: string }) {
           <PageLayoutEditor siteId={siteId} initial={pageConfig} />
         </div>
 
-        {/* Generated copy status */}
+        {/* Generated copy */}
         <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
           <h3 className="text-sm font-medium mb-1">Generated Copy</h3>
-          <p className="text-[10px] text-muted">
-            {data.site.has_website_copy ? "Website copy is populated." : "Not yet generated — pages show fallback placeholders."}
+          <p className="text-[10px] text-muted mb-3">
+            {data.site.has_website_copy
+              ? "Website copy is populated. Regenerate to refresh from the current playbook."
+              : "Not yet generated — pages show fallback placeholders."}
           </p>
+          <RegenerateCopyButton siteId={siteId} />
+        </div>
+
+        {/* Services & categories */}
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+          <h3 className="text-sm font-medium mb-1">Services & GBP Categories</h3>
+          <p className="text-[10px] text-muted mb-3">
+            Primary + additional GBP categories and 6-8 service tiles for local SEO. Re-derive after playbook changes.
+          </p>
+          <RegenerateServicesButton siteId={siteId} />
         </div>
       </div>
     </div>
