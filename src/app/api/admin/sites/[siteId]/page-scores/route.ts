@@ -27,14 +27,17 @@ async function discoverPagesFromSitemap(baseUrl: string): Promise<string[]> {
     if (!indexRes.ok) return fallback;
     const indexXml = await indexRes.text();
 
-    // Extract sub-sitemap URLs from the index
-    const sitemapLocs = [...indexXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+    const locs = [...indexXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+    if (locs.length === 0) return fallback;
 
-    if (sitemapLocs.length === 0) return fallback;
+    const isSitemapIndex = indexXml.includes("<sitemapindex") || locs.every(u => u.endsWith(".xml"));
+
+    if (!isSitemapIndex) {
+      return locs.slice(0, MAX_PAGES);
+    }
 
     const allUrls: string[] = [];
-
-    for (const sitemapUrl of sitemapLocs) {
+    for (const sitemapUrl of locs) {
       try {
         const subRes = await fetch(sitemapUrl, { signal: AbortSignal.timeout(10000) });
         if (!subRes.ok) continue;
