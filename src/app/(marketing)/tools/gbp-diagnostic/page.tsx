@@ -23,14 +23,14 @@ export default function GbpDiagnosticPage() {
           <GbpDiagnosticTool />
 
           <div className="mp-gbp-info">
-            <h3>What is this?</h3>
+            <h2>What is this?</h2>
             <p>
               TracPost&apos;s category intelligence engine analyzes your business type and
               matches it against Google&apos;s official category taxonomy. You get a primary
               category recommendation plus up to 4 additional categories — each with a
               one-sentence explanation of why it fits.
             </p>
-            <h3>No signup required</h3>
+            <h2>No signup required</h2>
             <p>
               This tool is free. No email, no account, no strings. If you want TracPost
               to manage your content and local SEO automatically, that&apos;s a separate conversation.
@@ -50,14 +50,14 @@ const gbpStyles = `
     padding-top: 48px;
     border-top: 1px solid #e5e7eb;
   }
-  .mp-gbp-info h3 {
+  .mp-gbp-info h2 {
     font-size: 16px;
     font-weight: 600;
     color: #1a1a1a;
     margin-bottom: 8px;
     margin-top: 24px;
   }
-  .mp-gbp-info h3:first-child { margin-top: 0; }
+  .mp-gbp-info h2:first-child { margin-top: 0; }
   .mp-gbp-info p {
     font-size: 15px;
     color: #4b5563;

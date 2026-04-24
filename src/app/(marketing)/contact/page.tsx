@@ -82,9 +82,9 @@ const contactStyles = `
   .mp-contact-value {
     font-size: 20px;
     color: #1a1a1a;
-    text-decoration: none;
     font-weight: 500;
   }
+  a.mp-contact-value { text-decoration: underline; text-underline-offset: 3px; }
   a.mp-contact-value:hover { color: #4b5563; }
 
   .mp-contact-cta {

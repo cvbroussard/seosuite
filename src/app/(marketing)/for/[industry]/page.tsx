@@ -134,23 +134,23 @@ export default async function IndustryPage({ params }: Props) {
           </p>
 
           <div className="mp-ind-block">
-            <h3 className="mp-ind-label">The problem</h3>
+            <h2 className="mp-ind-label">The problem</h2>
             <p className="mp-ind-body">{data.pain}</p>
           </div>
 
           <div className="mp-ind-block">
-            <h3 className="mp-ind-label">How TracPost solves it</h3>
+            <h2 className="mp-ind-label">How TracPost solves it</h2>
             <p className="mp-ind-body">{data.outcome}</p>
           </div>
 
           <div className="mp-ind-example">
             <div className="mp-ind-example-col">
-              <h4 className="mp-ind-example-label">You capture</h4>
+              <h3 className="mp-ind-example-label">You capture</h3>
               <p className="mp-ind-example-text">{data.exampleCapture}</p>
             </div>
             <div className="mp-ind-example-arrow">→</div>
             <div className="mp-ind-example-col">
-              <h4 className="mp-ind-example-label">TracPost publishes</h4>
+              <h3 className="mp-ind-example-label">TracPost publishes</h3>
               <p className="mp-ind-example-text">{data.exampleOutput}</p>
             </div>
           </div>

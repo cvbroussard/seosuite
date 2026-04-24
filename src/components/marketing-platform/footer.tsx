@@ -124,7 +124,8 @@ const footerStyles = `
   .mp-footer-link {
     font-size: 14px;
     color: #4b5563;
-    text-decoration: none;
+    text-decoration: underline;
+    text-underline-offset: 2px;
     transition: color 0.15s;
   }
   .mp-footer-link:hover { color: #1a1a1a; }

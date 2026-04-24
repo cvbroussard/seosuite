@@ -112,6 +112,9 @@ export default async function MarketingHomePage() {
                 src="https://assets.tracpost.com/marketing/hero-comp.jpg"
                 alt="Business owner captures a photo on their phone. AI-powered helpers deliver the content across Instagram, TikTok, Facebook, YouTube, Pinterest, LinkedIn, X, and Google."
                 className="mp-hero-img"
+                width={1200}
+                height={675}
+                fetchPriority="high"
               />
             </picture>
           </div>
@@ -254,6 +257,9 @@ export default async function MarketingHomePage() {
                       src={String(cs.og_image_url)}
                       alt={String(cs.title)}
                       className="mp-case-img"
+                      width={400}
+                      height={225}
+                      loading="lazy"
                     />
                   )}
                   <div className="mp-case-body">
@@ -347,8 +353,8 @@ const homeStyles = `
     padding: 8px 0;
     text-align: center;
   }
-  .mp-announcement a { color: #93c5fd; text-decoration: none; margin-left: 8px; }
-  .mp-announcement a:hover { text-decoration: underline; }
+  .mp-announcement a { color: #93c5fd; text-decoration: underline; margin-left: 8px; }
+  .mp-announcement a:hover { opacity: 0.8; }
 
   /* Hero */
   .mp-hero { padding: 80px 0 0; }

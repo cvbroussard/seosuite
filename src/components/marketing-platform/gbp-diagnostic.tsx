@@ -78,7 +78,7 @@ export function GbpDiagnosticTool() {
 
       {results && (
         <div className="mp-gbp-results">
-          <h3 className="mp-gbp-results-title">Your recommended categories</h3>
+          <h2 className="mp-gbp-results-title">Your recommended categories</h2>
           {results.map((cat, i) => (
             <div
               key={i}
