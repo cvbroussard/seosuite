@@ -234,7 +234,7 @@ export function ProvisioningGraph({ subscriberId }: { subscriberId: string }) {
   const hoveredTask = hovered ? tasks.find(t => t.task_key === hovered) : null;
 
   return (
-    <div className="p-4 space-y-4">
+    <div ref={containerRef} className="p-4 space-y-4">
       {/* Progress bar */}
       <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
         <div className="flex items-center justify-between mb-2">
@@ -257,7 +257,7 @@ export function ProvisioningGraph({ subscriberId }: { subscriberId: string }) {
       </div>
 
       {/* Graph */}
-      <div ref={containerRef} className="rounded-xl border border-border bg-surface shadow-card">
+      <div className="rounded-xl border border-border bg-surface shadow-card">
         <svg width={width} height={height} className="block">
           {/* Start / Finish labels */}
           <text x={20} y={height / 2} fill="currentColor" fontSize={11} opacity={0.3} fontWeight={500}>Start</text>
