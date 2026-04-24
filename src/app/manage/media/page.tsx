@@ -139,7 +139,7 @@ function MediaContent({ siteId }: { siteId: string }) {
                   style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: "0" }}
                 />
                 <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="rounded-full bg-black/50 p-1.5 text-white text-[10px]">▶</span>
+                  <span className="rounded-full bg-black/50 p-3 text-white text-lg">▶</span>
                 </span>
               </>
             ) : (
