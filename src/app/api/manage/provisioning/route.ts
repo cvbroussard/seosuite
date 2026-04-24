@@ -15,17 +15,47 @@ export async function GET(req: NextRequest) {
   if (!subscriberId) return NextResponse.json({ error: "subscriber_id required" }, { status: 400 });
 
   const tasks = await sql`
-    SELECT task_key, title, owner, depends_on, status, milestone,
+    SELECT id, task_key, title, owner, depends_on, status, milestone,
            sort_order, step_label, started_at, completed_at, notes
     FROM provisioning_tasks
     WHERE subscription_id = ${subscriberId}
     ORDER BY sort_order ASC
   `;
 
-  const completedCount = tasks.filter(t => t.status === "complete").length;
-  const totalCount = tasks.length;
+  // Fetch sub-tasks for all tasks
+  const taskIds = tasks.map(t => t.id as string);
+  const subTasks = taskIds.length > 0 ? await sql`
+    SELECT task_id, sub_key, title, status, completed_at, sort_order
+    FROM provisioning_sub_tasks
+    WHERE task_id = ANY(${taskIds})
+    ORDER BY sort_order ASC
+  ` : [];
 
-  return NextResponse.json({ tasks, completedCount, totalCount });
+  // Group sub-tasks by task_id
+  const subByTask = new Map<string, Array<Record<string, unknown>>>();
+  for (const st of subTasks) {
+    const tid = st.task_id as string;
+    if (!subByTask.has(tid)) subByTask.set(tid, []);
+    subByTask.get(tid)!.push(st);
+  }
+
+  // Enrich tasks with sub-task info
+  const enriched = tasks.map(t => {
+    const subs = subByTask.get(t.id as string) || [];
+    const subTotal = subs.length;
+    const subComplete = subs.filter(s => s.status === "complete").length;
+    return {
+      ...t,
+      subTasks: subs,
+      subTotal,
+      subComplete,
+    };
+  });
+
+  const completedCount = enriched.filter(t => (t as Record<string, unknown>).status === "complete").length;
+  const totalCount = enriched.length;
+
+  return NextResponse.json({ tasks: enriched, completedCount, totalCount });
 }
 
 /**

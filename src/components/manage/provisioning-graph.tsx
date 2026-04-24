@@ -3,6 +3,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
+interface SubTask {
+  sub_key: string;
+  title: string;
+  status: string;
+}
+
 interface Task {
   task_key: string;
   title: string;
@@ -12,6 +18,9 @@ interface Task {
   milestone: string | null;
   step_label: string | null;
   completed_at: string | null;
+  subTasks: SubTask[];
+  subTotal: number;
+  subComplete: number;
 }
 
 const OWNER_COLORS = {
@@ -316,27 +325,33 @@ export function ProvisioningGraph({ subscriberId }: { subscriberId: string }) {
                   opacity={isComplete ? 0.6 : 1}
                 />
 
-                {/* Inner fill — status */}
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={12}
-                  fill={statusColor}
-                  opacity={isComplete ? 0.8 : 0.6}
-                />
-
-                {/* Step label */}
-                <text
-                  x={node.x}
-                  y={node.y + 1}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill="#fff"
-                  fontSize={11}
-                  fontWeight={600}
-                >
-                  {isComplete ? "✓" : t.step_label || ""}
-                </text>
+                {/* Inner fill — status or progress ring */}
+                {t.subTotal > 0 && !isComplete ? (
+                  <>
+                    <circle cx={node.x} cy={node.y} r={12} fill={statusColor} opacity={0.2} />
+                    <circle
+                      cx={node.x} cy={node.y} r={12}
+                      fill="none"
+                      stroke={STATUS_FILLS.complete}
+                      strokeWidth={3}
+                      strokeDasharray={`${(t.subComplete / t.subTotal) * 75.4} 75.4`}
+                      transform={`rotate(-90 ${node.x} ${node.y})`}
+                      strokeLinecap="round"
+                    />
+                    <text x={node.x} y={node.y + 1} textAnchor="middle" dominantBaseline="middle"
+                      fill="currentColor" fontSize={8} fontWeight={600}>
+                      {t.subComplete}/{t.subTotal}
+                    </text>
+                  </>
+                ) : (
+                  <>
+                    <circle cx={node.x} cy={node.y} r={12} fill={statusColor} opacity={isComplete ? 0.8 : 0.6} />
+                    <text x={node.x} y={node.y + 1} textAnchor="middle" dominantBaseline="middle"
+                      fill="#fff" fontSize={11} fontWeight={600}>
+                      {isComplete ? "✓" : t.step_label || ""}
+                    </text>
+                  </>
+                )}
 
                 {/* Title below */}
                 <text
@@ -414,6 +429,21 @@ export function ProvisioningGraph({ subscriberId }: { subscriberId: string }) {
                   {action.label}
                 </button>
               ))}
+              {task.subTasks.length > 0 && (
+                <div className="border-t border-border mt-1 pt-1 px-3 py-1">
+                  <p className="text-[9px] text-muted mb-1">{task.subComplete}/{task.subTotal} complete</p>
+                  {task.subTasks.map(st => (
+                    <div key={st.sub_key} className="flex items-center gap-1.5 py-0.5">
+                      <span className={`text-[10px] ${st.status === "complete" ? "text-success" : "text-muted"}`}>
+                        {st.status === "complete" ? "✓" : "○"}
+                      </span>
+                      <span className={`text-[10px] ${st.status === "complete" ? "text-muted line-through" : ""}`}>
+                        {st.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="border-t border-border mt-1 pt-1">
                 {!isComplete ? (
                   <>
