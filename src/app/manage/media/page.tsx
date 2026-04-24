@@ -126,18 +126,17 @@ function MediaContent({ siteId }: { siteId: string }) {
           <div
             key={asset.id}
             onClick={() => { setSelected(asset); setEditNote(asset.context || ""); }}
-            className={`relative rounded-lg overflow-hidden border cursor-pointer transition-colors ${
+            className={`relative aspect-square rounded-lg overflow-hidden border cursor-pointer transition-colors ${
               selected?.id === asset.id ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-accent/50"
             }`}
           >
             <Image
               src={asset.url}
               alt={asset.context || ""}
-              width={120}
-              height={120}
+              fill
               sizes="120px"
               quality={50}
-              style={{ width: "100%", height: "auto", aspectRatio: "1", objectFit: "cover" }}
+              className="object-cover"
             />
             <span className="absolute top-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[8px] font-mono text-white">
               {asset.quality ? Math.round(asset.quality * 100) : "—"}
