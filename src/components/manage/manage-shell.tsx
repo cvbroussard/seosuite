@@ -38,6 +38,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Brand Playbook", path: "/brand" },
       { label: "Copy Generation", path: "/copy-gen" },
       { label: "Media Generation", path: "/media-gen" },
+      { label: "Blog", path: "/blog-config" },
+      { label: "Social", path: "/social-config" },
       { label: "Website", path: "/website" },
     ],
   },
