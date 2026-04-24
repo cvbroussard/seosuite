@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function GeneratePlaybookButton({ siteId, businessType, location, websiteUrl }: { siteId: string; businessType: string; location: string; websiteUrl: string }) {
+export function GeneratePlaybookButton({ siteId, businessType, location, websiteUrl, compact }: { siteId: string; businessType: string; location: string; websiteUrl: string; compact?: boolean }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +26,21 @@ export function GeneratePlaybookButton({ siteId, businessType, location, website
     } finally {
       setGenerating(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={generate}
+          disabled={generating}
+          className="rounded bg-surface-hover px-3 py-1 text-[10px] font-medium hover:bg-accent hover:text-white disabled:opacity-50"
+        >
+          {generating ? "Generating..." : "Regenerate Playbook"}
+        </button>
+        {error && <span className="text-[10px] text-danger">{error}</span>}
+      </div>
+    );
   }
 
   return (

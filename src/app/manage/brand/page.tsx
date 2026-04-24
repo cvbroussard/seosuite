@@ -57,18 +57,33 @@ function BrandContent({ siteId }: { siteId: string }) {
   if (!data.hasPlaybook) {
     return (
       <div className="p-6">
-        <GeneratePlaybookButton
-          siteId={data.siteId}
-          businessType={data.businessType || ""}
-          location={data.location || ""}
-          websiteUrl={data.url || ""}
-        />
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-card max-w-md">
+          <h3 className="text-sm font-medium mb-1">No Playbook Yet</h3>
+          <p className="text-[10px] text-muted mb-3">
+            Generate the brand playbook to establish voice, positioning, and content direction.
+          </p>
+          <GeneratePlaybookButton
+            siteId={data.siteId}
+            businessType={data.businessType || ""}
+            location={data.location || ""}
+            websiteUrl={data.url || ""}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-end">
+        <GeneratePlaybookButton
+          siteId={data.siteId}
+          businessType={data.businessType || ""}
+          location={data.location || ""}
+          websiteUrl={data.url || ""}
+          compact
+        />
+      </div>
       <BrandPlaybookView
         siteId={data.siteId}
         playbook={data.playbook}

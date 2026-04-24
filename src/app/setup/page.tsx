@@ -57,22 +57,6 @@ export default function SetupPage() {
         body: JSON.stringify({ status: "complete" }),
       }).catch(() => {});
 
-      // Fire auto-playbook generation in background (non-blocking)
-      const siteData = await res.json();
-      if (siteData.site?.id) {
-        fetch("/api/brand-intelligence", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_id: siteData.site.id,
-            action: "auto_generate",
-            business_type: businessType,
-            location: location || undefined,
-            website_url: siteUrl || undefined,
-          }),
-        }).catch(() => {}); // Fire and forget
-      }
-
       setStep("complete");
     } catch {
       setError("Network error");
