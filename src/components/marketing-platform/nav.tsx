@@ -1,10 +1,10 @@
 import Link from "next/link";
 
 const NAV_ITEMS = [
-  { label: "Product", href: "#product" },
-  { label: "Industries", href: "#industries" },
+  { label: "Product", href: "/product" },
+  { label: "How It Works", href: "/how-it-works" },
+  { label: "Compare", href: "/compare" },
   { label: "Pricing", href: "/pricing" },
-  { label: "Resources", href: "#resources" },
 ];
 
 export function MarketingNav() {
