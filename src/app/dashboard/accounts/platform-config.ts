@@ -11,6 +11,8 @@ export interface PlatformConfig {
   oauthReady: boolean;
   helpLinks: { label: string; href: string }[];
   multiAssetWarning?: string;
+  /** When set, the tile in the connections hub links to this slug instead of its own detail page */
+  hubTargetSlug?: string;
 }
 
 export const PLATFORMS: PlatformConfig[] = [
@@ -19,7 +21,7 @@ export const PLATFORMS: PlatformConfig[] = [
     label: "Instagram",
     slug: "instagram",
     color: "#E1306C",
-    why: "Instagram is where your work gets discovered visually. Before-and-after photos, project walkthroughs, and behind-the-scenes content build trust faster than any ad. Most of your competitors are already here — but they're posting inconsistently.",
+    why: "Instagram is where your work gets discovered visually. Connected via Meta — one authorization covers both Instagram and Facebook.",
     accountType: "Instagram Business or Creator account linked to a Facebook Page",
     prerequisites: [
       "An Instagram account (personal accounts will need to be converted to Business)",
@@ -28,40 +30,68 @@ export const PLATFORMS: PlatformConfig[] = [
     ],
     whatWeDoWithIt: [
       "Post photos, carousels, and Reels on your behalf",
-      "Optimize posting times based on when your audience is active",
       "Apply platform-specific formatting and hashtag strategy",
       "Track engagement and adjust content mix automatically",
     ],
     oauthRoute: "/api/auth/instagram",
     oauthReady: true,
+    hubTargetSlug: "meta",
     helpLinks: [
       { label: "Convert to Business Account", href: "https://help.instagram.com/502981923235522" },
       { label: "Link Instagram to Facebook Page", href: "https://help.instagram.com/570895513091465" },
     ],
-    multiAssetWarning: "If you manage multiple businesses on Facebook, select ALL Pages and Instagram accounts when Meta asks. Selecting only some can break access to the others. Future Pages can be added by reconnecting later.",
   },
   {
     key: "facebook",
     label: "Facebook",
     slug: "facebook",
     color: "#1877F2",
-    why: "Facebook Pages are still the most trusted digital presence for local businesses. When someone searches your business name, your Page is often the first result. It's also the gateway to Instagram publishing and Meta advertising.",
+    why: "Facebook Pages are the most trusted local presence — the first thing customers find when they search your business name. Connected via Meta — one authorization covers both Facebook and Instagram.",
     accountType: "Facebook Page (not a personal profile)",
     prerequisites: [
       "A Facebook Page for your business (not your personal profile)",
       "Admin role on the Page",
-      "Page must be published (not in draft/unpublished state)",
+      "Page must be published (not in draft state)",
     ],
     whatWeDoWithIt: [
       "Publish posts, photos, and link shares to your Page",
       "Cross-post content optimized for Facebook's algorithm",
-      "Monitor engagement and respond to common interactions",
       "Coordinate posting with Instagram for maximum reach",
+    ],
+    oauthRoute: "/api/auth/instagram",
+    oauthReady: true,
+    hubTargetSlug: "meta",
+    helpLinks: [
+      { label: "Create a Facebook Page", href: "https://www.facebook.com/pages/create" },
+      { label: "Page Roles and Permissions", href: "https://www.facebook.com/help/187316341316631" },
+    ],
+  },
+  {
+    key: "meta",
+    label: "Meta (Facebook + Instagram)",
+    slug: "meta",
+    color: "#1877F2",
+    why: "Facebook Pages are still the most trusted local presence — often the first thing customers find when they search your business name. Instagram is where your work gets discovered visually. Both run on a single Meta authorization, so connecting one connects the other.",
+    accountType: "Facebook Page with a linked Instagram Business or Creator account",
+    prerequisites: [
+      "A Facebook Page for your business (not your personal profile)",
+      "An Instagram Business or Creator account linked to the Facebook Page",
+      "Admin role on the Page",
+      "Page must be published (not in draft state)",
+    ],
+    whatWeDoWithIt: [
+      "Publish posts, photos, carousels, and Reels to both platforms",
+      "Format content natively for each platform's audience",
+      "Apply hashtag and timing strategy per platform",
+      "Monitor engagement across both Page and Instagram account",
+      "Coordinate cross-platform reach from a single content source",
     ],
     oauthRoute: "/api/auth/instagram",
     oauthReady: true,
     helpLinks: [
       { label: "Create a Facebook Page", href: "https://www.facebook.com/pages/create" },
+      { label: "Convert Instagram to Business Account", href: "https://help.instagram.com/502981923235522" },
+      { label: "Link Instagram to Facebook Page", href: "https://help.instagram.com/570895513091465" },
       { label: "Page Roles and Permissions", href: "https://www.facebook.com/help/187316341316631" },
     ],
     multiAssetWarning: "If you manage multiple businesses on Facebook, select ALL Pages and Instagram accounts when Meta asks. Selecting only some can break access to the others. Future Pages can be added by reconnecting later.",

@@ -21,29 +21,32 @@ export function ConnectionsOverview({
   connected: Record<string, ConnectedInfo>;
 }) {
   const prefix = usePrefix();
-  const connectedCount = Object.keys(connected).length;
+  // Hide the umbrella "meta" tile from the hub — Instagram and Facebook tiles lead there
+  const visiblePlatforms = PLATFORMS.filter((p) => p.key !== "meta");
+  const connectedCount = visiblePlatforms.filter((p) => connected[p.key]).length;
 
   return (
     <div className="p-4 space-y-6">
       <div>
         <h1 className="text-lg font-semibold mb-1">Connections</h1>
         <p className="text-sm text-muted">
-          {connectedCount} of {PLATFORMS.length} platforms connected
+          {connectedCount} of {visiblePlatforms.length} platforms connected
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {PLATFORMS.map((platform) => {
+        {visiblePlatforms.map((platform) => {
           const conn = connected[platform.key];
           const isConnected = !!conn;
           const tokenExpires = conn?.tokenExpiresAt ? new Date(conn.tokenExpiresAt) : null;
           const daysLeft = tokenExpires ? Math.ceil((tokenExpires.getTime() - Date.now()) / 86400000) : null;
           const tokenUrgent = daysLeft !== null && daysLeft < 7;
+          const targetSlug = platform.hubTargetSlug || platform.slug;
 
           return (
             <Link
               key={platform.key}
-              href={`${prefix}/accounts/${platform.slug}`}
+              href={`${prefix}/accounts/${targetSlug}`}
               className="group rounded-xl border border-border bg-surface p-4 shadow-card transition-colors hover:border-accent/30"
             >
               <div className="flex items-start gap-3">
