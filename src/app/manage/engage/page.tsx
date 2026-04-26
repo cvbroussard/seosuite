@@ -27,7 +27,8 @@ interface Person {
   is_advocate: boolean;
   is_influencer: boolean;
   last_seen_at: string;
-  handles: Array<{ platform: string; handle: string; follower_count: number | null }> | null;
+  avatar_url: string | null;
+  handles: Array<{ platform: string; handle: string; follower_count: number | null; avatar_url: string | null }> | null;
 }
 
 interface Summary {
@@ -76,10 +77,12 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState<string>("");
   const [replying, setReplying] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(() => {
     const siteParam = siteId !== "all" ? `&site_id=${siteId}` : "";
-    fetch(`/api/admin/engage?subscription_id=${subscriberId}${siteParam}`)
+    const archivedParam = showArchived ? "&include_archived=true" : "";
+    fetch(`/api/admin/engage?subscription_id=${subscriberId}${siteParam}${archivedParam}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return;
@@ -88,7 +91,7 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
         setSummary(d.summary || null);
       })
       .finally(() => setLoading(false));
-  }, [subscriberId, siteId]);
+  }, [subscriberId, siteId, showArchived]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
@@ -213,8 +216,26 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
       {/* Inbox tab */}
       {tab === "inbox" && (
         <div className="rounded-xl border border-border bg-surface shadow-card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2">
+            <span className="text-[10px] text-muted">
+              {events.length} {showArchived ? "events (incl. archived)" : "active events"}
+            </span>
+            <label className="flex items-center gap-2 text-[10px] text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={e => setShowArchived(e.target.checked)}
+                className="h-3 w-3"
+              />
+              Show archived
+            </label>
+          </div>
           {events.length === 0 ? (
-            <p className="p-6 text-center text-xs text-muted">No engagement events yet. Run a capture to pull recent activity.</p>
+            <p className="p-6 text-center text-xs text-muted">
+              {showArchived
+                ? "No engagement events for this subscriber."
+                : "No active engagement. Toggle 'Show archived' to see historical activity."}
+            </p>
           ) : (
             <div className="divide-y divide-border">
               {events.map(e => (
@@ -314,6 +335,7 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
             <table className="w-full text-xs">
               <thead className="bg-surface-hover">
                 <tr className="text-left">
+                  <th className="w-10 px-2 py-2"></th>
                   <th className="px-4 py-2 font-medium text-muted">Person</th>
                   <th className="px-4 py-2 font-medium text-muted">Platforms</th>
                   <th className="px-4 py-2 font-medium text-muted text-right">Events</th>
@@ -326,6 +348,16 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
               <tbody className="divide-y divide-border">
                 {persons.map(p => (
                   <tr key={p.id} className="hover:bg-surface-hover">
+                    <td className="px-2 py-2">
+                      {p.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full" />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-surface-hover flex items-center justify-center text-[10px] text-muted">
+                          {(p.display_name || "?").charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2 font-medium">{p.display_name}</td>
                     <td className="px-4 py-2 text-[10px] text-muted">
                       {(p.handles || []).map(h => `${PLATFORM_LABEL[h.platform] || h.platform}${h.handle ? ` @${h.handle}` : ""}`).join(", ")}

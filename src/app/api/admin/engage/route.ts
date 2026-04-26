@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const subscriptionId = url.searchParams.get("subscription_id");
   const siteId = url.searchParams.get("site_id");
+  const includeArchived = url.searchParams.get("include_archived") === "true";
 
   if (!subscriptionId) {
     return NextResponse.json({ error: "subscription_id required" }, { status: 400 });
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
         LEFT JOIN engaged_persons ep ON ep.id = ee.engaged_person_id
         LEFT JOIN engaged_person_handles eph ON eph.engaged_person_id = ep.id AND eph.platform = ee.platform
         WHERE ee.subscription_id = ${subscriptionId} AND ee.site_id = ${siteId}
-          AND ee.review_status != 'archived'
+          AND (${includeArchived} OR ee.review_status != 'archived')
         ORDER BY ee.occurred_at DESC
         LIMIT 100
       `
@@ -50,18 +51,24 @@ export async function GET(req: NextRequest) {
         LEFT JOIN engaged_persons ep ON ep.id = ee.engaged_person_id
         LEFT JOIN engaged_person_handles eph ON eph.engaged_person_id = ep.id AND eph.platform = ee.platform
         WHERE ee.subscription_id = ${subscriptionId}
-          AND ee.review_status != 'archived'
+          AND (${includeArchived} OR ee.review_status != 'archived')
         ORDER BY ee.occurred_at DESC
         LIMIT 100
       `;
 
-  // Top engagers — most events first, no time filter (historical engagement counts)
+  // Top engagers — most events first, no time filter (historical engagement counts).
+  // avatar_url picks the most-recently-seen handle that has one.
   const topPersons = await sql`
     SELECT ep.id, ep.display_name, ep.engagement_count,
            ep.positive_engagements, ep.negative_engagements,
            ep.is_advocate, ep.is_influencer, ep.last_seen_at,
-           (SELECT JSONB_AGG(jsonb_build_object('platform', platform, 'handle', handle, 'follower_count', follower_count))
-            FROM engaged_person_handles WHERE engaged_person_id = ep.id) AS handles
+           (SELECT JSONB_AGG(jsonb_build_object(
+              'platform', platform, 'handle', handle,
+              'follower_count', follower_count, 'avatar_url', avatar_url))
+            FROM engaged_person_handles WHERE engaged_person_id = ep.id) AS handles,
+           (SELECT avatar_url FROM engaged_person_handles
+            WHERE engaged_person_id = ep.id AND avatar_url IS NOT NULL
+            ORDER BY last_seen_at DESC LIMIT 1) AS avatar_url
     FROM engaged_persons ep
     WHERE ep.subscription_id = ${subscriptionId}
     ORDER BY ep.engagement_count DESC, ep.last_seen_at DESC
