@@ -111,7 +111,12 @@ export async function runInstantImports(): Promise<{
     }
 
     else {
-      outcomes.push("platform not yet wired");
+      // LinkedIn (and any future un-wired platform): no importer exists.
+      // Mark as imported so the asset doesn't sit perpetually in Pending.
+      // Future Phase work that adds an importer will hit a separate
+      // re-import flow rather than reusing imported_at.
+      outcomes.push("no importer for this platform — marked complete");
+      anyImported = true;
     }
 
     // Mark imported_at when at least one importer succeeded.
