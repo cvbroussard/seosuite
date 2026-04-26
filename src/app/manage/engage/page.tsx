@@ -261,7 +261,7 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                   <div className="flex items-start gap-3">
                     {e.person_avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={e.person_avatar_url} alt="" className="w-8 h-8 rounded-full shrink-0" />
+                      <img src={e.person_avatar_url} alt="" referrerPolicy="no-referrer" className="w-8 h-8 rounded-full shrink-0" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-surface-hover shrink-0 flex items-center justify-center text-[10px] text-muted">
                         {(e.person_display_name || "?").charAt(0).toUpperCase()}
@@ -387,7 +387,7 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                     <td className="px-2 py-2">
                       {p.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full" />
+                        <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" className="w-7 h-7 rounded-full" />
                       ) : (
                         <div className="w-7 h-7 rounded-full bg-surface-hover flex items-center justify-center text-[10px] text-muted">
                           {(p.display_name || "?").charAt(0).toUpperCase()}
