@@ -13,6 +13,7 @@ import { loadCadenceConfig, shouldPublishNow, getActiveCampaign } from "./cadenc
 import { runGates, quarantineAsset } from "./quality-gates";
 import { publishPost } from "./publisher";
 import { decrypt } from "@/lib/crypto";
+import { resolvePublishTargets } from "@/lib/platform-assets";
 
 interface PublishResult {
   platform: string;
@@ -196,20 +197,22 @@ export async function autopilotPublish(siteId: string, opts: { force?: boolean; 
   const config = await loadCadenceConfig(siteId);
   const results: PublishResult[] = [];
 
-  // Get connected platform accounts
-  const accounts = await sql`
-    SELECT sa.id AS account_id, sa.platform, sa.access_token_encrypted,
-           sa.metadata AS account_metadata
-    FROM social_accounts sa
-    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-    WHERE ssl.site_id = ${siteId} AND sa.status = 'active'
-  `;
+  // Resolve publish targets — checks new platform_assets model first,
+  // falls back to legacy site_social_links for unmigrated platforms.
+  const targets = await resolvePublishTargets(siteId);
 
   const dateStr = new Date().toISOString().slice(0, 10);
   const campaign = getActiveCampaign(config, dateStr);
 
-  for (const account of accounts) {
-    const platform = String(account.platform);
+  for (const target of targets) {
+    const platform = target.platform;
+    // Bridge to existing variable names — minimal surface change
+    const account = {
+      account_id: target.postAccountId,
+      platform,
+      access_token_encrypted: target.accessTokenEncrypted,
+      account_metadata: target.metadata,
+    };
 
     // Platform filter — admin can target a single platform for testing
     if (opts.platform && platform !== opts.platform) {
@@ -294,17 +297,27 @@ export async function autopilotPublish(siteId: string, opts: { force?: boolean; 
       continue;
     }
 
-    // Create the social post and publish immediately
+    // Create the social post and publish immediately.
+    // For new-model targets, we stash platform_account_id and asset metadata
+    // into social_posts.metadata so the publisher can route to the right
+    // page/IG/location even though social_accounts.account_id is the user-level ID.
+    const postMetadata = target.source === "asset"
+      ? {
+          platform: target.platform, // e.g., 'facebook' or 'instagram' (asset platform, not 'meta')
+          platform_account_id_override: target.platformAccountId,
+          asset_metadata: target.metadata,
+        }
+      : {};
     try {
       const [post] = await sql`
         INSERT INTO social_posts (
           account_id, source_asset_id, caption, media_urls, media_type,
-          status, scheduled_at, published_at, ai_generated
+          status, scheduled_at, published_at, ai_generated, metadata
         )
         VALUES (
           ${account.account_id}, ${assetId}, ${caption},
           ARRAY[${mediaUrl}], ${mediaType},
-          'scheduled', NOW(), NULL, true
+          'scheduled', NOW(), NULL, true, ${JSON.stringify(postMetadata)}
         )
         RETURNING id
       `;

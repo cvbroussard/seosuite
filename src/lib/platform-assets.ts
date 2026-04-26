@@ -199,6 +199,100 @@ export async function getSiteAssets(siteId: string, platform?: string): Promise<
 }
 
 /**
+ * Resolve all publishable targets for a site, unified across the new
+ * platform_assets model and legacy site_social_links. Returns one entry
+ * per platform. Used by the autopilot publisher.
+ *
+ * Each target is either:
+ *   - source: 'asset'  — from site_platform_assets (new model)
+ *   - source: 'legacy' — from site_social_links (old model)
+ *
+ * The returned shape gives the publisher everything it needs:
+ *   - The token to authenticate with (decrypt-ready)
+ *   - The platform-native account ID to publish to (Page ID, IG user ID, etc.)
+ *   - Any platform-specific metadata (page_access_token for FB, person_urn for LI, etc.)
+ */
+export interface PublishTarget {
+  source: "asset" | "legacy";
+  platform: string;
+  socialAccountId: string;
+  /** Encrypted access token from social_accounts. Caller must decrypt. */
+  accessTokenEncrypted: string;
+  /** The platform-native ID to publish to (Page ID, IG user ID, location ID, etc.) */
+  platformAccountId: string;
+  /** Display name for logs/UI */
+  accountName: string;
+  /** Asset-level metadata (e.g., page_access_token for FB pages) merged with social_accounts metadata */
+  metadata: Record<string, unknown>;
+  /** The social_post.account_id FK target. For new model, this is the platform_asset id surrogate. */
+  postAccountId: string;
+}
+
+export async function resolvePublishTargets(siteId: string): Promise<PublishTarget[]> {
+  // 1. New model: assigned platform_assets
+  const newRows = await sql`
+    SELECT pa.id AS platform_asset_id, pa.platform, pa.asset_id, pa.asset_name,
+           pa.metadata AS asset_metadata,
+           sa.id AS social_account_id, sa.access_token_encrypted,
+           sa.metadata AS account_metadata, sa.status
+    FROM site_platform_assets spa
+    JOIN platform_assets pa ON pa.id = spa.platform_asset_id
+    JOIN social_accounts sa ON sa.id = pa.social_account_id
+    WHERE spa.site_id = ${siteId}
+      AND spa.is_primary = true
+      AND sa.status = 'active'
+  `;
+
+  const targets: PublishTarget[] = newRows.map((r) => ({
+    source: "asset" as const,
+    platform: r.platform as string,
+    socialAccountId: r.social_account_id as string,
+    accessTokenEncrypted: r.access_token_encrypted as string,
+    platformAccountId: r.asset_id as string,
+    accountName: r.asset_name as string,
+    metadata: {
+      ...(r.account_metadata || {}),
+      ...(r.asset_metadata || {}),
+    } as Record<string, unknown>,
+    // Use social_account_id as the FK target — the legacy social_posts.account_id
+    // expects social_accounts.id. For new-model publishing, we still write
+    // social_posts.account_id = social_accounts.id but the asset metadata
+    // tells the publisher exactly which page/IG to post to.
+    postAccountId: r.social_account_id as string,
+  }));
+
+  const claimedPlatforms = new Set(targets.map((t) => t.platform));
+
+  // 2. Legacy fallback: site_social_links rows for platforms not yet migrated
+  const legacyRows = await sql`
+    SELECT sa.id AS social_account_id, sa.platform, sa.account_id AS platform_account_id,
+           sa.account_name, sa.access_token_encrypted, sa.metadata AS account_metadata,
+           sa.status
+    FROM site_social_links ssl
+    JOIN social_accounts sa ON sa.id = ssl.social_account_id
+    WHERE ssl.site_id = ${siteId}
+      AND sa.status = 'active'
+  `;
+
+  for (const r of legacyRows) {
+    const platform = r.platform as string;
+    if (claimedPlatforms.has(platform)) continue;
+    targets.push({
+      source: "legacy" as const,
+      platform,
+      socialAccountId: r.social_account_id as string,
+      accessTokenEncrypted: r.access_token_encrypted as string,
+      platformAccountId: r.platform_account_id as string,
+      accountName: r.account_name as string,
+      metadata: (r.account_metadata || {}) as Record<string, unknown>,
+      postAccountId: r.social_account_id as string,
+    });
+  }
+
+  return targets;
+}
+
+/**
  * Get the primary asset for a site on a given platform. This is what the
  * publisher uses when it's about to push a post.
  */

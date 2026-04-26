@@ -12,7 +12,7 @@ import { socialPostLink } from "@/lib/utm";
 export async function publishPost(postId: string): Promise<{ success: boolean; error?: string }> {
   const [post] = await sql`
     SELECT sp.id, sp.caption, sp.hashtags, sp.media_urls, sp.media_type,
-           sp.link_url, sp.slot_id,
+           sp.link_url, sp.slot_id, sp.metadata AS post_metadata,
            sa.platform, sa.account_id AS platform_account_id,
            sa.access_token_encrypted, sa.metadata AS account_metadata
     FROM social_posts sp
@@ -24,11 +24,37 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
   if (!post.caption) return { success: false, error: "Post has no caption" };
   if (!post.access_token_encrypted) return { success: false, error: "No access token for account" };
 
+  // New-model overrides: when the post was created from a platform_asset,
+  // the autopilot stashed the actual platform_account_id and asset metadata
+  // (e.g., page_access_token for FB) into social_posts.metadata.
+  const postMeta = (post.post_metadata || {}) as Record<string, unknown>;
+  const accountIdOverride = postMeta.platform_account_id_override as string | undefined;
+  const assetMetadata = (postMeta.asset_metadata || {}) as Record<string, unknown>;
+
+  // Resolve the account ID we publish AS.
+  // For platform 'meta' (umbrella OAuth): social_accounts.account_id is the user ID,
+  //   so we MUST use the override (Page ID or IG account ID) from the asset.
+  // For legacy rows: social_accounts.account_id is already the publishing target.
+  const platformAccountId = accountIdOverride || (post.platform_account_id as string);
+
+  // For the adapter, derive the target platform from the asset metadata if present,
+  // otherwise from social_accounts.platform (legacy).
+  // The asset's platform is what the publisher actually targets (facebook vs instagram
+  // even though both share a 'meta' grant).
+  const adapterPlatform = (postMeta.platform as string) || (post.platform as string);
+
   // Look up adapter
-  const adapter = getAdapter(post.platform);
+  const adapter = getAdapter(adapterPlatform);
   if (!adapter) {
-    return { success: false, error: `Unsupported platform: ${post.platform}` };
+    return { success: false, error: `Unsupported platform: ${adapterPlatform}` };
   }
+
+  // For Facebook page publishing, the adapter needs the page-specific access token,
+  // not the user token. The asset metadata carries it.
+  const pageAccessToken = assetMetadata.page_access_token as string | undefined;
+  const accessToken = pageAccessToken
+    ? pageAccessToken
+    : decrypt(post.access_token_encrypted as string);
 
   // Build full caption with hashtags appended
   const hashtags = (post.hashtags || []) as string[];
@@ -38,13 +64,16 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
 
   try {
     const result = await adapter.publish({
-      platformAccountId: post.platform_account_id,
-      accessToken: decrypt(post.access_token_encrypted as string),
+      platformAccountId,
+      accessToken,
       caption: fullCaption,
       mediaUrls: post.media_urls as string[],
       mediaType: post.media_type,
-      linkUrl: post.link_url ? socialPostLink(post.link_url as string, post.platform as string, postId) : undefined,
-      accountMetadata: (post.account_metadata || {}) as Record<string, unknown>,
+      linkUrl: post.link_url ? socialPostLink(post.link_url as string, adapterPlatform, postId) : undefined,
+      accountMetadata: {
+        ...(post.account_metadata || {}),
+        ...assetMetadata,
+      } as Record<string, unknown>,
     });
 
     // Update post as published
