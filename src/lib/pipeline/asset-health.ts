@@ -116,8 +116,13 @@ async function checkGbpAsset(asset: AssetWithToken): Promise<HealthCheckResult> 
 }
 
 /**
- * Check a single LinkedIn asset (organization or personal profile).
- * For now we just verify the token is still valid via /v2/userinfo.
+ * Check a single LinkedIn asset.
+ *
+ * For linkedin_person: /v2/userinfo confirms the token can act as the person.
+ * For linkedin_organization: we should verify the org appears in
+ *   organizationAcls, but that endpoint requires Community Management API
+ *   approval. Until CMA is approved, we can't reliably check org assets —
+ *   we mark them 'unknown' so operators aren't given a false "healthy" signal.
  */
 async function checkLinkedInAsset(asset: AssetWithToken): Promise<HealthCheckResult> {
   const token = decrypt(asset.access_token_encrypted);
@@ -126,6 +131,15 @@ async function checkLinkedInAsset(asset: AssetWithToken): Promise<HealthCheckRes
   });
   if (res.status === 401) return { status: "token_expired", error: "LinkedIn token expired" };
   if (!res.ok) return { status: "unknown", error: `HTTP ${res.status}` };
+
+  // Token works for personal-profile actions. For org assets, userinfo passing
+  // doesn't prove org publish permission — that requires CMA-gated APIs.
+  if (asset.asset_type === "linkedin_organization") {
+    return {
+      status: "unknown",
+      error: "Org permission check requires Community Management API approval (pending)",
+    };
+  }
   return { status: "healthy" };
 }
 
