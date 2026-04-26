@@ -3,21 +3,20 @@ import { exchangeGoogleCode, discoverGbpLocations } from "@/lib/google";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { oauthErrorUrl, oauthSuccessUrl } from "@/lib/oauth-redirect";
+import { recordOAuthGrant, recordAsset } from "@/lib/platform-assets";
 
 /**
  * GET /api/auth/google/callback?code=xxx&state=xxx
  *
  * Google redirects here after the user authorizes. We:
- * 1. Exchange code for access + refresh tokens
- * 2. Store credentials in gbp_credentials
- * 3. Discover GBP locations
- * 4. Store ONE social_account with status 'pending_assignment'
- *    (token + all discovered locations in metadata)
- * 5. Notify operator to assign the correct location
- * 6. Redirect tenant back to Connections (shows "Pending")
+ *   1. Exchange code for access + refresh tokens
+ *   2. Identify the Google user (one social_accounts row per user per subscriber)
+ *   3. Discover all GBP locations the token can access
+ *   4. Store each location as a platform_asset
+ *   5. Site assignment is a separate step (operator picks the location via UI)
  *
- * The operator then picks the correct location from the admin panel,
- * which creates the site_social_link and activates the connection.
+ * gbp_credentials is also written for backward compatibility with code that
+ * still reads from it (search-console, page-scores, etc).
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -51,10 +50,43 @@ export async function GET(req: NextRequest) {
   try {
     const { accessToken, refreshToken, expiresIn, email, googleAccountId } =
       await exchangeGoogleCode(code);
-
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Store credentials
+    // 1. Discover what this token can access
+    const locations = await discoverGbpLocations(accessToken);
+    console.log("Google OAuth — discovered GBP locations:", locations.length);
+
+    // 2. Record one social_accounts row for this Google user grant
+    const socialAccountId = await recordOAuthGrant({
+      subscriptionId: state.subscription_id,
+      platform: "google",
+      userIdentifier: googleAccountId,
+      userDisplayName: email,
+      accessToken,
+      refreshToken,
+      expiresAt,
+      scopes: ["business.manage", "userinfo.email", "webmasters.readonly"],
+      metadata: { google_account_id: googleAccountId, email },
+    });
+
+    // 3. Record each accessible location as a platform_asset
+    for (const loc of locations) {
+      await recordAsset({
+        socialAccountId,
+        platform: "gbp",
+        assetType: "gbp_location",
+        assetId: loc.locationId,
+        assetName: loc.locationName,
+        metadata: {
+          accountId: loc.accountId,
+          address: loc.address,
+        },
+      });
+    }
+
+    // Backward compatibility: still write to gbp_credentials so search-console
+    // and page-scores code that reads from it keeps working until those are
+    // refactored.
     await sql`
       INSERT INTO gbp_credentials (
         site_id, google_account_id, google_email,
@@ -79,63 +111,9 @@ export async function GET(req: NextRequest) {
         updated_at = NOW()
     `;
 
-    // Discover locations
-    const locations = await discoverGbpLocations(accessToken);
-
-    // Get site name for the notification
+    // Notify operator that locations need assignment
     const [site] = await sql`SELECT name FROM sites WHERE id = ${state.site_id}`;
     const siteName = (site?.name as string) || "Unknown site";
-
-    // Store a SINGLE social_account with pending status
-    // All discovered locations stored in metadata for the operator picker
-    const [socialAccount] = await sql`
-      INSERT INTO social_accounts (
-        subscription_id, platform, account_name, account_id,
-        access_token_encrypted, refresh_token_encrypted, token_expires_at,
-        scopes, status, metadata
-      )
-      VALUES (
-        ${state.subscription_id}, 'gbp',
-        ${email},
-        ${"pending_" + state.site_id},
-        ${encrypt(accessToken)}, ${encrypt(refreshToken)}, ${expiresAt},
-        ${"{business.manage}"},
-        'pending_assignment',
-        ${JSON.stringify({
-          google_account_id: googleAccountId,
-          google_email: email,
-          initiating_site_id: state.site_id,
-          initiating_site_name: siteName,
-          discovered_locations: locations.map((loc) => ({
-            accountId: loc.accountId,
-            locationId: loc.locationId,
-            locationName: loc.locationName,
-            address: loc.address,
-          })),
-        })}
-      )
-      ON CONFLICT (subscription_id, platform, account_id)
-      DO UPDATE SET
-        account_name = EXCLUDED.account_name,
-        access_token_encrypted = EXCLUDED.access_token_encrypted,
-        refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
-        token_expires_at = EXCLUDED.token_expires_at,
-        status = 'pending_assignment',
-        metadata = EXCLUDED.metadata,
-        updated_at = NOW()
-      RETURNING id
-    `;
-
-    // Link to the initiating site so it shows in the tenant's Connections
-    if (socialAccount) {
-      await sql`
-        INSERT INTO site_social_links (site_id, social_account_id)
-        VALUES (${state.site_id}, ${socialAccount.id})
-        ON CONFLICT DO NOTHING
-      `;
-    }
-
-    // Notify operator
     try {
       const locationNames = locations.map((l) => l.locationName).join(", ");
       await sql`
@@ -143,12 +121,12 @@ export async function GET(req: NextRequest) {
           subscription_id, category, severity, title, body, metadata
         ) VALUES (
           ${state.subscription_id}, 'campaigns', 'info',
-          ${"Google Business connected — assign location"},
-          ${`${siteName} connected Google Business (${email}). ${locations.length} location${locations.length !== 1 ? "s" : ""} discovered: ${locationNames}. Assign the correct location in the admin panel.`},
+          ${"Google connected — assign location to site"},
+          ${`${siteName} initiated Google connection (${email}). ${locations.length} location${locations.length !== 1 ? "s" : ""} discovered: ${locationNames}. Assign the correct location to each site in Manage → Site Connections.`},
           ${JSON.stringify({
             type: "gbp_pending_assignment",
             site_id: state.site_id,
-            social_account_id: socialAccount?.id,
+            social_account_id: socialAccountId,
             location_count: locations.length,
           })}
         )
@@ -159,14 +137,14 @@ export async function GET(req: NextRequest) {
     await sql`
       INSERT INTO usage_log (subscription_id, action, metadata)
       VALUES (${state.subscription_id}, 'google_connect', ${JSON.stringify({
-        locations: locations.map((l) => l.locationName),
+        google_account_id: googleAccountId,
         email,
-        status: "pending_assignment",
+        locations: locations.map((l) => l.locationName),
       })})
     `;
 
     return NextResponse.redirect(
-      oauthSuccessUrl(state.source, "Google Business (pending location assignment)")
+      oauthSuccessUrl(state.source, `Google (${locations.length} location${locations.length !== 1 ? "s" : ""})`)
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
