@@ -46,6 +46,7 @@ interface Person {
   is_influencer: boolean;
   last_seen_at: string;
   avatar_url: string | null;
+  primary_platform: string | null;
   handles: Array<{ platform: string; handle: string; follower_count: number | null; avatar_url: string | null }> | null;
 }
 
@@ -396,9 +397,8 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
             <table className="w-full text-xs">
               <thead className="bg-surface-hover">
                 <tr className="text-left">
-                  <th className="w-10 px-2 py-2"></th>
+                  <th className="w-16 px-3 py-2"></th>
                   <th className="px-4 py-2 font-medium text-muted">Person</th>
-                  <th className="px-4 py-2 font-medium text-muted">Platforms</th>
                   <th className="px-4 py-2 font-medium text-muted text-right">Events</th>
                   <th className="px-4 py-2 font-medium text-muted text-right">Positive</th>
                   <th className="px-4 py-2 font-medium text-muted text-right">Negative</th>
@@ -407,39 +407,39 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {persons.map(p => (
-                  <tr key={p.id} className="hover:bg-surface-hover">
-                    <td className="px-2 py-2">
-                      {p.avatar_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" className="w-7 h-7 rounded-full" />
-                      ) : (
-                        <div className="w-7 h-7 rounded-full bg-surface-hover flex items-center justify-center text-[10px] text-muted">
-                          {(p.display_name || "?").charAt(0).toUpperCase()}
+                {persons.map(p => {
+                  const badgePlatform = p.primary_platform || p.handles?.[0]?.platform || null;
+                  return (
+                    <tr key={p.id} className="hover:bg-surface-hover">
+                      <td className="px-3 py-2">
+                        <div className="relative inline-block">
+                          {p.avatar_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" className="w-12 h-12 rounded-full" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-surface-hover flex items-center justify-center text-sm text-muted">
+                              {(p.display_name || "?").charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          {badgePlatform && (
+                            <span className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 rounded-md ring-2 ring-surface inline-block leading-none" title={PLATFORM_LABEL[badgePlatform] || badgePlatform}>
+                              <PlatformIcon platform={badgePlatform} size={20} />
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 font-medium">{p.display_name}</td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {(p.handles || []).map((h, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 text-[10px] text-muted" title={PLATFORM_LABEL[h.platform] || h.platform}>
-                            <PlatformIcon platform={h.platform} size={14} />
-                            {h.handle ? `@${h.handle}` : ""}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-right">{p.engagement_count}</td>
-                    <td className="px-4 py-2 text-right text-success">{p.positive_engagements}</td>
-                    <td className="px-4 py-2 text-right text-danger">{p.negative_engagements}</td>
-                    <td className="px-4 py-2 text-[10px] text-muted">{new Date(p.last_seen_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-2 text-[10px]">
-                      {p.is_advocate && <span className="rounded bg-success/10 text-success px-1.5 py-0.5 text-[9px] font-medium mr-1">Advocate</span>}
-                      {p.is_influencer && <span className="rounded bg-accent/10 text-accent px-1.5 py-0.5 text-[9px] font-medium mr-1">Influencer</span>}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-2 font-medium">{p.display_name}</td>
+                      <td className="px-4 py-2 text-right">{p.engagement_count}</td>
+                      <td className="px-4 py-2 text-right text-success">{p.positive_engagements}</td>
+                      <td className="px-4 py-2 text-right text-danger">{p.negative_engagements}</td>
+                      <td className="px-4 py-2 text-[10px] text-muted">{new Date(p.last_seen_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-[10px]">
+                        {p.is_advocate && <span className="rounded bg-success/10 text-success px-1.5 py-0.5 text-[9px] font-medium mr-1">Advocate</span>}
+                        {p.is_influencer && <span className="rounded bg-accent/10 text-accent px-1.5 py-0.5 text-[9px] font-medium mr-1">Influencer</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
