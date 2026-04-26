@@ -32,10 +32,16 @@ class GbpAdapter implements PlatformAdapter {
     // Construct the full v4 resource path: accounts/{id}/locations/{id}
     // platformAccountId stores the v1 format (locations/{id})
     // accountMetadata has the accounts prefix
-    const gbpAccountId = (accountMetadata?.account_id as string) || "";
-    const locationId = gbpAccountId && platformAccountId
-      ? `${gbpAccountId}/${platformAccountId}`
-      : platformAccountId;
+    // Accept both legacy account_id and new model accountId (camelCase from platform_assets.metadata)
+    const gbpAccountId = (accountMetadata?.account_id as string) || (accountMetadata?.accountId as string) || "";
+
+    // platformAccountId may come in as either "5960056286920211161" (raw ID) or "locations/5960056286920211161"
+    const locationPart = platformAccountId.startsWith("locations/")
+      ? platformAccountId
+      : `locations/${platformAccountId}`;
+    const locationId = gbpAccountId
+      ? `${gbpAccountId}/${locationPart}`
+      : locationPart;
 
     // Build the Local Post payload
     const postBody: Record<string, unknown> = {
@@ -122,11 +128,13 @@ class GbpAdapter implements PlatformAdapter {
   }
   async fetchReviews(input: FetchReviewsInput): Promise<{ reviews: ReviewData[]; nextCursor?: string }> {
     const { platformAccountId, accessToken, cursor, accountMetadata } = input;
-    // Construct full v4 path: accounts/{id}/locations/{id}
-    const gbpAccountId = (accountMetadata?.account_id as string) || "";
-    const locationPath = gbpAccountId && platformAccountId
-      ? `${gbpAccountId}/${platformAccountId}`
-      : platformAccountId;
+    const gbpAccountId = (accountMetadata?.account_id as string) || (accountMetadata?.accountId as string) || "";
+    const locationPart = platformAccountId.startsWith("locations/")
+      ? platformAccountId
+      : `locations/${platformAccountId}`;
+    const locationPath = gbpAccountId
+      ? `${gbpAccountId}/${locationPart}`
+      : locationPart;
     let url = `https://mybusiness.googleapis.com/v4/${locationPath}/reviews?pageSize=25`;
     if (cursor) {
       url += `&pageToken=${cursor}`;
@@ -163,11 +171,13 @@ class GbpAdapter implements PlatformAdapter {
 
   async replyToReview(input: ReplyInput): Promise<{ success: boolean; platformReplyId?: string }> {
     const { platformAccountId, accessToken, platformReviewId, body, accountMetadata } = input;
-    // Construct full review resource path: accounts/{id}/locations/{id}/reviews/{id}
-    const gbpAccountId = (accountMetadata?.account_id as string) || "";
-    const locationPath = gbpAccountId && platformAccountId
-      ? `${gbpAccountId}/${platformAccountId}`
-      : platformAccountId;
+    const gbpAccountId = (accountMetadata?.account_id as string) || (accountMetadata?.accountId as string) || "";
+    const locationPart = platformAccountId.startsWith("locations/")
+      ? platformAccountId
+      : `locations/${platformAccountId}`;
+    const locationPath = gbpAccountId
+      ? `${gbpAccountId}/${locationPart}`
+      : locationPart;
     const reviewName = platformReviewId?.startsWith("accounts/")
       ? platformReviewId
       : `${locationPath}/reviews/${platformReviewId}`;
