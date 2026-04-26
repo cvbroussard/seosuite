@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         LIMIT 100
       `;
 
-  // Top engagers — most events, last 90 days
+  // Top engagers — most events first, no time filter (historical engagement counts)
   const topPersons = await sql`
     SELECT ep.id, ep.display_name, ep.engagement_count,
            ep.positive_engagements, ep.negative_engagements,
@@ -62,9 +62,8 @@ export async function GET(req: NextRequest) {
             FROM engaged_person_handles WHERE engaged_person_id = ep.id) AS handles
     FROM engaged_persons ep
     WHERE ep.subscription_id = ${subscriptionId}
-      AND ep.last_seen_at > NOW() - INTERVAL '90 days'
-    ORDER BY ep.engagement_count DESC
-    LIMIT 25
+    ORDER BY ep.engagement_count DESC, ep.last_seen_at DESC
+    LIMIT 50
   `;
 
   // Summary counts
