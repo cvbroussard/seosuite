@@ -579,8 +579,24 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                     <p className="text-[11px] text-muted mt-1">{appealDraft.rationale}</p>
                   </div>
 
+                  {/* First attempt: inline flag in GBP dashboard */}
+                  <div className="rounded-lg border-2 border-warning/40 bg-warning/5 p-4">
+                    <p className="text-xs font-semibold text-foreground mb-1">Step 1 — Try the inline flag first (faster)</p>
+                    <p className="text-[11px] text-muted leading-relaxed mb-3">
+                      Google&apos;s 3-dot &ldquo;Flag as inappropriate&rdquo; option in your dashboard goes through their automated detection. Many removals happen here without ever needing the support form. Try this before the form below.
+                    </p>
+                    <a
+                      href="https://business.google.com/reviews"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block rounded bg-warning text-white px-3 py-1.5 text-[11px] font-medium hover:opacity-90"
+                    >
+                      Open GBP Reviews dashboard →
+                    </a>
+                  </div>
+
                   <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted mb-1">Appeal text — edit as needed</p>
+                    <p className="text-[10px] uppercase tracking-wide text-muted mb-1">Step 2 — Appeal text (if Step 1 was denied)</p>
                     <textarea
                       value={editedAppeal}
                       onChange={ev => setEditedAppeal(ev.target.value)}
@@ -598,12 +614,43 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                     </div>
                   )}
 
+                  {/* Granular copy buttons — these populate the support form's individual fields */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted mb-2">Quick-copy fields for the form</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(appealEvent.body || ""); setMessage("Review text copied"); }}
+                        className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-surface-hover"
+                      >
+                        📋 Review excerpt
+                      </button>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(appealEvent.person_display_name || ""); setMessage("Reviewer name copied"); }}
+                        className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-surface-hover"
+                      >
+                        📋 Reviewer name
+                      </button>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(new Date(appealEvent.occurred_at).toLocaleDateString()); setMessage("Review date copied"); }}
+                        className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-surface-hover"
+                      >
+                        📋 Review date
+                      </button>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(appealDraft.category || ""); setMessage("Category copied"); }}
+                        className="rounded border border-border px-2.5 py-1 text-[10px] font-medium hover:bg-surface-hover"
+                      >
+                        📋 Policy category
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="rounded-lg border border-border bg-surface-hover p-3 text-[11px] text-muted">
-                    <p className="font-medium text-foreground mb-1">How to submit</p>
+                    <p className="font-medium text-foreground mb-1">Submit the form</p>
                     <ol className="space-y-1 list-decimal pl-4">
                       <li>Click &ldquo;Copy appeal text&rdquo; below.</li>
                       <li>Click &ldquo;Open Google form&rdquo; — sign in with the GBP-owner account.</li>
-                      <li>Find this review in the list, click &ldquo;Report&rdquo;, paste the text, submit.</li>
+                      <li>Use the quick-copy buttons above to paste each field as you walk through the wizard.</li>
                       <li>Click &ldquo;Mark as submitted&rdquo; here so we can track the outcome.</li>
                     </ol>
                   </div>
