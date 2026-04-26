@@ -64,7 +64,15 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
 
   if (isExpiring && post.refresh_token_encrypted) {
     try {
-      const refreshAdapter = getAdapter(post.platform as string);
+      // Map OAuth provider → adapter key. social_accounts.platform stores the
+      // OAuth provider ('meta', 'google'), but adapters are registered under
+      // the publishing platform ('facebook'/'instagram', 'gbp').
+      const oauthProvider = post.platform as string;
+      const refreshAdapterKey =
+        oauthProvider === "google" ? "gbp" :
+        oauthProvider === "meta" ? "facebook" :
+        oauthProvider;
+      const refreshAdapter = getAdapter(refreshAdapterKey);
       if (refreshAdapter?.refreshToken) {
         const refreshResult = await refreshAdapter.refreshToken(
           decrypt(post.refresh_token_encrypted as string)
