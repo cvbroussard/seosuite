@@ -26,49 +26,61 @@ export default async function UnipostPage() {
         COALESCE((sa.metadata->>'followers_count')::int, 0)
       ), 0)::int
       FROM social_accounts sa
-      JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-      WHERE ssl.site_id = ${siteId} AND sa.status = 'active'
+      WHERE sa.id IN (
+        SELECT account_id FROM social_posts WHERE site_id = ${siteId}
+      ) AND sa.status = 'active'
       ) AS total_followers,
-      (SELECT COUNT(*)::int FROM social_posts sp
-       JOIN social_accounts sa ON sp.account_id = sa.id
-       JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-       WHERE ssl.site_id = ${siteId} AND sp.status = 'published'
-       AND sp.published_at > NOW() - INTERVAL '7 days'
+      (SELECT COUNT(*)::int FROM social_posts
+       WHERE site_id = ${siteId} AND status = 'published'
+       AND published_at > NOW() - INTERVAL '7 days'
       ) AS posts_this_week,
-      (SELECT COUNT(*)::int FROM social_posts sp
-       JOIN social_accounts sa ON sp.account_id = sa.id
-       JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-       WHERE ssl.site_id = ${siteId} AND sp.status = 'published'
+      (SELECT COUNT(*)::int FROM social_posts
+       WHERE site_id = ${siteId} AND status = 'published'
       ) AS total_posts
   `;
 
-  // Recent posts across all platforms (firehose data)
+  // Recent posts — site_id is now direct on social_posts.
+  // Resolve display platform from sp.metadata->>'platform' (new model) or sa.platform (legacy).
   const recentPosts = await sql`
     SELECT sp.id, sp.caption, sp.media_urls, sp.media_type, sp.platform_post_url,
            sp.published_at, sp.status, sp.error_message,
-           sa.platform, sa.account_name,
+           COALESCE(sp.metadata->>'platform', sa.platform) AS platform,
+           sa.account_name,
            ma.storage_url AS source_image_url, ma.variants AS asset_variants
     FROM social_posts sp
-    JOIN social_accounts sa ON sp.account_id = sa.id
-    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+    LEFT JOIN social_accounts sa ON sp.account_id = sa.id
     LEFT JOIN media_assets ma ON ma.id = sp.source_asset_id
-    WHERE ssl.site_id = ${siteId}
+    WHERE sp.site_id = ${siteId}
       AND sp.status IN ('published', 'scheduled', 'failed', 'draft', 'held')
     ORDER BY COALESCE(sp.published_at, sp.scheduled_at, sp.created_at) DESC NULLS LAST
     LIMIT 100
   `;
 
-  // Connected platforms
-  const platforms = await sql`
+  // Connected platforms — show assigned assets first (new model),
+  // then any legacy site_social_links not yet migrated.
+  const assignedPlatforms = await sql`
+    SELECT pa.platform, pa.asset_name AS account_name, sa.status,
+           NULL AS followers
+    FROM site_platform_assets spa
+    JOIN platform_assets pa ON pa.id = spa.platform_asset_id
+    JOIN social_accounts sa ON sa.id = pa.social_account_id
+    WHERE spa.site_id = ${siteId}
+      AND spa.is_primary = true
+  `;
+  const legacyPlatforms = await sql`
     SELECT sa.platform, sa.account_name, sa.status,
            sa.metadata->>'followers_count' AS followers
     FROM social_accounts sa
     JOIN site_social_links ssl ON ssl.social_account_id = sa.id
     WHERE ssl.site_id = ${siteId}
-    ORDER BY sa.platform
   `;
+  const platformSet = new Set(assignedPlatforms.map(p => p.platform));
+  const platforms = [
+    ...assignedPlatforms,
+    ...legacyPlatforms.filter(p => !platformSet.has(p.platform)),
+  ];
 
-  // Posts grouped by source asset (campaign view data)
+  // Posts grouped by source asset (campaign view)
   const campaignGroups = await sql`
     SELECT sp.source_asset_id,
            ma.storage_url AS source_image_url,
@@ -76,12 +88,11 @@ export default async function UnipostPage() {
            COUNT(*)::int AS platform_count,
            COUNT(*) FILTER (WHERE sp.status = 'published')::int AS published_count,
            MIN(sp.published_at) AS first_published,
-           ARRAY_AGG(DISTINCT sa.platform) AS platforms
+           ARRAY_AGG(DISTINCT COALESCE(sp.metadata->>'platform', sa.platform)) AS platforms
     FROM social_posts sp
-    JOIN social_accounts sa ON sp.account_id = sa.id
-    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
+    LEFT JOIN social_accounts sa ON sp.account_id = sa.id
     LEFT JOIN media_assets ma ON ma.id = sp.source_asset_id
-    WHERE ssl.site_id = ${siteId}
+    WHERE sp.site_id = ${siteId}
       AND sp.source_asset_id IS NOT NULL
       AND sp.status = 'published'
     GROUP BY sp.source_asset_id, ma.storage_url, ma.context_note

@@ -311,11 +311,11 @@ export async function autopilotPublish(siteId: string, opts: { force?: boolean; 
     try {
       const [post] = await sql`
         INSERT INTO social_posts (
-          account_id, source_asset_id, caption, media_urls, media_type,
+          site_id, account_id, source_asset_id, caption, media_urls, media_type,
           status, scheduled_at, published_at, ai_generated, metadata
         )
         VALUES (
-          ${account.account_id}, ${assetId}, ${caption},
+          ${siteId}, ${account.account_id}, ${assetId}, ${caption},
           ARRAY[${mediaUrl}], ${mediaType},
           'scheduled', NOW(), NULL, true, ${JSON.stringify(postMetadata)}
         )
