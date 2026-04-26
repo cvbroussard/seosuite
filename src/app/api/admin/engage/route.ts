@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
                ee.engaged_person_id,
                ee.metadata->>'star_rating' AS star_rating,
                ee.metadata->>'sentiment_rationale' AS sentiment_rationale,
+               ee.metadata->'appeal'->>'submittedAt' AS appeal_submitted_at,
                ep.display_name AS person_display_name,
                eph.handle AS person_handle,
                eph.avatar_url AS person_avatar_url
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest) {
                ee.engaged_person_id,
                ee.metadata->>'star_rating' AS star_rating,
                ee.metadata->>'sentiment_rationale' AS sentiment_rationale,
+               ee.metadata->'appeal'->>'submittedAt' AS appeal_submitted_at,
                ep.display_name AS person_display_name,
                eph.handle AS person_handle,
                eph.avatar_url AS person_avatar_url

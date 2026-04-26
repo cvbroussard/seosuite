@@ -16,6 +16,7 @@ interface Event {
   engaged_person_id: string | null;
   star_rating: string | null;
   sentiment_rationale: string | null;
+  appeal_submitted_at: string | null;
   person_display_name: string | null;
   person_handle: string | null;
   person_avatar_url: string | null;
@@ -98,6 +99,10 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
   const [replyText, setReplyText] = useState<string>("");
   const [replying, setReplying] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [appealEvent, setAppealEvent] = useState<Event | null>(null);
+  const [appealDraft, setAppealDraft] = useState<{ hasViolation: boolean; category: string | null; rationale: string; appealText: string; evidenceSuggestions: string[]; googleFormUrl: string } | null>(null);
+  const [appealLoading, setAppealLoading] = useState(false);
+  const [editedAppeal, setEditedAppeal] = useState("");
 
   const load = useCallback(() => {
     const siteParam = siteId !== "all" ? `&site_id=${siteId}` : "";
@@ -140,6 +145,49 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
       // Optimistically remove from list (inbox excludes archived; reviewed stays visible but updates badge)
       setEvents(prev => status === "archived" ? prev.filter(e => e.id !== eventId) : prev.map(e => e.id === eventId ? { ...e, review_status: status } : e));
     }
+  }
+
+  async function openAppeal(e: Event) {
+    setAppealEvent(e);
+    setAppealDraft(null);
+    setEditedAppeal("");
+    setAppealLoading(true);
+    try {
+      const res = await fetch("/api/admin/engage/appeal-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: e.id }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setAppealDraft(d);
+        setEditedAppeal(d.appealText || "");
+      } else {
+        setMessage(`Draft failed: ${d.error || "unknown error"}`);
+        setAppealEvent(null);
+      }
+    } catch (err) {
+      setMessage(`Draft failed: ${err instanceof Error ? err.message : String(err)}`);
+      setAppealEvent(null);
+    }
+    setAppealLoading(false);
+  }
+
+  async function markAppealSubmitted() {
+    if (!appealEvent || !appealDraft) return;
+    await fetch("/api/admin/engage/appeal-submitted", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventId: appealEvent.id,
+        category: appealDraft.category,
+        draft: editedAppeal,
+      }),
+    });
+    setMessage("Appeal logged. Watch the inbox — if Google removes the review, it'll disappear on the next capture.");
+    setEvents(prev => prev.map(e => e.id === appealEvent.id ? { ...e, appeal_submitted_at: new Date().toISOString() } : e));
+    setAppealEvent(null);
+    setAppealDraft(null);
   }
 
   async function moderate(eventId: string, action: "hide" | "delete") {
@@ -361,6 +409,20 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                             </button>
                           </>
                         )}
+                        {e.platform === "gbp" && e.event_type === "review" && (e.sentiment === "negative" || (e.star_rating && STAR_RATING_VALUE[e.star_rating] <= 2)) && !e.appeal_submitted_at && (
+                          <button
+                            onClick={() => openAppeal(e)}
+                            className="text-[10px] text-warning hover:underline"
+                            title="Draft a Google appeal — TracPost will assess if the review violates Google policy and prepare the submission text"
+                          >
+                            Appeal to Google
+                          </button>
+                        )}
+                        {e.appeal_submitted_at && (
+                          <span className="rounded bg-warning/10 text-warning px-1.5 py-0.5 text-[9px] font-medium" title={`Appeal submitted ${new Date(e.appeal_submitted_at).toLocaleString()}`}>
+                            Appeal submitted
+                          </span>
+                        )}
                         {e.review_status === "reviewed" && (
                           <span className="rounded bg-success/10 text-success px-1.5 py-0.5 text-[9px] font-medium">Reviewed</span>
                         )}
@@ -474,6 +536,103 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Appeal modal */}
+      {appealEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setAppealEvent(null); setAppealDraft(null); }}>
+          <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded-xl bg-surface shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="border-b border-border px-5 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold">Appeal Google Review</h2>
+                <p className="text-[11px] text-muted mt-0.5">From {appealEvent.person_display_name || "Unknown"}</p>
+              </div>
+              <button onClick={() => { setAppealEvent(null); setAppealDraft(null); }} className="text-muted hover:text-foreground text-xl leading-none">×</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-lg bg-surface-hover p-3 text-xs italic text-foreground border-l-2 border-border">
+                &ldquo;{appealEvent.body}&rdquo;
+              </div>
+
+              {appealLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted py-4">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                  Analyzing review against Google policy…
+                </div>
+              )}
+
+              {appealDraft && !appealDraft.hasViolation && (
+                <div className="rounded-lg border border-border bg-surface-hover p-4">
+                  <p className="text-xs font-medium mb-1">No clear policy violation</p>
+                  <p className="text-[11px] text-muted">{appealDraft.rationale}</p>
+                  <p className="text-[11px] text-muted mt-2">A negative-but-civil review of actual service is not removable. The strongest move here is a thoughtful public reply.</p>
+                </div>
+              )}
+
+              {appealDraft && appealDraft.hasViolation && (
+                <>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted mb-1">Suggested category</p>
+                    <p className="text-xs font-medium">{appealDraft.category}</p>
+                    <p className="text-[11px] text-muted mt-1">{appealDraft.rationale}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted mb-1">Appeal text — edit as needed</p>
+                    <textarea
+                      value={editedAppeal}
+                      onChange={ev => setEditedAppeal(ev.target.value)}
+                      rows={6}
+                      className="w-full rounded border border-border bg-background px-3 py-2 text-xs leading-relaxed focus:border-accent focus:outline-none resize-y"
+                    />
+                  </div>
+
+                  {appealDraft.evidenceSuggestions.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted mb-1">Evidence to gather</p>
+                      <ul className="text-[11px] text-foreground space-y-1 pl-4 list-disc">
+                        {appealDraft.evidenceSuggestions.map((s, i) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-border bg-surface-hover p-3 text-[11px] text-muted">
+                    <p className="font-medium text-foreground mb-1">How to submit</p>
+                    <ol className="space-y-1 list-decimal pl-4">
+                      <li>Click &ldquo;Copy appeal text&rdquo; below.</li>
+                      <li>Click &ldquo;Open Google form&rdquo; — sign in with the GBP-owner account.</li>
+                      <li>Find this review in the list, click &ldquo;Report&rdquo;, paste the text, submit.</li>
+                      <li>Click &ldquo;Mark as submitted&rdquo; here so we can track the outcome.</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(editedAppeal); setMessage("Appeal text copied"); }}
+                      className="rounded border border-border px-3 py-1.5 text-[11px] font-medium hover:bg-surface-hover"
+                    >
+                      Copy appeal text
+                    </button>
+                    <a
+                      href={appealDraft.googleFormUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded border border-border px-3 py-1.5 text-[11px] font-medium hover:bg-surface-hover"
+                    >
+                      Open Google form →
+                    </a>
+                    <button
+                      onClick={markAppealSubmitted}
+                      className="rounded bg-warning text-white px-3 py-1.5 text-[11px] font-medium hover:opacity-90 ml-auto"
+                    >
+                      Mark as submitted
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
