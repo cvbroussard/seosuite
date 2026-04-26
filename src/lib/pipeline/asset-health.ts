@@ -86,15 +86,18 @@ async function checkMetaAsset(asset: AssetWithToken): Promise<HealthCheckResult>
 
 /**
  * Check a single GBP location asset.
+ *
+ * Uses the Business Information API (v1) — the v4 mybusiness.googleapis.com
+ * endpoint for reading location data was deprecated. Publishing still goes
+ * through v4 /localPosts, but read operations live on the new v1 API.
  */
 async function checkGbpAsset(asset: AssetWithToken): Promise<HealthCheckResult> {
   const accessToken = decrypt(asset.access_token_encrypted);
-  const accountId = (asset.metadata?.accountId as string) || (asset.metadata?.account_id as string) || "";
-  const locationPart = asset.asset_id.startsWith("locations/") ? asset.asset_id : `locations/${asset.asset_id}`;
-  const path = accountId ? `${accountId}/${locationPart}` : locationPart;
+  const locationId = asset.asset_id.replace(/^locations\//, "");
 
+  // v1 Business Information API — readMask required to get any fields back
   const res = await fetch(
-    `https://mybusiness.googleapis.com/v4/${path}`,
+    `https://mybusinessbusinessinformation.googleapis.com/v1/locations/${locationId}?readMask=name,title`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
