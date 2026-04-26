@@ -280,14 +280,14 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                     <div className="relative shrink-0">
                       {e.person_avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={e.person_avatar_url} alt="" referrerPolicy="no-referrer" className="w-9 h-9 rounded-full" />
+                        <img src={e.person_avatar_url} alt="" referrerPolicy="no-referrer" className="w-12 h-12 rounded-full" />
                       ) : (
-                        <div className="w-9 h-9 rounded-full bg-surface-hover flex items-center justify-center text-[11px] text-muted">
+                        <div className="w-12 h-12 rounded-full bg-surface-hover flex items-center justify-center text-sm text-muted">
                           {(e.person_display_name || "?").charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface ring-1 ring-surface" title={PLATFORM_LABEL[e.platform] || e.platform}>
-                        <PlatformIcon platform={e.platform} size={14} />
+                      <span className="absolute -bottom-1 -right-1 rounded-full bg-surface ring-2 ring-surface" title={PLATFORM_LABEL[e.platform] || e.platform}>
+                        <PlatformIcon platform={e.platform} size={18} />
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
