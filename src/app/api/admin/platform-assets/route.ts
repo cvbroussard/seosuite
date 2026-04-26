@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
   const assets = await sql`
     SELECT pa.id, pa.social_account_id, pa.platform, pa.asset_type,
            pa.asset_id, pa.asset_name, pa.metadata,
+           pa.health_status, pa.health_checked_at, pa.health_error,
            ARRAY(
              SELECT json_build_object(
                'site_id', spa.site_id,

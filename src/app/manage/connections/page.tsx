@@ -11,8 +11,27 @@ interface Asset {
   asset_id: string;
   asset_name: string;
   metadata: Record<string, unknown>;
+  health_status: string;
+  health_checked_at: string | null;
+  health_error: string | null;
   assignments: Array<{ site_id: string; site_name: string; is_primary: boolean }>;
 }
+
+const HEALTH_LABEL: Record<string, string> = {
+  healthy: "Healthy",
+  permission_lost: "Permission lost",
+  token_expired: "Token expired",
+  unreachable: "Unreachable",
+  unknown: "Not yet checked",
+};
+
+const HEALTH_COLOR: Record<string, string> = {
+  healthy: "text-success bg-success/10",
+  permission_lost: "text-warning bg-warning/10",
+  token_expired: "text-danger bg-danger/10",
+  unreachable: "text-danger bg-danger/10",
+  unknown: "text-muted bg-surface-hover",
+};
 
 interface OAuthAccount {
   social_account_id: string;
@@ -133,16 +152,41 @@ function ConnectionsContent({ siteId, subscriberId }: { siteId: string; subscrib
 
   const allPlatforms = ["facebook", "instagram", "gbp", "linkedin", "youtube", "tiktok", "twitter", "pinterest"];
 
+  async function runHealthCheck() {
+    setSaving("__health__");
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/asset-health", { method: "POST" });
+      const d = await res.json();
+      const summary = d.summary || {};
+      const total = Object.values(summary).reduce((n: number, v) => n + (v as number), 0);
+      setMessage(`Health check complete — ${total} assets checked across all subscribers`);
+      load();
+    } catch {
+      setMessage("Health check failed");
+    }
+    setSaving(null);
+  }
+
   return (
     <div className="p-4 space-y-4">
       {message && (
         <div className="rounded-lg bg-success/10 px-4 py-2 text-xs text-success">{message}</div>
       )}
 
-      <p className="text-xs text-muted">
-        Each row shows a platform connection and which asset is assigned to this site.
-        OAuth connections are managed in the tenant studio. Assignments are operator-controlled here.
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted flex-1 pr-4">
+          Each row shows a platform connection and which asset is assigned to this site.
+          OAuth connections are managed in the tenant studio. Assignments are operator-controlled here.
+        </p>
+        <button
+          onClick={runHealthCheck}
+          disabled={saving === "__health__"}
+          className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50 shrink-0"
+        >
+          {saving === "__health__" ? "Checking..." : "Run Health Check"}
+        </button>
+      </div>
 
       <div className="rounded-xl border border-border bg-surface shadow-card overflow-hidden">
         <table className="w-full text-xs">
@@ -151,6 +195,7 @@ function ConnectionsContent({ siteId, subscriberId }: { siteId: string; subscrib
               <th className="px-4 py-2 font-medium text-muted">Platform</th>
               <th className="px-4 py-2 font-medium text-muted">Status</th>
               <th className="px-4 py-2 font-medium text-muted">Assigned Asset</th>
+              <th className="px-4 py-2 font-medium text-muted">Health</th>
               <th className="px-4 py-2 font-medium text-muted text-right">Actions</th>
             </tr>
           </thead>
@@ -199,6 +244,18 @@ function ConnectionsContent({ siteId, subscriberId }: { siteId: string; subscrib
                           );
                         })}
                       </select>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {primary ? (
+                      <span
+                        title={primary.health_error || (primary.health_checked_at ? `Checked ${new Date(primary.health_checked_at).toLocaleString()}` : "")}
+                        className={`inline-block rounded px-2 py-0.5 text-[10px] font-medium ${HEALTH_COLOR[primary.health_status] || HEALTH_COLOR.unknown}`}
+                      >
+                        {HEALTH_LABEL[primary.health_status] || primary.health_status}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
