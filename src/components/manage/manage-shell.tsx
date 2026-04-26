@@ -219,6 +219,17 @@ export function ManageShell({
             >
               Engage
             </Link>
+            <Link
+              href={`${prefix}/onboarding`}
+              onClick={() => setExpandedGroup(null)}
+              className={`rounded px-2.5 py-[7px] text-[13px] transition-colors mb-1 ${
+                pathname.startsWith(`${prefix}/onboarding`) || (prefix === "" && pathname.startsWith("/onboarding"))
+                  ? "text-foreground font-medium bg-surface-hover"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Onboarding
+            </Link>
             {NAV_GROUPS.map(group => {
               const isExpanded = expandedGroup === group.label;
               const containsActive = groupContainsActive(group);

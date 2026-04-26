@@ -278,6 +278,17 @@ export async function GET(req: NextRequest) {
       console.error("Engagement capture failed:", err instanceof Error ? err.message : err);
     }
 
+    // ── 2d. Instant Import (one-time per asset, after assignment) ──
+    let importSummary: { candidates: number; imported: number; skipped: number; errored: number } | null = null;
+    try {
+      const { runInstantImports } = await import("@/lib/instant-import");
+      const result = await runInstantImports();
+      importSummary = { candidates: result.candidates, imported: result.imported, skipped: result.skipped, errored: result.errored };
+      console.log("Instant import:", importSummary);
+    } catch (err) {
+      console.error("Instant import failed:", err instanceof Error ? err.message : err);
+    }
+
     // ── 3. Autopilot publishing ──
     // Replaces the old slot-based pipeline. For each active site with
     // autopilot enabled, evaluate cadence rules and publish immediately
@@ -319,6 +330,7 @@ export async function GET(req: NextRequest) {
       tokens_failed: tokenResult.failed,
       asset_health: healthSummary,
       engagement_capture: engageSummary,
+      instant_import: importSummary,
     };
 
     return NextResponse.json({ summary, publishResults });
