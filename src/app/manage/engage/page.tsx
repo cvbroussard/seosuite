@@ -286,7 +286,7 @@ function EngageContent({ subscriberId, siteId }: { subscriberId: string; siteId:
                           {(e.person_display_name || "?").charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <span className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 rounded-md bg-surface p-px ring-2 ring-surface" title={PLATFORM_LABEL[e.platform] || e.platform}>
+                      <span className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 rounded-md ring-2 ring-surface inline-block leading-none" title={PLATFORM_LABEL[e.platform] || e.platform}>
                         <PlatformIcon platform={e.platform} size={20} />
                       </span>
                     </div>
