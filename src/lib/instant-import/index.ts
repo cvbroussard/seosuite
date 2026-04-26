@@ -12,6 +12,7 @@
 import "server-only";
 import { sql } from "@/lib/db";
 import { importGbpProfile } from "./gbp-profile";
+import { importInstagramMedia, importFacebookPosts, importGbpPhotos } from "./historical-media";
 
 interface PendingImport {
   asset_id: string;
@@ -21,13 +22,14 @@ interface PendingImport {
   asset_metadata: Record<string, unknown>;
   access_token_encrypted: string;
   primary_site_id: string | null;
+  subscription_id: string;
 }
 
 async function getPendingImports(): Promise<PendingImport[]> {
   const rows = await sql`
     SELECT pa.id AS asset_id, pa.platform, pa.asset_name,
            pa.asset_id AS platform_native_id, pa.metadata AS asset_metadata,
-           sa.access_token_encrypted,
+           sa.access_token_encrypted, sa.subscription_id,
            (SELECT spa.site_id FROM site_platform_assets spa
             WHERE spa.platform_asset_id = pa.id AND spa.is_primary = true
             LIMIT 1) AS primary_site_id
@@ -45,6 +47,7 @@ async function getPendingImports(): Promise<PendingImport[]> {
     asset_metadata: (r.asset_metadata || {}) as Record<string, unknown>,
     access_token_encrypted: r.access_token_encrypted as string,
     primary_site_id: r.primary_site_id as string | null,
+    subscription_id: r.subscription_id as string,
   }));
 }
 
@@ -60,27 +63,75 @@ export async function runInstantImports(): Promise<{
   const details: Array<{ asset_id: string; platform: string; outcome: string }> = [];
 
   for (const asset of pending) {
-    try {
-      let result: { imported: boolean; reason?: string } = { imported: false, reason: "platform not yet wired" };
-      if (asset.platform === "gbp") {
-        result = await importGbpProfile(asset);
-      }
-      // facebook + instagram + linkedin: nothing to import in Phase 1a
-      // historical_posts (IG/FB media) ships in Phase 1b
+    const outcomes: string[] = [];
+    let anyImported = false;
 
-      if (result.imported) {
-        imported++;
-        details.push({ asset_id: asset.asset_id, platform: asset.platform, outcome: "imported" });
-      } else {
-        skipped++;
-        details.push({ asset_id: asset.asset_id, platform: asset.platform, outcome: result.reason || "skipped" });
+    // GBP: profile config + photos
+    if (asset.platform === "gbp") {
+      try {
+        const profileResult = await importGbpProfile(asset);
+        if (profileResult.imported) { anyImported = true; outcomes.push(`profile: ${(profileResult.fieldsWritten || []).join("+")}`); }
+        else outcomes.push(`profile: ${profileResult.reason || "skipped"}`);
+      } catch (err) {
+        outcomes.push(`profile error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`GBP profile import failed for ${asset.asset_id}:`, err);
       }
-    } catch (err) {
-      errored++;
-      const msg = err instanceof Error ? err.message : String(err);
-      details.push({ asset_id: asset.asset_id, platform: asset.platform, outcome: `error: ${msg}` });
-      console.error(`Instant import failed for asset ${asset.asset_id} (${asset.platform}):`, err);
+      try {
+        const photosResult = await importGbpPhotos(asset);
+        if (photosResult.imported) { anyImported = true; outcomes.push(`photos: ${photosResult.count}`); }
+        else outcomes.push(`photos: ${photosResult.reason || `0 (skipped ${photosResult.skipped || 0})`}`);
+      } catch (err) {
+        outcomes.push(`photos error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`GBP photos import failed for ${asset.asset_id}:`, err);
+      }
     }
+
+    // Instagram: historical media
+    else if (asset.platform === "instagram") {
+      try {
+        const r = await importInstagramMedia(asset);
+        if (r.imported) { anyImported = true; outcomes.push(`media: ${r.count}`); }
+        else outcomes.push(`media: ${r.reason || `0 (skipped ${r.skipped || 0})`}`);
+      } catch (err) {
+        outcomes.push(`media error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`IG media import failed for ${asset.asset_id}:`, err);
+      }
+    }
+
+    // Facebook: historical posts with media
+    else if (asset.platform === "facebook") {
+      try {
+        const r = await importFacebookPosts(asset);
+        if (r.imported) { anyImported = true; outcomes.push(`posts: ${r.count}`); }
+        else outcomes.push(`posts: ${r.reason || `0 (skipped ${r.skipped || 0})`}`);
+      } catch (err) {
+        outcomes.push(`posts error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`FB posts import failed for ${asset.asset_id}:`, err);
+      }
+    }
+
+    else {
+      outcomes.push("platform not yet wired");
+    }
+
+    // Mark imported_at when at least one importer succeeded.
+    // If everything errored or was skipped due to no site assignment, leave
+    // it pending so a future cron retries when conditions change.
+    if (anyImported) {
+      try {
+        await sql`UPDATE platform_assets SET imported_at = NOW() WHERE id = ${asset.asset_id}`;
+        imported++;
+      } catch (err) {
+        errored++;
+        console.error(`Failed to set imported_at for ${asset.asset_id}:`, err);
+      }
+    } else if (outcomes.some(o => o.includes("error"))) {
+      errored++;
+    } else {
+      skipped++;
+    }
+
+    details.push({ asset_id: asset.asset_id, platform: asset.platform, outcome: outcomes.join(" · ") });
   }
 
   return { candidates: pending.length, imported, skipped, errored, details };

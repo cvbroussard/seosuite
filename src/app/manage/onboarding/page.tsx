@@ -13,6 +13,7 @@ interface AssetRow {
   created_at: string;
   primary_site_name: string | null;
   gbp_profile_snapshot: Record<string, unknown> | null;
+  historical_count: number;
 }
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -131,6 +132,10 @@ function AssetCard({ asset }: { asset: AssetRow }) {
     if (p.primary_phone) summary.push(`📞 ${p.primary_phone}`);
     if (p.primary_category) summary.push(`🏷 ${p.primary_category}`);
     if (p.website_uri) summary.push(`🌐 ${String(p.website_uri).replace(/^https?:\/\//, "")}`);
+  }
+  if (asset.historical_count > 0) {
+    const noun = asset.platform === "gbp" ? "photos" : asset.platform === "facebook" ? "posts" : "media";
+    summary.push(`📸 ${asset.historical_count} historical ${noun}`);
   }
 
   return (

@@ -105,11 +105,7 @@ export async function importGbpProfile(asset: AssetRow): Promise<GbpImportResult
   `;
   if (primaryPhone) fieldsWritten.push("business_phone");
 
-  await sql`
-    UPDATE platform_assets
-    SET imported_at = NOW()
-    WHERE id = ${asset.asset_id}
-  `;
-
+  // imported_at is set by the orchestrator after all importers for the
+  // asset finish, so a partial-success doesn't permanently skip retries.
   return { imported: true, fieldsWritten };
 }

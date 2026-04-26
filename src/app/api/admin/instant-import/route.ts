@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
            (SELECT s.gbp_profile FROM site_platform_assets spa
             JOIN sites s ON s.id = spa.site_id
             WHERE spa.platform_asset_id = pa.id AND spa.is_primary = true
-            LIMIT 1) AS gbp_profile_snapshot
+            LIMIT 1) AS gbp_profile_snapshot,
+           (SELECT COUNT(*)::int FROM historical_posts hp WHERE hp.platform_asset_id = pa.id) AS historical_count
     FROM platform_assets pa
     JOIN social_accounts sa ON sa.id = pa.social_account_id
     WHERE sa.subscription_id = ${subscriptionId}
