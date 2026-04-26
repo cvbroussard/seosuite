@@ -5,6 +5,7 @@ import "server-only";
 import { sql } from "@/lib/db";
 import { upsertEngagedPerson, refreshPersonAggregates } from "./persons";
 import { quickSentiment } from "./sentiment";
+import { notifyNegativeEngagement } from "./notify";
 
 export interface RecordEventInput {
   subscriptionId: string;
@@ -80,6 +81,20 @@ export async function recordEngagementEvent(input: RecordEventInput): Promise<bo
 
   if (inserted.length > 0) {
     await refreshPersonAggregates(personId);
+
+    // Fire immediate notification only when this is a fresh, active negative
+    // event. Auto-archived historicals (>30 days old) don't notify.
+    if (sentiment === "negative" && reviewStatus === "new") {
+      notifyNegativeEngagement({
+        subscriptionId: input.subscriptionId,
+        platform: input.platform,
+        eventType: input.eventType,
+        body: input.body || null,
+        personDisplayName: input.personDisplayName,
+        permalink: input.permalink || null,
+      }).catch(err => console.error("notifyNegativeEngagement failed:", err));
+    }
+
     return true;
   }
   return false;

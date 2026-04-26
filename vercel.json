@@ -17,6 +17,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/engage/digest-cron",
+      "schedule": "0 13 * * *"
+    },
+    {
       "path": "/api/pipeline/video-pool",
       "schedule": "0 */3 * * *"
     },
