@@ -64,7 +64,7 @@ The next four pieces in this series cover how the platforms got built, which one
 
 Humans are social. Business follows humans. Therefore business is social.
 
-This was true in 1850. It's true in 2026. It will be true when whatever replaces TikTok arrives.
+This was true in 1492. It's true in 2026. It will be true when whatever replaces TikTok arrives.
 
 The only question is whether you're showing up.`,
   },
