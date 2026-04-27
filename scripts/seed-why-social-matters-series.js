@@ -333,10 +333,21 @@ Show up everywhere. The compounded reach is the real reach. The businesses still
 
   const SERIES = { slug: "why-social-matters", name: "Why Social Matters", total: articles.length };
 
+  const HERO_COMPOSITIONS = {
+    "humans-are-not-lone-wolves-business-has-always-been-social": "A late-afternoon coffee shop scene. Three groups visible: two people leaning in conversation, one person alone on a laptop visibly smiling at a screen, a table of three sharing one phone. Warm editorial light. The composition implies the same human behavior — connection — expressed through three different mediums. Documentary photography.",
+    "how-social-networks-were-actually-built-the-trojan-horse-of-free": "A wrapped gift box stamped 'FREE' being unwrapped. Instead of a gift inside, an industrial mechanism is revealed — gears, sensors pointed outward like cameras, a side chute marked 'advertisers' with gold coins flowing out. Vintage industrial blueprint aesthetic, sepia tones. The title's metaphor made literal.",
+    "the-reach-hierarchy-how-many-people-actually-see-each-platform": "A stylized bar chart on dark canvas, each bar composed not of solid color but of thousands of tiny human silhouettes packed like crowds. Facebook's bar towers; LinkedIn's bar is shorter but populated with suit-clad silhouettes; TikTok's bar shorter still but with younger, animated silhouettes. Editorial infographic, deliberately undermarketed-looking — feels like data, not a brochure.",
+    "where-your-customers-actually-live-platform-fit-by-industry": "A stylized world atlas, but instead of countries each territory is a business type (wedding photographer, plumber, restaurateur, B2B consultant). Each territory has a 'capital city' pinned with the platform icon where their customers cluster. Cartography aesthetic — clean lines, minimal palette. The map as metaphor for industry-platform fit.",
+    "you-used-to-pick-one-the-new-math-says-all-of-them": "A heavy industrial door caught mid-slam, dust particles suspended in golden backlight. Weathered painted text on the door reads 'THE PICK ONE PLATFORM ERA'. The composition suggests someone has just walked through and closed it definitively. Cinematic photography.",
+  };
+
   let inserted = 0, skipped = 0;
   for (let i = 0; i < articles.length; i++) {
     const a = articles[i];
-    const seriesMeta = { series: { ...SERIES, index: i + 1 } };
+    const meta = {
+      series: { ...SERIES, index: i + 1 },
+      ...(HERO_COMPOSITIONS[a.slug] ? { hero_composition: HERO_COMPOSITIONS[a.slug] } : {}),
+    };
     const exists = await sql`SELECT id FROM blog_posts WHERE site_id = ${tracpost.id} AND slug = ${a.slug} LIMIT 1`;
     if (exists.length > 0) {
       console.log(`SKIP (exists): ${a.slug}`);
@@ -348,7 +359,7 @@ Show up everywhere. The compounded reach is the real reach. The businesses still
         site_id, slug, title, meta_title, excerpt, content_type, content_pillar, body, status, metadata
       ) VALUES (
         ${tracpost.id}, ${a.slug}, ${a.title}, ${a.meta_title}, ${a.excerpt},
-        ${a.content_type}, ${a.content_pillar}, ${a.body}, 'draft', ${JSON.stringify(seriesMeta)}::jsonb
+        ${a.content_type}, ${a.content_pillar}, ${a.body}, 'draft', ${JSON.stringify(meta)}::jsonb
       )
     `;
     console.log(`INSERTED: ${a.title}`);

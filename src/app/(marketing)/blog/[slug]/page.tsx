@@ -140,12 +140,21 @@ export default async function MarketingBlogArticle({ params }: Props) {
               className="mp-article-hero-img"
               fetchPriority="high"
             />
-          ) : (
-            <div className="mp-article-hero-placeholder" aria-hidden="true">
-              <span className="mp-article-hero-placeholder-eyebrow">Hero placeholder</span>
-              <span className="mp-article-hero-placeholder-title">{String(post.title)}</span>
-            </div>
-          )}
+          ) : (() => {
+            const heroComposition = (post.metadata as { hero_composition?: string } | null)?.hero_composition;
+            return (
+              <div className="mp-article-hero-placeholder" aria-hidden="true">
+                <span className="mp-article-hero-placeholder-eyebrow">Hero placeholder</span>
+                <span className="mp-article-hero-placeholder-title">{String(post.title)}</span>
+                {heroComposition && (
+                  <div className="mp-article-hero-placeholder-comp">
+                    <span className="mp-article-hero-placeholder-comp-label">Composition Description</span>
+                    <p className="mp-article-hero-placeholder-comp-text">{heroComposition}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Series banner — top */}
           {seriesMeta && seriesEntries.length > 1 && (
@@ -338,7 +347,7 @@ const articleStyles = `
   /* Hero placeholder for articles without og_image_url */
   .mp-article-hero-placeholder {
     width: 100%;
-    aspect-ratio: 16 / 9;
+    min-height: 360px;
     margin: 0 0 40px;
     background: linear-gradient(135deg, #1a1a1a 0%, #4b5563 100%);
     border-radius: 12px;
@@ -346,7 +355,7 @@ const articleStyles = `
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: 40px 32px;
     text-align: center;
     box-sizing: border-box;
   }
@@ -355,7 +364,7 @@ const articleStyles = `
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: rgba(255,255,255,0.45);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     font-weight: 600;
   }
   .mp-article-hero-placeholder-title {
@@ -363,7 +372,29 @@ const articleStyles = `
     font-weight: 700;
     color: rgba(255,255,255,0.92);
     line-height: 1.2;
-    max-width: 600px;
+    max-width: 640px;
+  }
+  .mp-article-hero-placeholder-comp {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    max-width: 640px;
+  }
+  .mp-article-hero-placeholder-comp-label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.4);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .mp-article-hero-placeholder-comp-text {
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.55;
+    font-style: italic;
+    margin: 0;
   }
 
   /* Series banner — top */
