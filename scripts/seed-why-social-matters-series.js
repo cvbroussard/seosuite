@@ -113,7 +113,11 @@ If you treat the platform like a place where humans gather — where you show up
 
 The trojan horse of "free" is real. The platforms aren't free; you pay with your attention and your content. But businesses that understand the trade get back something genuinely valuable: a constant, low-friction channel to the customers who used to be impossible to find.
 
-Next: which platforms have how many people, and which ones reach yours.`,
+Next: which platforms have how many people, and which ones reach yours.
+
+---
+
+*Footnote — As of early 2026, Bloomberg values Meta at $1.5 trillion. Yahoo's billion-dollar offer would now buy 0.067% of the company.*`,
   },
 
   // ─── 3. THE REACH HIERARCHY ───────────────────────────────────────────────
