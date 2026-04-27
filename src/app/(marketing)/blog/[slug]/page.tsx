@@ -330,6 +330,11 @@ const articleStyles = `
     border-top: 1px solid #e5e7eb;
   }
 
+  /* Extra breathing room above the pre-footer CTA section */
+  .mp-article + .mp-section {
+    padding-top: 120px;
+  }
+
   /* Hero placeholder for articles without og_image_url */
   .mp-article-hero-placeholder {
     width: 100%;
