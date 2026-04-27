@@ -296,7 +296,7 @@ function BrandContent({ siteId }: { siteId: string }) {
           )}
 
           {dna ? (
-            <BrandPlaybookView siteId={data.siteId} playbook={dna.playbook} subscriberAngle={dna.subscriber_angle || null} />
+            <BrandPlaybookView siteId={data.siteId} playbook={dna.playbook} subscriberAngle={dna.subscriber_angle || null} hideSharpen />
           ) : (
             <div className="rounded-xl border border-border bg-surface p-6 shadow-card text-center">
               <p className="text-xs text-muted mb-3">Brand DNA hasn&apos;t been generated yet.</p>

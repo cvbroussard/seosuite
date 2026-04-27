@@ -15,9 +15,10 @@ interface PlaybookViewProps {
   siteId: string;
   playbook: Record<string, unknown>;
   subscriberAngle: string | null;
+  hideSharpen?: boolean;
 }
 
-export function BrandPlaybookView({ siteId, playbook: initialPlaybook, subscriberAngle }: PlaybookViewProps) {
+export function BrandPlaybookView({ siteId, playbook: initialPlaybook, subscriberAngle, hideSharpen = false }: PlaybookViewProps) {
   const [playbook, setPlaybook] = useState(initialPlaybook);
   const [angle, setAngle] = useState(subscriberAngle || "");
   const [refining, setRefining] = useState(false);
@@ -80,6 +81,7 @@ export function BrandPlaybookView({ siteId, playbook: initialPlaybook, subscribe
       </div>
 
       {/* Refinement input */}
+      {!hideSharpen && (
       <div
         className="mb-8 p-5"
         style={{
@@ -142,6 +144,7 @@ export function BrandPlaybookView({ siteId, playbook: initialPlaybook, subscribe
           </>
         )}
       </div>
+      )}
 
       {/* Your Promise */}
       {offerStatement?.finalStatement && (
