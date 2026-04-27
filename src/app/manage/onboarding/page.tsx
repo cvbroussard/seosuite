@@ -23,20 +23,23 @@ const PLATFORM_LABEL: Record<string, string> = {
   linkedin: "LinkedIn",
 };
 
-function OnboardingContent({ subscriberId }: { subscriberId: string }) {
+function OnboardingContent({ subscriberId, siteId }: { subscriberId: string; siteId: string }) {
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch(`/api/admin/instant-import?subscription_id=${subscriberId}`)
+    const siteParam = siteId !== "all" ? `&site_id=${siteId}` : "";
+    fetch(`/api/admin/instant-import?subscription_id=${subscriberId}${siteParam}`)
       .then(r => r.ok ? r.json() : { assets: [] })
       .then(d => setAssets(d.assets || []))
       .finally(() => setLoading(false));
-  }, [subscriberId]);
+  }, [subscriberId, siteId]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
+
+  const siteScoped = siteId !== "all";
 
   async function runImports() {
     setRunning(true);
@@ -76,6 +79,7 @@ function OnboardingContent({ subscriberId }: { subscriberId: string }) {
           <p className="text-[11px] text-muted mt-0.5">
             One-time pull of platform-side reference data when an asset is assigned to a site.
             Runs automatically every 15 minutes via cron.
+            {siteScoped && " · Showing assets assigned to this site only — switch site filter to 'All sites' to see unassigned orphans."}
           </p>
         </div>
         <button
@@ -173,7 +177,7 @@ function AssetCard({ asset }: { asset: AssetRow }) {
 export default function Page() {
   return (
     <ManagePage title="Onboarding">
-      {({ subscriberId }) => <OnboardingContent subscriberId={subscriberId} />}
+      {({ subscriberId, siteId }) => <OnboardingContent subscriberId={subscriberId} siteId={siteId} />}
     </ManagePage>
   );
 }
