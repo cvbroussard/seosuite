@@ -1,29 +1,37 @@
 /**
  * POST /api/admin/brand-dna/compare
- * Body: { siteId, regenerateBaseline?: boolean }
+ * Body: { siteId, force?: boolean }
  *
- * A/B harness for brand-DNA augmentation. Returns:
- *   - score: signal sufficiency for the site
- *   - signals: extracted BrandSignals (only if tier !== "minimal")
- *   - baseline: existing sites.brand_playbook (or freshly regenerated if requested)
- *   - v2: new tier-aware playbook (NOT persisted)
+ * Returns:
+ *   - score, signals, baseline (from sites.brand_playbook), v2 envelope
+ *   - activeSource: which one is currently active
  *
- * Operator inspects both side-by-side and decides whether to promote
- * v2 by manually saving it. Nothing in this endpoint mutates the site
- * — pure read + new generation.
+ * Cache behavior: if sites.brand_dna already has a generated envelope and
+ * force !== true, returns it immediately (zero LLM cost). Pass force=true to
+ * regenerate (extract + sonnet) and overwrite the cached envelope.
  *
- * COSTS: 2 Haiku calls (extract) + 1 Sonnet call (v2). Plus 1 more
- * Sonnet call if regenerateBaseline=true. Use deliberately.
+ * COST when fresh: 2 Haiku + 1 Sonnet (~$0.15)
+ * COST when cached: 0
  */
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { scoreBrandSignals } from "@/lib/brand-dna/score";
 import { extractBrandSignals } from "@/lib/brand-dna/extract";
 import { generatePlaybookV2 } from "@/lib/brand-dna/auto-generate-v2";
-import { autoGeneratePlaybook } from "@/lib/brand-intelligence/auto-generate";
+import type { BrandSignals } from "@/lib/brand-dna/extract";
+import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
+import type { Tier } from "@/lib/brand-dna/score";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+interface DnaEnvelope {
+  playbook: BrandPlaybook;
+  signals: BrandSignals | null;
+  score: { score: number; tier: Tier };
+  generated_at: string;
+  version: string;
+}
 
 export async function POST(req: NextRequest) {
   const adminCookie = req.cookies.get("tp_admin")?.value;
@@ -33,14 +41,15 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const siteId = body.siteId as string | undefined;
-  const regenerateBaseline = body.regenerateBaseline === true;
+  const force = body.force === true;
 
   if (!siteId) {
     return NextResponse.json({ error: "siteId required" }, { status: 400 });
   }
 
   const [site] = await sql`
-    SELECT business_type, location, url, brand_playbook, name
+    SELECT business_type, location, url, brand_playbook, brand_dna,
+           active_brand_source, name
     FROM sites WHERE id = ${siteId}
   `;
   if (!site) {
@@ -50,39 +59,58 @@ export async function POST(req: NextRequest) {
   const businessType = (site.business_type as string) || "business";
   const location = (site.location as string) || undefined;
   const websiteUrl = (site.url as string) || undefined;
+  const cached = site.brand_dna as DnaEnvelope | null;
 
-  // 1. Score
+  // 1. Score is always fresh — cheap, no LLM
   const score = await scoreBrandSignals(siteId);
 
-  // 2. Extract signals (skip for minimal tier)
+  // 2. If cached + not forced, return immediately
+  if (cached && !force) {
+    return NextResponse.json({
+      site: { id: siteId, name: site.name, businessType, location },
+      score,
+      signals: cached.signals,
+      baseline: site.brand_playbook,
+      v2: cached.playbook,
+      activeSource: site.active_brand_source,
+      cached: true,
+      generatedAt: cached.generated_at,
+    });
+  }
+
+  // 3. Extract signals (skip for minimal tier)
   const signals = score.tier !== "minimal" ? await extractBrandSignals(siteId) : null;
 
-  // 3. Generate v2 playbook (in-memory, NOT persisted)
+  // 4. Generate v2
   const v2 = await generatePlaybookV2({
     businessType, location, websiteUrl,
     tier: score.tier,
     signals: signals || undefined,
   });
 
-  // 4. Baseline — use existing playbook unless caller asks for fresh regeneration
-  let baseline = site.brand_playbook;
-  let baselineSource: "existing_db" | "freshly_generated" = "existing_db";
-  const hasExisting = baseline && Object.keys(baseline as object).length > 0;
-  if (regenerateBaseline || !hasExisting) {
-    // autoGeneratePlaybook PERSISTS to the DB — undesirable for A/B.
-    // Instead, regenerate via the same prompt path but directly skip persistence.
-    // For now we just call it — the side-effect is acceptable since baseline
-    // would be the same shape anyway. Caller can inspect both regardless.
-    baseline = await autoGeneratePlaybook(siteId, businessType, location, websiteUrl);
-    baselineSource = "freshly_generated";
-  }
+  // 5. Persist envelope to brand_dna (does NOT change active_brand_source)
+  const envelope: DnaEnvelope = {
+    playbook: v2,
+    signals,
+    score: { score: score.score, tier: score.tier },
+    generated_at: new Date().toISOString(),
+    version: v2.version || `2.0-v2-${score.tier}`,
+  };
+  await sql`
+    UPDATE sites
+    SET brand_dna = ${JSON.stringify(envelope)}::jsonb,
+        updated_at = NOW()
+    WHERE id = ${siteId}
+  `;
 
   return NextResponse.json({
     site: { id: siteId, name: site.name, businessType, location },
     score,
     signals,
-    baseline,
-    baselineSource,
+    baseline: site.brand_playbook,
     v2,
+    activeSource: site.active_brand_source,
+    cached: false,
+    generatedAt: envelope.generated_at,
   });
 }

@@ -18,8 +18,10 @@ interface CompareResponse {
   };
   signals: Record<string, unknown> | null;
   baseline: Record<string, unknown>;
-  baselineSource: "existing_db" | "freshly_generated";
   v2: Record<string, unknown>;
+  activeSource: "playbook" | "dna";
+  cached: boolean;
+  generatedAt: string | null;
 }
 
 const TIER_COLOR: Record<string, string> = {
@@ -31,46 +33,69 @@ const TIER_COLOR: Record<string, string> = {
 export function CompareModal({ siteId, onClose }: { siteId: string; onClose: () => void }) {
   const [data, setData] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [pane, setPane] = useState<"signals" | "side" | "playbook" | "dna">("side");
-  const [promoting, setPromoting] = useState(false);
 
-  useEffect(() => {
+  function load(force = false) {
+    if (force) setRegenerating(true); else setLoading(true);
     fetch("/api/admin/brand-dna/compare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteId }),
+      body: JSON.stringify({ siteId, force }),
     })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setData(d))
+      .then(d => {
+        setData(d);
+        if (force && d) toast.success("Brand DNA regenerated");
+      })
       .catch(() => toast.error("Compare request failed"))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setRegenerating(false); });
+  }
+
+  useEffect(() => {
+    load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
 
-  async function promote() {
+  async function regenerate() {
     if (!data) return;
     const ok = await confirm({
-      title: "Promote Brand DNA to live?",
-      body: "Replaces the current Brand Playbook with the augmented Brand DNA. The previous playbook is backed up to brand_wizard_state for reversal.",
-      confirmLabel: "Promote Brand DNA",
-      danger: true,
+      title: "Regenerate Brand DNA?",
+      body: "Re-runs signal extraction (2 Haiku calls) and playbook generation (1 Sonnet call). Takes 30–90 seconds. Current cached envelope is overwritten.",
+      confirmLabel: "Regenerate",
     });
     if (!ok) return;
-    setPromoting(true);
+    load(true);
+  }
+
+  async function activate(source: "playbook" | "dna") {
+    if (!data) return;
+    const verb = source === "dna" ? "Activate Brand DNA" : "Revert to Brand Playbook";
+    const ok = await confirm({
+      title: `${verb}?`,
+      body: source === "dna"
+        ? "Brand DNA becomes the active source for downstream content generation. Brand Playbook stays preserved — toggle back at any time."
+        : "Brand Playbook becomes the active source. Brand DNA stays cached — toggle back at any time.",
+      confirmLabel: verb,
+    });
+    if (!ok) return;
+    setActivating(true);
     try {
-      const res = await fetch("/api/admin/brand-dna/promote", {
+      const res = await fetch("/api/admin/brand-dna/activate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId, playbook: data.v2 }),
+        body: JSON.stringify({ siteId, source }),
       });
+      const d = await res.json();
       if (res.ok) {
-        toast.success("Brand DNA promoted to live");
-        onClose();
+        toast.success(source === "dna" ? "Brand DNA active" : "Brand Playbook active");
+        setData(prev => prev ? { ...prev, activeSource: source } : prev);
       } else {
-        const d = await res.json();
-        toast.error(`Promotion failed: ${d.error || "unknown"}`);
+        toast.error(`Failed: ${d.error || "unknown"}`);
       }
     } finally {
-      setPromoting(false);
+      setActivating(false);
     }
   }
 
@@ -90,6 +115,14 @@ export function CompareModal({ siteId, onClose }: { siteId: string; onClose: () 
                 <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${TIER_COLOR[data.score.tier]}`}>
                   {data.score.tier} · score {data.score.score}
                 </span>
+                <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${data.activeSource === "dna" ? "bg-accent/10 text-accent" : "bg-surface-hover text-foreground"}`}>
+                  active: {data.activeSource === "dna" ? "Brand DNA" : "Brand Playbook"}
+                </span>
+                {data.cached && data.generatedAt && (
+                  <span className="text-[10px] text-muted" title={new Date(data.generatedAt).toLocaleString()}>
+                    cached · {timeAgo(data.generatedAt)}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -97,13 +130,14 @@ export function CompareModal({ siteId, onClose }: { siteId: string; onClose: () 
         </div>
 
         {/* Body */}
-        {loading ? (
+        {loading || regenerating ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="h-5 w-5 mx-auto mb-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               <p className="text-xs text-muted">
-                Scoring → extracting signals → generating playbooks…
-                <br />This takes 30–90 seconds (multiple Claude calls).
+                {regenerating
+                  ? "Regenerating Brand DNA — extracting signals and generating playbook (30–90s)…"
+                  : "Loading…"}
               </p>
             </div>
           </div>
@@ -197,19 +231,37 @@ export function CompareModal({ siteId, onClose }: { siteId: string; onClose: () 
             {/* Footer actions */}
             <div className="border-t border-border bg-surface px-5 py-3 flex items-center justify-between shrink-0">
               <p className="text-[11px] text-muted">
-                Promotion replaces the live Brand Playbook with this Brand DNA. Previous playbook backed up to <code>brand_wizard_state</code> for reversal.
+                Both versions stay stored. Toggle the active source instantly without losing either.
               </p>
               <div className="flex gap-2">
-                <button onClick={onClose} className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground hover:bg-surface-hover">
-                  Close (no changes)
-                </button>
                 <button
-                  onClick={promote}
-                  disabled={promoting}
-                  className="rounded bg-accent text-white px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                  onClick={regenerate}
+                  disabled={regenerating || activating}
+                  className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50"
+                  title="Re-extract signals and re-generate Brand DNA (30–90s, ~$0.15)"
                 >
-                  {promoting ? "Promoting…" : "Promote Brand DNA to live"}
+                  Regenerate
                 </button>
+                <button onClick={onClose} className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground hover:bg-surface-hover">
+                  Close
+                </button>
+                {data.activeSource === "playbook" ? (
+                  <button
+                    onClick={() => activate("dna")}
+                    disabled={activating}
+                    className="rounded bg-accent text-white px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    {activating ? "Activating…" : "Activate Brand DNA"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => activate("playbook")}
+                    disabled={activating}
+                    className="rounded border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-hover disabled:opacity-50"
+                  >
+                    {activating ? "Reverting…" : "Revert to Brand Playbook"}
+                  </button>
+                )}
               </div>
             </div>
           </>
@@ -217,6 +269,17 @@ export function CompareModal({ siteId, onClose }: { siteId: string; onClose: () 
       </div>
     </div>
   );
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 function ScoreCell({ label, count, detail, score, weight }: { label: string; count?: number; detail?: string; score: number; weight: number }) {
