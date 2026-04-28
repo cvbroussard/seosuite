@@ -22,7 +22,7 @@ export async function POST(
   if (!submission) {
     return NextResponse.json({ error: "Onboarding link not found" }, { status: 404 });
   }
-  if (await isExpired(submission)) {
+  if (isExpired(submission)) {
     return NextResponse.json({ error: "Onboarding link expired" }, { status: 410 });
   }
   if (submission.completed_at) {

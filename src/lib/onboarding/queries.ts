@@ -39,7 +39,7 @@ export async function getByToken(token: string): Promise<OnboardingSubmission | 
   return (row as unknown as OnboardingSubmission) || null;
 }
 
-export async function isExpired(submission: OnboardingSubmission): boolean {
+export function isExpired(submission: OnboardingSubmission): boolean {
   return new Date(submission.expires_at).getTime() < Date.now();
 }
 

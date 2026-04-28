@@ -27,7 +27,7 @@ export default async function OnboardingPage({ params }: Props) {
   const submission = await getByToken(token);
   if (!submission) notFound();
 
-  if (await isExpired(submission)) {
+  if (isExpired(submission)) {
     return (
       <div className="op-shell">
         <div className="op-card">
