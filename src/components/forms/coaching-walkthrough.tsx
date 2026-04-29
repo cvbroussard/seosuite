@@ -725,7 +725,9 @@ function ScreenshotLightbox({
   onClose: () => void;
 }) {
   const [errored, setErrored] = useState(false);
-  const filePath = `public${url}`;
+  // The URL is now the full canonical asset URL (assets.tracpost.com/...).
+  // Show it as-is for the operator to know where to upload.
+  const filePath = url;
 
   return (
     <div
