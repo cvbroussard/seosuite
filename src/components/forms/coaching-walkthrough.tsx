@@ -736,7 +736,7 @@ function ScreenshotLightbox({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.45)",
+        background: "rgba(0,0,0,0.35)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -748,7 +748,7 @@ function ScreenshotLightbox({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          maxWidth: 600,
+          maxWidth: 500,
           width: "auto",
           display: "flex",
           flexDirection: "column",
@@ -842,20 +842,6 @@ function ScreenshotLightbox({
           </div>
         )}
 
-        {!errored && (
-          <p
-            style={{
-              fontSize: 12,
-              fontFamily: "ui-monospace, 'SF Mono', monospace",
-              color: "rgba(255,255,255,0.6)",
-              margin: 0,
-              textAlign: "center",
-              wordBreak: "break-all",
-            }}
-          >
-            {url}
-          </p>
-        )}
       </div>
     </div>
   );
