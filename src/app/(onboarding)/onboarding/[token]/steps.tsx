@@ -525,8 +525,25 @@ export function Step5Connect({ platformStatus = {}, onSave, saving, token, nudge
           const hasFailed = status === "failed";
           const isSkipped = skipped.has(p.id);
           const platformNudges = nudges.filter((n) => nudgePlatformMatchesCard(n.platform, p.id));
+          const isClickable = !isConnected && !isSkipped;
           return (
-            <div key={p.id} className={`ow-platform-row ${isConnected ? "ow-platform-connected" : ""}`}>
+            <div
+              key={p.id}
+              className={`ow-platform-row ${isConnected ? "ow-platform-connected" : ""} ${isClickable ? "ow-platform-clickable" : ""}`}
+              onClick={isClickable ? () => setCoachingPlatform(p.id) : undefined}
+              role={isClickable ? "button" : undefined}
+              tabIndex={isClickable ? 0 : undefined}
+              onKeyDown={
+                isClickable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setCoachingPlatform(p.id);
+                      }
+                    }
+                  : undefined
+              }
+            >
               <div className="ow-platform-main">
                 <div className="ow-platform-logo">
                   <PlatformIcon platform={p.id} size={28} />
@@ -539,17 +556,20 @@ export function Step5Connect({ platformStatus = {}, onSave, saving, token, nudge
                   {isConnected ? (
                     <span className="ow-platform-status-pill ow-status-ok">✓ Connected</span>
                   ) : isSkipped ? (
-                    <button type="button" onClick={() => toggleSkip(p.id)} className="ow-platform-status-pill ow-status-skip">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSkip(p.id);
+                      }}
+                      className="ow-platform-status-pill ow-status-skip"
+                    >
                       Marked unavailable · undo
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setCoachingPlatform(p.id)}
-                      className="ow-platform-link"
-                    >
+                    <span className="ow-platform-link" aria-hidden>
                       Get started →
-                    </button>
+                    </span>
                   )}
                 </div>
               </div>

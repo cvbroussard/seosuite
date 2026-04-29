@@ -466,6 +466,21 @@ const wizardStyles = `
     background: rgba(34, 197, 94, 0.04);
     border-color: rgba(34, 197, 94, 0.3);
   }
+  .ow-platform-clickable {
+    cursor: pointer;
+  }
+  .ow-platform-clickable:hover {
+    border-color: #1a1a1a;
+    background: #fafafa;
+  }
+  .ow-platform-clickable:hover .ow-platform-link {
+    color: #1a1a1a;
+    text-decoration: underline;
+  }
+  .ow-platform-clickable:focus-visible {
+    outline: 2px solid #1a1a1a;
+    outline-offset: 2px;
+  }
   .ow-platform-main {
     display: flex;
     align-items: center;
