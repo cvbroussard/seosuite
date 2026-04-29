@@ -12,37 +12,23 @@
  *   - Otherwise → render the wizard at current_step
  */
 import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
 import { getByToken, isExpired } from "@/lib/onboarding/queries";
 import { OnboardingWizard } from "./wizard";
 
 export const dynamic = "force-dynamic";
 
-const ONBOARDING_TOKEN_COOKIE = "tp_onboarding_token";
-const COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
-
 interface Props {
   params: Promise<{ token: string }>;
 }
+
+// Note: the tp_onboarding_token cookie is set by middleware when the URL
+// matches /onboarding/[token]. Server Components can't write cookies.
 
 export default async function OnboardingPage({ params }: Props) {
   const { token } = await params;
 
   const submission = await getByToken(token);
   if (!submission) notFound();
-
-  if (!submission.completed_at && !isExpired(submission)) {
-    const cookieStore = await cookies();
-    cookieStore.set({
-      name: ONBOARDING_TOKEN_COOKIE,
-      value: token,
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: COOKIE_MAX_AGE,
-      path: "/",
-    });
-  }
 
   if (isExpired(submission)) {
     return (

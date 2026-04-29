@@ -17,6 +17,9 @@ export const dynamic = "force-dynamic";
 
 const ONBOARDING_TOKEN_COOKIE = "tp_onboarding_token";
 
+// Server Components can't write cookies. Stale cookies just lead the user
+// back here on next visit and they hit the resend prompt.
+
 export default async function OnboardingEntry() {
   const cookieStore = await cookies();
   const cookied = cookieStore.get(ONBOARDING_TOKEN_COOKIE)?.value;
@@ -26,13 +29,9 @@ export default async function OnboardingEntry() {
     if (submission && !submission.completed_at && !isExpired(submission)) {
       redirect(`/onboarding/${cookied}`);
     }
-    // Stale cookie — clear it before showing prompt
-    cookieStore.set({
-      name: ONBOARDING_TOKEN_COOKIE,
-      value: "",
-      maxAge: 0,
-      path: "/",
-    });
+    // Stale cookie — fall through to the resend prompt. Cookie will be
+    // overwritten if the user starts a fresh onboarding (middleware writes
+    // a new token on /onboarding/[token]).
   }
 
   return (

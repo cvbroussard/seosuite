@@ -49,12 +49,38 @@ const BOUNCE_DURING_ONBOARDING = new Set([
   "/pricing",
 ]);
 
+// Onboarding tokens are 32 random bytes base64url-encoded → 43 chars,
+// possibly with trailing padding. Match liberally; the page itself
+// validates the token against the DB.
+const ONBOARDING_TOKEN_PATH = /^\/onboarding\/([A-Za-z0-9_-]{40,})$/;
+
 export async function middleware(req: NextRequest) {
   const hostname = req.headers.get("host") || "localhost";
   const subdomain = classifyHost(hostname);
   const { pathname } = req.nextUrl;
 
   const isLocal = hostname.includes("localhost");
+
+  // When a visitor lands on /onboarding/[token], persist that token in a
+  // cookie so they can return to /onboarding (bare) and resume. Server
+  // Components can't write cookies, so this happens here in middleware.
+  // The submit endpoint and login routes clear it on completion.
+  const tokenMatch = pathname.match(ONBOARDING_TOKEN_PATH);
+  if (tokenMatch) {
+    const token = tokenMatch[1];
+    const existing = req.cookies.get("tp_onboarding_token")?.value;
+    if (existing !== token) {
+      const response = NextResponse.next();
+      response.cookies.set("tp_onboarding_token", token, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 30 * 24 * 60 * 60,
+        path: "/",
+      });
+      return response;
+    }
+  }
 
   // Mid-onboarding visitors get bounced from marketing pages so they don't
   // accidentally re-enter the signup funnel. Triggered only by the
