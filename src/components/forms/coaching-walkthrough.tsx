@@ -646,13 +646,17 @@ function NodeRenderer({
 
 /**
  * Reconstruct a navigation stack from path_taken (the DB audit trail).
- * Filters to nodes that exist in the current graph, dedupes consecutive
- * repeats, ensures the start node anchors the stack.
  *
- * If a previous session backed out and picked a different option, the
- * resulting stack may include abandoned-branch nodes — Back will walk
- * through the actual history. Acceptable for V1; cleaner forward-only
- * derivation would require traversing edges + likely loses information.
+ * path_taken is chronological: every forward step gets appended; back-
+ * navigation isn't recorded. So if a session goes A→B→C→back→D, the
+ * audit log is [A, B, C, D]. Naively treating that as the navStack
+ * would put C "behind" D in back-history even though C is on an
+ * abandoned branch.
+ *
+ * Algorithm: walk path_taken backwards from the last entry, prepending
+ * only nodes that are an actual graph-parent (forward-edge predecessor)
+ * of the running target. That reconstructs the LINEAR path from start
+ * to current, naturally dropping abandoned branches.
  */
 function restoreNavStack(
   walkthrough: PlatformWalkthrough,
@@ -661,17 +665,41 @@ function restoreNavStack(
   if (!pathTaken || pathTaken.length === 0) {
     return [walkthrough.start];
   }
-  const stack: string[] = [];
-  for (const id of pathTaken) {
-    if (!walkthrough.nodes[id]) continue; // ignore nodes that no longer exist
-    if (stack[stack.length - 1] === id) continue; // skip consecutive dupes
-    stack.push(id);
+  const valid = pathTaken.filter((id) => walkthrough.nodes[id]);
+  if (valid.length === 0) {
+    return [walkthrough.start];
   }
-  if (stack.length === 0) return [walkthrough.start];
-  if (stack[0] !== walkthrough.start) {
-    return [walkthrough.start, ...stack.filter((id) => id !== walkthrough.start)];
+
+  const current = valid[valid.length - 1];
+  const result: string[] = [current];
+  let target = current;
+
+  for (let i = valid.length - 2; i >= 0; i--) {
+    const candidate = valid[i];
+    if (isGraphParent(walkthrough, candidate, target)) {
+      result.unshift(candidate);
+      target = candidate;
+    }
   }
-  return stack;
+
+  // Anchor at the walkthrough start so Back can always reach the very beginning
+  if (result[0] !== walkthrough.start) {
+    return [walkthrough.start, ...result];
+  }
+  return result;
+}
+
+/** Whether `parentId` has a forward edge directly to `childId` in the graph. */
+function isGraphParent(
+  w: PlatformWalkthrough,
+  parentId: string,
+  childId: string
+): boolean {
+  const node = w.nodes[parentId];
+  if (!node) return false;
+  if (node.type === "question") return node.options.some((o) => o.next === childId);
+  if (node.type === "instruction") return node.next === childId;
+  return false; // terminal nodes have no children
 }
 
 /**
