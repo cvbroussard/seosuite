@@ -347,17 +347,22 @@ const wizardStyles = `
   .ow-input {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
+    border: 1px solid #c5cbd3;
+    border-radius: 8px;
     font-size: 14px;
     font-family: inherit;
     color: #1a1a1a;
-    background: #fff;
-    transition: border-color 0.15s;
+    background: #f9fafb;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   }
   .ow-input:focus {
     outline: none;
     border-color: #1a1a1a;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(26,26,26,0.06);
+  }
+  .ow-input::placeholder {
+    color: #b0b8c4;
   }
   .ow-textarea {
     resize: vertical;
