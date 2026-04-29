@@ -744,6 +744,16 @@ export function Step7Review({ data, platformStatus = {}, onSubmit, submitting, g
   const brandOk = !!data.brand_color;
   const ownerOk = !!(data.owner_name && data.owner_email);
 
+  // Strict Option B policy: every one of the 7 platforms must be in a
+  // terminal state (connected or skipped/marked-unavailable). No platform
+  // may be in pending/failed/untouched state at submit time. Operator
+  // queue surfaces skipped platforms for follow-up.
+  const ALL_PLATFORM_IDS = ["meta", "gbp", "linkedin", "youtube", "pinterest", "tiktok", "twitter"];
+  const platformsAddressed = ALL_PLATFORM_IDS.filter(
+    (p) => platformStatus[p] === "connected" || platformStatus[p] === "skipped"
+  ).length;
+  const platformsAllAddressed = platformsAddressed === platformsTotal;
+
   const items: ReviewItem[] = [
     {
       step: 2,
@@ -775,14 +785,20 @@ export function Step7Review({ data, platformStatus = {}, onSubmit, submitting, g
     {
       step: 5,
       label: "Platform connections",
-      status:
-        platformsConnected === platformsTotal
+      status: platformsAllAddressed
+        ? platformsConnected === platformsTotal
           ? "complete"
-          : platformsConnected > 0
-          ? "in_progress"
-          : "incomplete",
-      hint: `${platformsConnected} of ${platformsTotal} connected`,
-      required: false, // operator may proceed with fewer; full coverage is best-effort
+          : "complete" // every platform addressed (connected or marked unavailable)
+        : platformsAddressed > 0
+        ? "in_progress"
+        : "incomplete",
+      hint:
+        platformsConnected === platformsTotal
+          ? `All ${platformsTotal} connected`
+          : platformsAllAddressed
+          ? `${platformsConnected} connected · ${platformsTotal - platformsConnected} marked unavailable`
+          : `${platformsAddressed} of ${platformsTotal} addressed (need to connect or mark unavailable)`,
+      required: true, // Option B: every platform must be explicitly addressed
     },
     {
       step: 6,
