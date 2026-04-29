@@ -98,24 +98,47 @@ export async function POST(
   const reachedTerminal = action === "complete";
   const completedAt = action === "complete" ? new Date().toISOString() : null;
 
-  await sql`
-    INSERT INTO coaching_progress (
-      subscription_id, platform, last_node_id, path_taken, reached_terminal, completed_at
-    ) VALUES (
-      ${submission.subscription_id},
-      ${platform},
-      ${node_id},
-      ARRAY[${node_id}::TEXT],
-      ${reachedTerminal},
-      ${completedAt}
-    )
-    ON CONFLICT (subscription_id, platform) DO UPDATE SET
-      last_node_id     = EXCLUDED.last_node_id,
-      path_taken       = array_append(coaching_progress.path_taken, EXCLUDED.last_node_id),
-      reached_terminal = coaching_progress.reached_terminal OR EXCLUDED.reached_terminal,
-      completed_at     = COALESCE(coaching_progress.completed_at, EXCLUDED.completed_at),
-      updated_at       = NOW()
-  `;
+  // path_taken records FORWARD steps only (action === "navigate").
+  // "complete" and "abandon" don't represent new node visits — they're
+  // status transitions on the node already at the top of path_taken —
+  // so they don't append (which would create duplicates).
+  if (action === "navigate") {
+    await sql`
+      INSERT INTO coaching_progress (
+        subscription_id, platform, last_node_id, path_taken, reached_terminal, completed_at
+      ) VALUES (
+        ${submission.subscription_id},
+        ${platform},
+        ${node_id},
+        ARRAY[${node_id}::TEXT],
+        false,
+        NULL
+      )
+      ON CONFLICT (subscription_id, platform) DO UPDATE SET
+        last_node_id = EXCLUDED.last_node_id,
+        path_taken   = array_append(coaching_progress.path_taken, EXCLUDED.last_node_id),
+        updated_at   = NOW()
+    `;
+  } else {
+    // complete or abandon: update status fields, leave path_taken alone
+    await sql`
+      INSERT INTO coaching_progress (
+        subscription_id, platform, last_node_id, path_taken, reached_terminal, completed_at
+      ) VALUES (
+        ${submission.subscription_id},
+        ${platform},
+        ${node_id},
+        ARRAY[${node_id}::TEXT],
+        ${reachedTerminal},
+        ${completedAt}
+      )
+      ON CONFLICT (subscription_id, platform) DO UPDATE SET
+        last_node_id     = EXCLUDED.last_node_id,
+        reached_terminal = coaching_progress.reached_terminal OR EXCLUDED.reached_terminal,
+        completed_at     = COALESCE(coaching_progress.completed_at, EXCLUDED.completed_at),
+        updated_at       = NOW()
+    `;
+  }
 
   return NextResponse.json({ ok: true, action });
 }
