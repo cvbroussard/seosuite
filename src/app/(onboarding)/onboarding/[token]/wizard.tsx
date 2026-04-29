@@ -344,24 +344,37 @@ const wizardStyles = `
     font-weight: 400;
     color: #9ca3af;
   }
-  .ow-input {
+  /* Wizard inputs — override the dashboard's borderless "flat input" pattern.
+     Match specificity with :not() pseudo-classes so we beat the global rule
+     in app/globals.css that targets input:not([type=checkbox]):not([type=radio]). */
+  input.ow-input:not([type="checkbox"]):not([type="radio"]),
+  textarea.ow-input,
+  select.ow-input {
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #c5cbd3;
+    padding: 9px 12px;
+    border: 1px solid #d1d5db;
     border-radius: 8px;
     font-size: 14px;
     font-family: inherit;
     color: #1a1a1a;
-    background: #f9fafb;
-    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    background: #fff;
+    transition: border-color 0.12s;
   }
-  .ow-input:focus {
+  input.ow-input:not([type="checkbox"]):not([type="radio"]):hover,
+  textarea.ow-input:hover,
+  select.ow-input:hover {
+    background: #fff;
+    border-color: #9ca3af;
+  }
+  input.ow-input:not([type="checkbox"]):not([type="radio"]):focus,
+  textarea.ow-input:focus,
+  select.ow-input:focus {
     outline: none;
     border-color: #1a1a1a;
     background: #fff;
-    box-shadow: 0 0 0 3px rgba(26,26,26,0.06);
   }
-  .ow-input::placeholder {
+  input.ow-input::placeholder,
+  textarea.ow-input::placeholder {
     color: #b0b8c4;
   }
   .ow-textarea {
