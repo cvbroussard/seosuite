@@ -246,22 +246,54 @@ export function CoachingWalkthrough({
             gap: 8,
           }}
         >
-          <button
-            type="button"
-            onClick={goBack}
-            disabled={navStack.length <= 1}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: navStack.length > 1 ? "#374151" : "#d1d5db",
-              fontSize: 13,
-              fontWeight: 500,
-              padding: "6px 0",
-              cursor: navStack.length > 1 ? "pointer" : "not-allowed",
-            }}
-          >
-            ← Back
-          </button>
+          {(() => {
+            const canGoBack = navStack.length > 1;
+            const prevNodeId = canGoBack ? navStack[navStack.length - 2] : null;
+            const prevNode = prevNodeId && walkthrough ? walkthrough.nodes[prevNodeId] : null;
+            const prevLabel = prevNode ? getNodeBackLabel(prevNode) : "";
+            return (
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={!canGoBack}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: canGoBack ? "#374151" : "#d1d5db",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  padding: "6px 0",
+                  cursor: canGoBack ? "pointer" : "not-allowed",
+                  textAlign: "left",
+                  maxWidth: "60%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  lineHeight: 1.3,
+                }}
+              >
+                <span style={{ fontSize: 11, color: canGoBack ? "#9ca3af" : "#d1d5db", fontWeight: 500 }}>
+                  ← Back to
+                </span>
+                {canGoBack && prevLabel && (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#1a1a1a",
+                      fontWeight: 500,
+                      marginTop: 2,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: "100%",
+                    }}
+                  >
+                    {prevLabel}
+                  </span>
+                )}
+              </button>
+            );
+          })()}
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             {onSkip && (
               <button
@@ -587,6 +619,19 @@ function NodeRenderer({
       </div>
     </div>
   );
+}
+
+/**
+ * Short, human-readable label for a node — used in the "Back to..."
+ * breadcrumb. Truncates question text since questions can be long;
+ * instruction + terminal nodes already have concise titles.
+ */
+function getNodeBackLabel(node: WalkthroughNode): string {
+  const MAX = 50;
+  const truncate = (s: string) => (s.length > MAX ? s.slice(0, MAX - 1).trimEnd() + "…" : s);
+  if (node.type === "question") return truncate(node.question);
+  if (node.type === "instruction") return truncate(node.title);
+  return truncate(node.title);
 }
 
 function ScreenshotLightbox({
