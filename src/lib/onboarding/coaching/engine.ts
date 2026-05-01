@@ -15,6 +15,7 @@ import type {
   QuestionNode,
   InstructionNode,
   TerminalNode,
+  GalleryItem,
 } from "./types";
 
 interface WalkthroughRow {
@@ -98,6 +99,7 @@ function nodeFromRow(row: NodeRow): WalkthroughNode {
       deep_link_label: c.deep_link_label ? String(c.deep_link_label) : undefined,
       screenshot: c.screenshot ? String(c.screenshot) : undefined,
       screenshot_alt: c.screenshot_alt ? String(c.screenshot_alt) : undefined,
+      gallery: parseGallery(c.gallery),
       bullets: Array.isArray(c.bullets) ? (c.bullets as unknown[]).map(String) : undefined,
       next: String(c.next || ""),
     } as InstructionNode;
@@ -111,6 +113,31 @@ function nodeFromRow(row: NodeRow): WalkthroughNode {
     action: (c.action as "connect" | "done") || "done",
     action_label: c.action_label ? String(c.action_label) : undefined,
   } as TerminalNode;
+}
+
+function parseGallery(raw: unknown): GalleryItem[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const items: GalleryItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const type = String(e.type || "");
+    if (type === "image" && typeof e.url === "string") {
+      items.push({
+        type: "image",
+        url: e.url,
+        caption: e.caption ? String(e.caption) : undefined,
+        alt: e.alt ? String(e.alt) : undefined,
+      });
+    } else if (type === "button" && typeof e.label === "string") {
+      items.push({
+        type: "button",
+        label: e.label,
+        caption: e.caption ? String(e.caption) : undefined,
+      });
+    }
+  }
+  return items.length > 0 ? items : undefined;
 }
 
 /**

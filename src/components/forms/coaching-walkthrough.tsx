@@ -5,12 +5,34 @@ import type {
   PlatformWalkthrough,
   WalkthroughNode,
   CoachingProgressPayload,
+  GalleryItem,
+  InstructionNode,
 } from "@/lib/onboarding/coaching/types";
 import { ThinProgressBar } from "./thin-progress-bar";
 
-interface LightboxImage {
-  url: string;
-  alt: string;
+interface LightboxState {
+  items: GalleryItem[];
+  startIndex: number;
+}
+
+/**
+ * Resolve an instruction node's effective gallery: prefer the polymorphic
+ * `gallery` field when present, otherwise fall back to a single-item gallery
+ * synthesized from the legacy `screenshot` URL. Returns an empty array when
+ * the node has neither — the CTA is then suppressed.
+ */
+function resolveGallery(node: InstructionNode): GalleryItem[] {
+  if (node.gallery && node.gallery.length > 0) return node.gallery;
+  if (node.screenshot) {
+    return [
+      {
+        type: "image",
+        url: node.screenshot,
+        alt: node.screenshot_alt || node.title,
+      },
+    ];
+  }
+  return [];
 }
 
 interface Props {
@@ -48,7 +70,7 @@ export function CoachingWalkthrough({
   onSkip,
 }: Props) {
   const [confirmingSkip, setConfirmingSkip] = useState(false);
-  const [lightbox, setLightbox] = useState<LightboxImage | null>(null);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [walkthrough, setWalkthrough] = useState<PlatformWalkthrough | null>(walkthroughProp || null);
   const [navStack, setNavStack] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -251,7 +273,7 @@ export function CoachingWalkthrough({
               onAdvance={goNext}
               onConnect={handleConnect}
               onDone={onClose}
-              onOpenScreenshot={(url, alt) => setLightbox({ url, alt })}
+              onOpenGallery={(items) => setLightbox({ items, startIndex: 0 })}
             />
           )}
         </div>
@@ -353,11 +375,11 @@ export function CoachingWalkthrough({
           </div>
         </footer>
 
-        {/* Lightbox overlay for screenshots */}
+        {/* Gallery lightbox — multi-step walkthrough viewer */}
         {lightbox && (
-          <ScreenshotLightbox
-            url={lightbox.url}
-            alt={lightbox.alt}
+          <GalleryLightbox
+            items={lightbox.items}
+            startIndex={lightbox.startIndex}
             onClose={() => setLightbox(null)}
           />
         )}
@@ -446,13 +468,13 @@ function NodeRenderer({
   onAdvance,
   onConnect,
   onDone,
-  onOpenScreenshot,
+  onOpenGallery,
 }: {
   node: WalkthroughNode;
   onAdvance: (nextId: string) => void;
   onConnect: () => void;
   onDone: () => void;
-  onOpenScreenshot: (url: string, alt: string) => void;
+  onOpenGallery: (items: GalleryItem[]) => void;
 }) {
   if (node.type === "question") {
     return (
@@ -521,55 +543,55 @@ function NodeRenderer({
             ))}
           </ul>
         )}
-        {node.screenshot && (
-          <div
-            style={{
-              margin: "14px 0",
-              padding: "14px 16px",
-              border: "1px dashed #d1d5db",
-              borderRadius: 10,
-              background: "#f9fafb",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }} aria-hidden>
-              📷
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <button
-                type="button"
-                onClick={() => onOpenScreenshot(node.screenshot!, node.screenshot_alt || node.title)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "#1d4ed8",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                  display: "block",
-                  textAlign: "left",
-                }}
-              >
-                View screenshot
-              </button>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#9ca3af",
-                  marginTop: 3,
-                  fontFamily: "ui-monospace, 'SF Mono', monospace",
-                  wordBreak: "break-all",
-                }}
-              >
-                {node.screenshot}
+        {(() => {
+          const gallery = resolveGallery(node);
+          if (gallery.length === 0) return null;
+          const isMulti = gallery.length > 1;
+          const ctaLabel = isMulti ? `Walk through the steps (${gallery.length})` : "View screenshot";
+          return (
+            <div
+              style={{
+                margin: "14px 0",
+                padding: "14px 16px",
+                border: "1px dashed #d1d5db",
+                borderRadius: 10,
+                background: "#f9fafb",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }} aria-hidden>
+                {isMulti ? "🖼" : "📷"}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => onOpenGallery(gallery)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#1d4ed8",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    display: "block",
+                    textAlign: "left",
+                  }}
+                >
+                  {ctaLabel} →
+                </button>
+                {isMulti && (
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 3 }}>
+                    Step-by-step walkthrough opens in a viewer you can flip through.
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
           {node.deep_link && (
             <a
@@ -715,25 +737,67 @@ function getNodeBackLabel(node: WalkthroughNode): string {
   return truncate(node.title);
 }
 
-function ScreenshotLightbox({
-  url,
-  alt,
+/**
+ * Multi-step gallery lightbox. Renders the active item large (image at
+ * full size, or a labeled card for button-type steps), with a strip of
+ * navigation chips along the bottom — thumbnails for image steps,
+ * numbered/labeled chips for button steps. All entries reachable in one
+ * click from the strip.
+ *
+ * Always opens at index 0 for predictability — coming back later doesn't
+ * try to guess which step the subscriber was on.
+ *
+ * Keyboard: ← prev step, → next step, Esc close.
+ */
+function GalleryLightbox({
+  items,
+  startIndex,
   onClose,
 }: {
-  url: string;
-  alt: string;
+  items: GalleryItem[];
+  startIndex: number;
   onClose: () => void;
 }) {
-  const [errored, setErrored] = useState(false);
-  // The URL is now the full canonical asset URL (assets.tracpost.com/...).
-  // Show it as-is for the operator to know where to upload.
-  const filePath = url;
+  const safeStart = Math.max(0, Math.min(startIndex, items.length - 1));
+  const [activeIndex, setActiveIndex] = useState(safeStart);
+  // Track per-item image-load failures so the "pending" panel can
+  // replace just the broken slot — operators upload screenshots
+  // incrementally and a missing one shouldn't kill the whole gallery.
+  const [erroredUrls, setErroredUrls] = useState<Set<string>>(new Set());
+
+  const active = items[activeIndex];
+  const total = items.length;
+
+  const goPrev = useCallback(() => {
+    setActiveIndex((i) => (i > 0 ? i - 1 : i));
+  }, []);
+  const goNext = useCallback(() => {
+    setActiveIndex((i) => (i < total - 1 ? i + 1 : i));
+  }, [total]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") goPrev();
+      else if (e.key === "ArrowRight" || e.key === "ArrowDown") goNext();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, goPrev, goNext]);
+
+  function markErrored(url: string) {
+    setErroredUrls((prev) => {
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  }
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={alt}
+      aria-label="Walkthrough gallery"
       onClick={onClose}
       style={{
         position: "fixed",
@@ -750,19 +814,20 @@ function ScreenshotLightbox({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          maxWidth: 500,
-          width: "auto",
+          maxWidth: 760,
+          width: "100%",
           display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          alignItems: "center",
+          flexDirection: "row",
+          gap: 14,
+          alignItems: "stretch",
           position: "relative",
+          maxHeight: "82vh",
         }}
       >
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close screenshot"
+          aria-label="Close gallery"
           style={{
             position: "absolute",
             top: -14,
@@ -778,7 +843,7 @@ function ScreenshotLightbox({
             alignItems: "center",
             justifyContent: "center",
             boxShadow: "0 4px 12px rgba(0,0,0,0.20)",
-            zIndex: 1,
+            zIndex: 2,
           }}
         >
           <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -786,65 +851,267 @@ function ScreenshotLightbox({
           </svg>
         </button>
 
-        {!errored ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={url}
-            alt={alt}
-            onError={() => setErrored(true)}
-            style={{
-              maxWidth: "100%",
-              maxHeight: "70vh",
-              objectFit: "contain",
-              borderRadius: 8,
-              background: "#fff",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-            }}
-          />
-        ) : (
+        {/* Vertical step strip — thumbnails + chips pinned left.
+            Scrolls independently if the gallery is long; the hero
+            stays anchored on the right and only the strip moves. */}
+        {total > 1 && (
           <div
             style={{
-              padding: "32px 28px",
-              background: "#fff",
-              borderRadius: 14,
-              maxWidth: 460,
-              textAlign: "center",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.40)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              alignItems: "center",
+              padding: "4px 2px",
+              overflowY: "auto",
+              maxHeight: "78vh",
+              flexShrink: 0,
+              width: 76,
             }}
           >
-            <div style={{ fontSize: 32, marginBottom: 12 }} aria-hidden>
-              📷
-            </div>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
-              Screenshot pending
-            </h3>
-            <p style={{ fontSize: 13, color: "#4b5563", margin: "0 0 16px", lineHeight: 1.55 }}>
-              This screenshot hasn&apos;t been captured yet. Capture this screen during your next setup walkthrough and upload it to:
-            </p>
-            <code
-              style={{
-                display: "block",
-                padding: "10px 14px",
-                background: "#f3f4f6",
-                color: "#1a1a1a",
-                borderRadius: 8,
-                fontSize: 12,
-                fontFamily: "ui-monospace, 'SF Mono', monospace",
-                wordBreak: "break-all",
-                textAlign: "left",
-                lineHeight: 1.6,
-              }}
-            >
-              {filePath}
-            </code>
-            <p style={{ fontSize: 11, color: "#9ca3af", margin: "14px 0 0" }}>
-              Once dropped into the repo at this exact path, the wizard renders the real image
-              automatically — no code change needed.
-            </p>
+            {items.map((it, idx) => {
+              const isActive = idx === activeIndex;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveIndex(idx)}
+                  aria-label={`Go to step ${idx + 1}`}
+                  aria-current={isActive ? "step" : undefined}
+                  style={{
+                    background: "#fff",
+                    border: isActive ? "2px solid #1d4ed8" : "1px solid rgba(0,0,0,0.10)",
+                    borderRadius: 8,
+                    padding: 0,
+                    cursor: "pointer",
+                    overflow: "hidden",
+                    width: 64,
+                    height: 48,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#1a1a1a",
+                    boxShadow: isActive ? "0 2px 8px rgba(29,78,216,0.35)" : "0 1px 3px rgba(0,0,0,0.10)",
+                    flexShrink: 0,
+                    position: "relative",
+                  }}
+                >
+                  {it.type === "image" && !erroredUrls.has(it.url) ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={it.url}
+                      alt=""
+                      onError={() => markErrored(it.url)}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                  ) : (
+                    <span style={{ fontFamily: "ui-monospace, 'SF Mono', monospace" }}>
+                      {idx + 1}
+                    </span>
+                  )}
+                  {/* Tiny corner badge for button-step thumbnails so they're
+                      visually distinguishable from image thumbs at a glance */}
+                  {it.type === "button" && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 2,
+                        right: 2,
+                        fontSize: 8,
+                        background: "rgba(29,78,216,0.85)",
+                        color: "#fff",
+                        padding: "1px 4px",
+                        borderRadius: 4,
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                        fontWeight: 700,
+                      }}
+                    >
+                      tap
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
 
+        {/* Right column — hero + caption + counter, vertically centered.
+            Hero size variation no longer pushes anything around because
+            the strip is anchored in its own column. */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            minWidth: 0,
+          }}
+        >
+          <ActiveGalleryItem
+            item={active}
+            errored={active.type === "image" && erroredUrls.has(active.url)}
+            onImageError={() => active.type === "image" && markErrored(active.url)}
+          />
+
+          {active.type === "button" && active.label && (
+            <p
+              style={{
+                fontSize: 12,
+                color: "rgba(255,255,255,0.92)",
+                margin: 0,
+                textAlign: "center",
+                textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                fontWeight: 600,
+              }}
+            >
+              {active.label}
+            </p>
+          )}
+
+          {active.caption && (
+            <p
+              style={{
+                fontSize: 13,
+                color: "#fff",
+                textAlign: "center",
+                maxWidth: 540,
+                margin: 0,
+                textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                lineHeight: 1.55,
+              }}
+            >
+              {active.caption}
+            </p>
+          )}
+
+          {total > 1 && (
+            <p
+              style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.85)",
+                margin: 0,
+                textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+              }}
+            >
+              Step {activeIndex + 1} of {total}
+            </p>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The "hero" slot of the gallery — renders the current item full-size.
+ * Image items show the actual screenshot (with pending-fallback if it
+ * 404s). Button items render a centered placeholder card with the label.
+ */
+function ActiveGalleryItem({
+  item,
+  errored,
+  onImageError,
+}: {
+  item: GalleryItem;
+  errored: boolean;
+  onImageError: () => void;
+}) {
+  if (item.type === "button") {
+    return (
+      <div
+        style={{
+          padding: "40px 32px",
+          background: "#fff",
+          borderRadius: 14,
+          width: "100%",
+          maxWidth: 460,
+          textAlign: "center",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+          minHeight: 200,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#9ca3af",
+            letterSpacing: 0.16,
+            textTransform: "uppercase",
+          }}
+        >
+          Action step
+        </div>
+        <h3 style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a", margin: 0, lineHeight: 1.3 }}>
+          {item.label}
+        </h3>
+      </div>
+    );
+  }
+
+  if (errored) {
+    return (
+      <div
+        style={{
+          padding: "32px 28px",
+          background: "#fff",
+          borderRadius: 14,
+          maxWidth: 460,
+          textAlign: "center",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.40)",
+        }}
+      >
+        <div style={{ fontSize: 32, marginBottom: 12 }} aria-hidden>
+          📷
+        </div>
+        <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
+          Screenshot pending
+        </h3>
+        <p style={{ fontSize: 13, color: "#4b5563", margin: "0 0 16px", lineHeight: 1.55 }}>
+          This screenshot hasn&apos;t been captured yet. Operator will upload to:
+        </p>
+        <code
+          style={{
+            display: "block",
+            padding: "10px 14px",
+            background: "#f3f4f6",
+            color: "#1a1a1a",
+            borderRadius: 8,
+            fontSize: 12,
+            fontFamily: "ui-monospace, 'SF Mono', monospace",
+            wordBreak: "break-all",
+            textAlign: "left",
+            lineHeight: 1.6,
+          }}
+        >
+          {item.url}
+        </code>
+      </div>
+    );
+  }
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={item.url}
+      alt={item.alt || ""}
+      onError={onImageError}
+      style={{
+        maxWidth: "100%",
+        maxHeight: "70vh",
+        objectFit: "contain",
+        borderRadius: 8,
+        background: "#fff",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+      }}
+    />
   );
 }

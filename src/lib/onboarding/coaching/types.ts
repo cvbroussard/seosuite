@@ -43,6 +43,36 @@ export interface QuestionNode {
   options: QuestionOption[];
 }
 
+/**
+ * Gallery item — polymorphic step entry rendered inside the coaching
+ * lightbox. An "image" step shows an actual screenshot at full size; a
+ * "button" step represents a verbal action that has no useful screenshot
+ * (e.g., "wait for verification email", "click the Continue dropdown").
+ *
+ * The gallery is the modern replacement for the single-screenshot model.
+ * Existing nodes that still set `screenshot` continue to work — the
+ * editor surfaces both fields and prefers `gallery` if present.
+ */
+export interface GalleryImageItem {
+  type: "image";
+  /** Public URL (assets.tracpost.com/...) */
+  url: string;
+  /** Caption shown beneath the image inside the lightbox */
+  caption?: string;
+  /** Alt-text for accessibility */
+  alt?: string;
+}
+
+export interface GalleryButtonItem {
+  type: "button";
+  /** Numbered/labeled chip text inside the lightbox strip */
+  label: string;
+  /** Caption shown when this step is active */
+  caption?: string;
+}
+
+export type GalleryItem = GalleryImageItem | GalleryButtonItem;
+
 export interface InstructionNode {
   type: "instruction";
   id: string;
@@ -54,10 +84,12 @@ export interface InstructionNode {
   deep_link?: string;
   /** CTA label for the deep_link button */
   deep_link_label?: string;
-  /** Optional screenshot URL (placeholder if not yet captured) */
+  /** Legacy single-screenshot URL (still honored if gallery is empty). */
   screenshot?: string;
-  /** Optional alt-text for the screenshot */
+  /** Legacy alt-text for the single screenshot. */
   screenshot_alt?: string;
+  /** Multi-step walkthrough gallery — preferred over `screenshot`. */
+  gallery?: GalleryItem[];
   /** Bulleted prerequisites or sub-steps shown beneath the body */
   bullets?: string[];
   /** Where to go after the user clicks "I'm done with this step" */

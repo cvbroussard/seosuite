@@ -217,6 +217,11 @@ textarea::placeholder {
   color: var(--color-input-placeholder);
 }
 
+/* Utility: force full-width on selects (and harmless on inputs/textareas). */
+.input {
+  width: 100%;
+}
+
 /* Kill all box-shadows — flat design */
 * {
   --tw-shadow: none !important;
