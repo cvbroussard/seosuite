@@ -4,6 +4,7 @@ import {
   lookupTenantByCustomDomain,
   lookupCustomDomainBySlug,
 } from "@/lib/custom-domain-lookup";
+import { isAdminCookieValidEdge } from "@/lib/cookie-sign-edge";
 
 /**
  * Extract siteSlug from a custom subdomain.
@@ -95,7 +96,7 @@ export async function middleware(req: NextRequest) {
 
   // In development, only enforce admin auth — skip subdomain logic
   if (isLocal) {
-    return gateAdmin(req, pathname);
+    return await gateAdmin(req, pathname);
   }
 
   // API routes — shared across all subdomains, pass through
@@ -272,7 +273,7 @@ export async function middleware(req: NextRequest) {
 
     // Gate admin routes (after rewrite or direct access)
     if (pathname.startsWith("/admin")) {
-      const gate = gateAdmin(req, pathname);
+      const gate = await gateAdmin(req, pathname);
       if (gate) return gate;
       return NextResponse.next();
     }
@@ -288,7 +289,7 @@ export async function middleware(req: NextRequest) {
     const rewritePath = pathname === "/" ? "/admin" : `/admin${pathname}`;
 
     // Gate before rewriting
-    const gate = gateAdmin(req, rewritePath);
+    const gate = await gateAdmin(req, rewritePath);
     if (gate) return gate;
 
     const url = req.nextUrl.clone();
@@ -314,7 +315,7 @@ export async function middleware(req: NextRequest) {
     // Rewrite: /subscribers → /manage/subscribers, / → /manage
     const rewritePath = pathname === "/" ? "/manage" : `/manage${pathname}`;
 
-    const gate = gateAdmin(req, rewritePath);
+    const gate = await gateAdmin(req, rewritePath);
     if (gate) return gate;
 
     const url = req.nextUrl.clone();
@@ -371,10 +372,18 @@ export async function middleware(req: NextRequest) {
 }
 
 /**
- * Gate admin routes — redirect to admin login if no tp_admin cookie.
+ * Gate admin routes — redirect to admin login if the tp_admin cookie is
+ * missing, malformed, tampered with, or expired.
+ *
+ * Verifies the HMAC signature using a Web-Crypto-based verifier
+ * (`isAdminCookieValidEdge`) — the cookie is set by /api/auth/admin
+ * with `signCookie()` and is NOT just the literal string "authenticated".
  * Returns a redirect response if blocked, or null if allowed.
  */
-function gateAdmin(req: NextRequest, pathname: string): NextResponse | null {
+async function gateAdmin(
+  req: NextRequest,
+  pathname: string,
+): Promise<NextResponse | null> {
   // Skip API routes and login page
   if (pathname.startsWith("/api/") || pathname === "/admin-login") {
     return null;
@@ -391,7 +400,7 @@ function gateAdmin(req: NextRequest, pathname: string): NextResponse | null {
   }
 
   const adminCookie = req.cookies.get("tp_admin")?.value;
-  if (adminCookie === "authenticated") {
+  if (await isAdminCookieValidEdge(adminCookie)) {
     return null;
   }
 
