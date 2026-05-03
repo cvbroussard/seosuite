@@ -46,7 +46,17 @@ export async function GET(_req: NextRequest) {
       AND sa.subscription_id = ${session.subscriptionId}
   `;
 
-  if (pages.length === 0) {
+  const igAccounts = await sql`
+    SELECT pa.asset_id AS ig_user_id, pa.asset_name AS ig_username, pa.metadata
+    FROM site_platform_assets spa
+    JOIN platform_assets pa ON pa.id = spa.platform_asset_id
+    JOIN social_accounts sa ON sa.id = pa.social_account_id
+    WHERE spa.site_id = ${session.activeSiteId}
+      AND pa.asset_type = 'instagram_account'
+      AND sa.subscription_id = ${session.subscriptionId}
+  `;
+
+  if (pages.length === 0 && igAccounts.length === 0) {
     return NextResponse.json({ posts: [] });
   }
 
@@ -64,8 +74,11 @@ export async function GET(_req: NextRequest) {
   const allPosts: Array<{
     id: string;
     platform: string;
-    pageId: string;
-    pageName: string;
+    pageId: string | null;        // FB Page ID (FB posts only)
+    pageName: string | null;
+    igUserId: string | null;      // IG Business account ID (IG posts only)
+    igUsername: string | null;
+    igMediaId: string | null;     // IG media ID (IG posts only)
     caption: string;
     image: string | null;
     permalinkUrl: string | null;
@@ -94,6 +107,9 @@ export async function GET(_req: NextRequest) {
           platform: "facebook",
           pageId: page.page_id as string,
           pageName: page.page_name as string,
+          igUserId: null,
+          igUsername: null,
+          igMediaId: null,
           caption: raw.message ?? "",
           image: raw.full_picture ?? null,
           permalinkUrl: raw.permalink_url ?? null,
@@ -106,7 +122,55 @@ export async function GET(_req: NextRequest) {
     }
   }
 
-  // Top by engagement
+  // ── Instagram media ─────────────────────────────────────────────────
+  const igFields = [
+    "id",
+    "caption",
+    "media_url",
+    "thumbnail_url",
+    "permalink",
+    "timestamp",
+    "like_count",
+    "comments_count",
+  ].join(",");
+
+  for (const acct of igAccounts) {
+    const meta = (acct.metadata || {}) as Record<string, unknown>;
+    // IG publishing uses the linked Page's access token (organic Meta callback stores it)
+    const igToken = meta.page_access_token as string | undefined;
+    if (!igToken) continue;
+
+    try {
+      const res = await fetch(
+        `${GRAPH_BASE}/${acct.ig_user_id}/media?fields=${igFields}&limit=25&access_token=${igToken}`
+      );
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.data)) continue;
+
+      for (const raw of data.data as Record<string, unknown>[]) {
+        const likeCount = Number(raw.like_count ?? 0);
+        const commentsCount = Number(raw.comments_count ?? 0);
+        allPosts.push({
+          id: String(raw.id),
+          platform: "instagram",
+          pageId: null,
+          pageName: null,
+          igUserId: acct.ig_user_id as string,
+          igUsername: acct.ig_username as string,
+          igMediaId: String(raw.id),
+          caption: String(raw.caption ?? ""),
+          image: (raw.media_url as string) ?? (raw.thumbnail_url as string) ?? null,
+          permalinkUrl: (raw.permalink as string) ?? null,
+          createdTime: String(raw.timestamp ?? ""),
+          engagement: likeCount + commentsCount,
+        });
+      }
+    } catch {
+      // partial-results-better-than-total-failure same as FB branch
+    }
+  }
+
+  // Top by engagement, mixed across platforms
   allPosts.sort((a, b) => b.engagement - a.engagement);
   return NextResponse.json({ posts: allPosts.slice(0, 10) });
 }

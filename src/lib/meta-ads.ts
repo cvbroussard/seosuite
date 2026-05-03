@@ -251,23 +251,65 @@ export async function createAdSet(
   return { id: String(data.id) };
 }
 
+/**
+ * Live discovery: is the given Instagram Business account Page-linked
+ * at the Meta business level? Required for paid IG ads — Meta's ad
+ * infrastructure attributes IG placements via the Page-IG association.
+ *
+ * Uses the Ads OAuth token (pages_show_list + business_management).
+ * Called just before each IG boost attempt so cached state never goes
+ * stale relative to subscriber-side relinking at meta.com.
+ *
+ * Returns the linked Page info if found; { linked: false } otherwise.
+ */
+export async function verifyIgPageLink(
+  igUserId: string,
+  accessToken: string
+): Promise<{ linked: boolean; pageId: string | null; pageName: string | null }> {
+  const res = await fetch(
+    `${GRAPH_BASE}/me/accounts?fields=id,name,instagram_business_account&access_token=${accessToken}`
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Page-IG link discovery failed: ${JSON.stringify(data.error || data)}`);
+  }
+  if (!Array.isArray(data.data)) {
+    return { linked: false, pageId: null, pageName: null };
+  }
+  for (const page of data.data) {
+    const ig = (page as Record<string, unknown>).instagram_business_account as { id?: string } | undefined;
+    if (ig?.id === igUserId) {
+      return {
+        linked: true,
+        pageId: String((page as Record<string, unknown>).id),
+        pageName: String((page as Record<string, unknown>).name || ""),
+      };
+    }
+  }
+  return { linked: false, pageId: null, pageName: null };
+}
+
 export interface CreateBoostedAdParams {
   name: string;
   adSetId: string;
-  pageId: string;
-  postId: string;             // The full post id including page prefix is fine
+  platform: "facebook" | "instagram";
+  // Facebook fields:
+  pageId?: string;
+  postId?: string;          // Page Post ID; full pageId_postId form preferred
+  // Instagram fields:
+  igMediaId?: string;       // The IG media object ID (from /{ig_user_id}/media)
   status?: "ACTIVE" | "PAUSED";
 }
 
 /**
- * Create an ad whose creative is an existing organic Page post —
- * the "boost an existing post" pattern. Used by the boost-winners flow.
+ * Create an ad whose creative is an existing organic post — boost an
+ * existing-post pattern. Branches on platform:
  *
- * Step 1: create an ad creative referencing object_story_id (full
- *   {pageId}_{postId} form).
- * Step 2: create the ad attaching that creative to the ad set.
- *
- * Meta requires that the post is owned by the connected Page.
+ * - Facebook: creative references object_story_id ({pageId}_{postId}).
+ * - Instagram: creative references effective_instagram_media_id, which
+ *   resolves to the Page-linked IG account at the ad-account business
+ *   level. Caller must verify the Page-IG link exists via
+ *   verifyIgPageLink() before calling — this function does not pre-check.
  */
 export async function createBoostedAd(
   adAccountId: string,
@@ -275,16 +317,28 @@ export async function createBoostedAd(
   accessToken: string
 ): Promise<{ creativeId: string; adId: string }> {
   const id = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
-  // post id may already be in pageId_postId form (Page Post id) or just the bare post id;
-  // boost requires the full pageId_postId object_story_id.
-  const objectStoryId = params.postId.includes("_") ? params.postId : `${params.pageId}_${params.postId}`;
 
-  // Step 1 — creative
+  // Step 1 — creative (platform-specific)
   const creativeBody = new URLSearchParams({
     name: `${params.name} — creative`,
-    object_story_id: objectStoryId,
     access_token: accessToken,
   });
+
+  if (params.platform === "facebook") {
+    if (!params.pageId || !params.postId) {
+      throw new Error("Facebook boost requires pageId and postId");
+    }
+    const objectStoryId = params.postId.includes("_")
+      ? params.postId
+      : `${params.pageId}_${params.postId}`;
+    creativeBody.set("object_story_id", objectStoryId);
+  } else {
+    if (!params.igMediaId) {
+      throw new Error("Instagram boost requires igMediaId");
+    }
+    creativeBody.set("effective_instagram_media_id", params.igMediaId);
+  }
+
   const creativeRes = await fetch(`${GRAPH_BASE}/${id}/adcreatives`, {
     method: "POST",
     body: creativeBody,

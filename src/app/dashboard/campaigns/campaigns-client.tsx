@@ -42,8 +42,11 @@ interface CampaignRow {
 interface TopPost {
   id: string;
   platform: string;
-  pageId: string;
-  pageName: string;
+  pageId: string | null;
+  pageName: string | null;
+  igUserId: string | null;
+  igUsername: string | null;
+  igMediaId: string | null;
   caption: string;
   image: string | null;
   permalinkUrl: string | null;
@@ -208,9 +211,15 @@ export function CampaignsClient(_props: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postId: post.id,
-          pageId: post.pageId,
-          pageName: post.pageName,
+          platform: post.platform,
+          // FB fields (null for IG posts; backend handles per-platform validation)
+          postId: post.platform === "facebook" ? post.id : "",
+          pageId: post.pageId ?? "",
+          pageName: post.pageName ?? "",
+          // IG fields
+          igMediaId: post.igMediaId ?? "",
+          igUserId: post.igUserId ?? "",
+          igUsername: post.igUsername ?? "",
           name: `Boost: ${post.caption.slice(0, 50) || post.id}`,
           dailyBudgetDollars: parseFloat(boostBudget),
         }),
@@ -542,7 +551,9 @@ export function CampaignsClient(_props: Props) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <PlatformIcon platform={post.platform} size={14} />
-                          <span className="text-[10px] text-muted">{post.pageName}</span>
+                          <span className="text-[10px] text-muted">
+                            {post.platform === "instagram" ? `@${post.igUsername}` : post.pageName}
+                          </span>
                         </div>
                         <p className="text-xs line-clamp-2">{post.caption || "(no caption)"}</p>
                         <div className="mt-1.5 flex gap-4 text-[10px] text-muted">

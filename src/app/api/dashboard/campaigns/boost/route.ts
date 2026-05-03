@@ -30,15 +30,28 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  const platform = (String(body.platform || "facebook").trim().toLowerCase()) as "facebook" | "instagram";
   const postId = String(body.postId || "").trim();
   const pageId = String(body.pageId || "").trim();
-  const pageName = String(body.pageName || "Page").trim();
-  const name = String(body.name || "").trim() || `Boost: ${pageName}`;
+  const pageName = String(body.pageName || "").trim();
+  const igMediaId = String(body.igMediaId || "").trim();
+  const igUserId = String(body.igUserId || "").trim();
+  const igUsername = String(body.igUsername || "").trim();
+  const name = String(body.name || "").trim() || `Boost: ${pageName || igUsername || "post"}`;
   const dailyBudgetDollars = Number(body.dailyBudgetDollars);
 
-  if (!postId || !pageId) {
-    return NextResponse.json({ error: "postId and pageId required" }, { status: 400 });
+  if (platform === "facebook") {
+    if (!postId || !pageId) {
+      return NextResponse.json({ error: "postId and pageId required for facebook boost" }, { status: 400 });
+    }
+  } else if (platform === "instagram") {
+    if (!igMediaId || !igUserId) {
+      return NextResponse.json({ error: "igMediaId and igUserId required for instagram boost" }, { status: 400 });
+    }
+  } else {
+    return NextResponse.json({ error: `unknown platform: ${platform}` }, { status: 400 });
   }
+
   if (!Number.isFinite(dailyBudgetDollars) || dailyBudgetDollars < 1) {
     return NextResponse.json({ error: "Daily budget must be at least $1" }, { status: 400 });
   }
@@ -84,14 +97,17 @@ export async function POST(req: NextRequest) {
       {
         name,
         adSetId: adSet.id,
-        pageId,
-        postId,
+        platform,
+        pageId: platform === "facebook" ? pageId : undefined,
+        postId: platform === "facebook" ? postId : undefined,
+        igMediaId: platform === "instagram" ? igMediaId : undefined,
         status: "PAUSED",
       },
       accessToken
     );
 
     return NextResponse.json({
+      platform,
       campaignId: campaign.id,
       adSetId: adSet.id,
       adId: ad.adId,
@@ -100,6 +116,26 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
+
+    // Translate IG Page-link-style errors into actionable coaching.
+    // Meta's typical error messages around this include phrases like
+    // "Instagram account is not connected to a Page", "no Instagram
+    // Business Account", or "Page is not connected to an Instagram
+    // account". Match loosely; pass through anything else verbatim.
+    if (platform === "instagram") {
+      const lower = message.toLowerCase();
+      const looksLikeLinkProblem =
+        lower.includes("instagram") &&
+        (lower.includes("not connected") || lower.includes("no instagram") || lower.includes("not linked") || lower.includes("not associated") || lower.includes("page-backed"));
+      if (looksLikeLinkProblem) {
+        return NextResponse.json({
+          error: "ig_not_page_linked",
+          message:
+            "This Instagram boost can't be created because the IG account isn't linked to a Facebook Page at Meta. Set up the link at meta.com → Page Settings → Linked Accounts → Instagram, then try again. (No need to re-connect TracPost — the link is picked up live.)",
+        }, { status: 400 });
+      }
+    }
+
     return NextResponse.json({ error: "marketing_api_failed", message }, { status: 502 });
   }
 }
