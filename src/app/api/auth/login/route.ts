@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const user = rows[0];
 
   if (!user.password_hash) {
-    return NextResponse.json({ error: "Password not set — contact admin" }, { status: 401 });
+    return NextResponse.json({ error: "Password not set. If you haven't finished onboarding, check your email for the sign-in link to complete it. Otherwise contact admin." }, { status: 401 });
   }
 
   const valid = await bcrypt.compare(password, user.password_hash);
