@@ -32,7 +32,7 @@ export function classifyHost(hostname: string): SubdomainType {
   // Strip port if present
   const host = hostname.split(":")[0];
 
-  if (host === "studio.tracpost.com") return "studio";
+  if (host === "studio.tracpost.com" || host === "app.tracpost.com") return "studio";
   if (host === "platform.tracpost.com") return "platform";
   if (host === "manage.tracpost.com") return "manage";
   if (host === "next.tracpost.com") return "next";
