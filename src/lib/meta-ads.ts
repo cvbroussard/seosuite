@@ -158,6 +158,162 @@ export async function listCampaigns(
   }));
 }
 
+// ─── Write operations ────────────────────────────────────────────────
+
+export interface CreateCampaignParams {
+  name: string;
+  objective: string;        // e.g. 'OUTCOME_TRAFFIC' | 'OUTCOME_ENGAGEMENT' | 'OUTCOME_LEADS'
+  status?: "ACTIVE" | "PAUSED";
+}
+
+/**
+ * Create a campaign in the given ad account. Returns the new campaign ID.
+ * Defaults status to PAUSED so review-time creations don't accidentally
+ * spend money. special_ad_categories=[] is correct for TracPost's
+ * subscriber segment (contractors, restaurants, etc.) — no special
+ * regulated categories.
+ */
+export async function createCampaign(
+  adAccountId: string,
+  params: CreateCampaignParams,
+  accessToken: string
+): Promise<{ id: string }> {
+  const id = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  const body = new URLSearchParams({
+    name: params.name,
+    objective: params.objective,
+    status: params.status || "PAUSED",
+    special_ad_categories: JSON.stringify([]),
+    access_token: accessToken,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${id}/campaigns`, {
+    method: "POST",
+    body,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Create campaign failed: ${JSON.stringify(data.error || data)}`);
+  }
+  return { id: String(data.id) };
+}
+
+export interface CreateAdSetParams {
+  name: string;
+  campaignId: string;
+  dailyBudgetCents: number;        // Meta wants integer cents
+  optimizationGoal?: string;       // default LINK_CLICKS
+  billingEvent?: string;           // default IMPRESSIONS
+  bidStrategy?: string;            // default LOWEST_COST_WITHOUT_CAP
+  countryCodes?: string[];         // default ['US']
+  status?: "ACTIVE" | "PAUSED";
+}
+
+/**
+ * Create an ad set under a campaign. Returns the new ad set ID.
+ *
+ * Defaults are deliberately broad to make creation reliable for first
+ * campaigns: US-only targeting, lowest-cost bid strategy, link-clicks
+ * optimization. Subscribers can refine in Meta Ads Manager if needed.
+ *
+ * Ad set start_time defaults to immediate; Meta requires a non-past
+ * timestamp. We send a 1-minute future offset to avoid clock skew
+ * rejecting the call.
+ */
+export async function createAdSet(
+  adAccountId: string,
+  params: CreateAdSetParams,
+  accessToken: string
+): Promise<{ id: string }> {
+  const id = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  const startTime = new Date(Date.now() + 60_000).toISOString();
+  const body = new URLSearchParams({
+    name: params.name,
+    campaign_id: params.campaignId,
+    daily_budget: String(params.dailyBudgetCents),
+    billing_event: params.billingEvent || "IMPRESSIONS",
+    optimization_goal: params.optimizationGoal || "LINK_CLICKS",
+    bid_strategy: params.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
+    start_time: startTime,
+    targeting: JSON.stringify({
+      geo_locations: { countries: params.countryCodes || ["US"] },
+    }),
+    status: params.status || "PAUSED",
+    access_token: accessToken,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${id}/adsets`, {
+    method: "POST",
+    body,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Create ad set failed: ${JSON.stringify(data.error || data)}`);
+  }
+  return { id: String(data.id) };
+}
+
+export interface CreateBoostedAdParams {
+  name: string;
+  adSetId: string;
+  pageId: string;
+  postId: string;             // The full post id including page prefix is fine
+  status?: "ACTIVE" | "PAUSED";
+}
+
+/**
+ * Create an ad whose creative is an existing organic Page post —
+ * the "boost an existing post" pattern. Used by the boost-winners flow.
+ *
+ * Step 1: create an ad creative referencing object_story_id (full
+ *   {pageId}_{postId} form).
+ * Step 2: create the ad attaching that creative to the ad set.
+ *
+ * Meta requires that the post is owned by the connected Page.
+ */
+export async function createBoostedAd(
+  adAccountId: string,
+  params: CreateBoostedAdParams,
+  accessToken: string
+): Promise<{ creativeId: string; adId: string }> {
+  const id = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  // post id may already be in pageId_postId form (Page Post id) or just the bare post id;
+  // boost requires the full pageId_postId object_story_id.
+  const objectStoryId = params.postId.includes("_") ? params.postId : `${params.pageId}_${params.postId}`;
+
+  // Step 1 — creative
+  const creativeBody = new URLSearchParams({
+    name: `${params.name} — creative`,
+    object_story_id: objectStoryId,
+    access_token: accessToken,
+  });
+  const creativeRes = await fetch(`${GRAPH_BASE}/${id}/adcreatives`, {
+    method: "POST",
+    body: creativeBody,
+  });
+  const creativeData = await creativeRes.json();
+  if (!creativeRes.ok) {
+    throw new Error(`Create ad creative failed: ${JSON.stringify(creativeData.error || creativeData)}`);
+  }
+
+  // Step 2 — ad
+  const adBody = new URLSearchParams({
+    name: params.name,
+    adset_id: params.adSetId,
+    creative: JSON.stringify({ creative_id: String(creativeData.id) }),
+    status: params.status || "PAUSED",
+    access_token: accessToken,
+  });
+  const adRes = await fetch(`${GRAPH_BASE}/${id}/ads`, {
+    method: "POST",
+    body: adBody,
+  });
+  const adData = await adRes.json();
+  if (!adRes.ok) {
+    throw new Error(`Create ad failed: ${JSON.stringify(adData.error || adData)}`);
+  }
+
+  return { creativeId: String(creativeData.id), adId: String(adData.id) };
+}
+
 export interface CampaignInsights {
   spend: string;
   impressions: string;

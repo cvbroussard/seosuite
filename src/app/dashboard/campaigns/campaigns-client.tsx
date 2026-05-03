@@ -91,6 +91,24 @@ export function CampaignsClient(_props: Props) {
 
   const [connecting, setConnecting] = useState(false);
 
+  // Campaign creation form state
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newObjective, setNewObjective] = useState("OUTCOME_TRAFFIC");
+  const [newBudget, setNewBudget] = useState("10");
+
+  // Per-row insights expansion
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  // Boost form state (per-post inline)
+  const [boostingPostId, setBoostingPostId] = useState<string | null>(null);
+  const [boostBudget, setBoostBudget] = useState("10");
+  const [boosting, setBoosting] = useState(false);
+  const [boostError, setBoostError] = useState<string | null>(null);
+  const [boostSuccess, setBoostSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -133,6 +151,85 @@ export function CampaignsClient(_props: Props) {
       .then((data) => setTopPosts(data.posts || []))
       .finally(() => setTopPostsLoading(false));
   }, [activeTab]);
+
+  async function refreshCampaigns() {
+    setCampaignsLoading(true);
+    try {
+      const res = await fetch("/api/dashboard/campaigns/list");
+      const data = await res.json();
+      if (data.error) {
+        setCampaignsError(data.message || data.error);
+        setCampaigns([]);
+      } else {
+        setCampaigns(data.campaigns || []);
+      }
+    } finally {
+      setCampaignsLoading(false);
+    }
+  }
+
+  async function submitNewCampaign() {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch("/api/dashboard/campaigns/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName,
+          objective: newObjective,
+          dailyBudgetDollars: parseFloat(newBudget),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateError(data.message || data.error || "Create failed");
+        return;
+      }
+      // Reset form and refresh list
+      setShowCreateForm(false);
+      setNewName("");
+      setNewBudget("10");
+      setNewObjective("OUTCOME_TRAFFIC");
+      await refreshCampaigns();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function submitBoost(post: TopPost) {
+    setBoosting(true);
+    setBoostError(null);
+    setBoostSuccess(null);
+    try {
+      const res = await fetch("/api/dashboard/campaigns/boost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: post.id,
+          pageId: post.pageId,
+          pageName: post.pageName,
+          name: `Boost: ${post.caption.slice(0, 50) || post.id}`,
+          dailyBudgetDollars: parseFloat(boostBudget),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBoostError(data.message || data.error || "Boost failed");
+        return;
+      }
+      setBoostSuccess(`Boost campaign created (paused). Activate in Meta Ads Manager when ready.`);
+      setBoostingPostId(null);
+      // Pull the campaigns list so the new boost appears
+      await refreshCampaigns();
+    } catch (err) {
+      setBoostError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setBoosting(false);
+    }
+  }
 
   async function startConnectFlow() {
     setConnecting(true);
@@ -241,6 +338,71 @@ export function CampaignsClient(_props: Props) {
       {/* Campaigns Tab */}
       {activeTab === "campaigns" && (
         <div className="space-y-3">
+          {/* Create-campaign affordance */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted">All new campaigns are created in PAUSED status — activate them in Meta Ads Manager when you&apos;re ready to spend.</p>
+            <button
+              onClick={() => { setShowCreateForm((v) => !v); setCreateError(null); }}
+              className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+            >
+              {showCreateForm ? "Cancel" : "+ New Campaign"}
+            </button>
+          </div>
+
+          {showCreateForm && (
+            <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+              <h3 className="text-sm font-medium mb-3">Create Campaign</h3>
+              <div className="grid grid-cols-[1fr_180px_120px] gap-3">
+                <div>
+                  <label className="block text-[10px] text-muted mb-0.5">Campaign Name</label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="e.g. Spring Renovation Promotion"
+                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-muted mb-0.5">Objective</label>
+                  <select
+                    value={newObjective}
+                    onChange={(e) => setNewObjective(e.target.value)}
+                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+                  >
+                    <option value="OUTCOME_TRAFFIC">Traffic to website</option>
+                    <option value="OUTCOME_ENGAGEMENT">Post engagement</option>
+                    <option value="OUTCOME_LEADS">Lead generation</option>
+                    <option value="OUTCOME_AWARENESS">Brand awareness</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-muted mb-0.5">Daily Budget ($)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={newBudget}
+                    onChange={(e) => setNewBudget(e.target.value)}
+                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+                  />
+                </div>
+              </div>
+              {createError && (
+                <p className="mt-2 text-xs text-danger">{createError}</p>
+              )}
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  onClick={submitNewCampaign}
+                  disabled={creating || !newName.trim()}
+                  className="rounded bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                >
+                  {creating ? "Creating…" : "Create (paused)"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl border border-border bg-surface p-3 shadow-card">
               <p className="text-2xl font-semibold">{activeCount}</p>
@@ -283,26 +445,59 @@ export function CampaignsClient(_props: Props) {
                   <span>Clicks</span>
                 </div>
               </div>
-              {campaigns.map((c) => (
-                <div key={c.id} className="border-b border-border px-4 py-3 last:border-0 hover:bg-surface-hover transition-colors">
-                  <div className="grid grid-cols-[1fr_90px_100px_90px_90px_90px] items-center">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <PlatformIcon platform="facebook" size={16} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{c.name || c.id}</p>
-                        <p className="text-[9px] text-muted">{fmtDate(c.startTime || c.createdTime)} · {c.objective.replace("OUTCOME_", "")}</p>
+              {campaigns.map((c) => {
+                const isExpanded = expandedRow === c.id;
+                return (
+                  <div key={c.id} className="border-b border-border last:border-0">
+                    <button
+                      onClick={() => setExpandedRow(isExpanded ? null : c.id)}
+                      className="w-full px-4 py-3 hover:bg-surface-hover transition-colors text-left"
+                    >
+                      <div className="grid grid-cols-[1fr_90px_100px_90px_90px_90px] items-center">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <PlatformIcon platform="facebook" size={16} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{c.name || c.id}</p>
+                            <p className="text-[9px] text-muted">{fmtDate(c.startTime || c.createdTime)} · {c.objective.replace("OUTCOME_", "")}</p>
+                          </div>
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${STATUS_COLORS[c.effectiveStatus] || "bg-gray-100 text-gray-500"}`}>
+                          {c.effectiveStatus.toLowerCase()}
+                        </span>
+                        <span className="text-xs">{fmtBudgetCents(c.dailyBudget)}</span>
+                        <span className="text-xs">{fmtMoney(c.insights.spend, adAccount.currency)}</span>
+                        <span className="text-xs">{parseInt(c.insights.reach || "0", 10).toLocaleString()}</span>
+                        <span className="text-xs">{parseInt(c.insights.clicks || "0", 10).toLocaleString()}</span>
                       </div>
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${STATUS_COLORS[c.effectiveStatus] || "bg-gray-100 text-gray-500"}`}>
-                      {c.effectiveStatus.toLowerCase()}
-                    </span>
-                    <span className="text-xs">{fmtBudgetCents(c.dailyBudget)}</span>
-                    <span className="text-xs">{fmtMoney(c.insights.spend, adAccount.currency)}</span>
-                    <span className="text-xs">{parseInt(c.insights.reach || "0", 10).toLocaleString()}</span>
-                    <span className="text-xs">{parseInt(c.insights.clicks || "0", 10).toLocaleString()}</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-border bg-background px-4 py-3">
+                        <div className="grid grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-[10px] text-muted">Impressions</p>
+                            <p className="text-sm font-medium">{parseInt(c.insights.impressions || "0", 10).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted">CTR</p>
+                            <p className="text-sm font-medium">{parseFloat(c.insights.ctr || "0").toFixed(2)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted">CPC</p>
+                            <p className="text-sm font-medium">{fmtMoney(c.insights.cpc, adAccount.currency)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted">CPM</p>
+                            <p className="text-sm font-medium">{fmtMoney(c.insights.cpm, adAccount.currency)}</p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-[10px] text-muted">
+                          Campaign ID: {c.id} · Status: {c.status} · Created {fmtDate(c.createdTime)}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -324,30 +519,88 @@ export function CampaignsClient(_props: Props) {
               </p>
             )}
 
+            {boostSuccess && (
+              <div className="mb-3 rounded bg-success/10 px-3 py-2 text-xs text-success">
+                {boostSuccess}
+              </div>
+            )}
+
             <div className="space-y-3">
-              {topPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="rounded-lg border border-border p-3 transition-colors hover:border-accent/50"
-                >
-                  <div className="flex items-start gap-3">
-                    {post.image && (
-                      <img src={post.image} alt="" className="h-16 w-16 rounded object-cover flex-shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <PlatformIcon platform={post.platform} size={14} />
-                        <span className="text-[10px] text-muted">{post.pageName}</span>
+              {topPosts.map((post) => {
+                const isBoosting = boostingPostId === post.id;
+                return (
+                  <div
+                    key={post.id}
+                    className={`rounded-lg border p-3 transition-colors ${
+                      isBoosting ? "border-accent bg-accent/5" : "border-border hover:border-accent/50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {post.image && (
+                        <img src={post.image} alt="" className="h-16 w-16 rounded object-cover flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <PlatformIcon platform={post.platform} size={14} />
+                          <span className="text-[10px] text-muted">{post.pageName}</span>
+                        </div>
+                        <p className="text-xs line-clamp-2">{post.caption || "(no caption)"}</p>
+                        <div className="mt-1.5 flex gap-4 text-[10px] text-muted">
+                          <span>{post.engagement.toLocaleString()} engagements</span>
+                          <span>{fmtDate(post.createdTime)}</span>
+                        </div>
                       </div>
-                      <p className="text-xs line-clamp-2">{post.caption || "(no caption)"}</p>
-                      <div className="mt-1.5 flex gap-4 text-[10px] text-muted">
-                        <span>{post.engagement.toLocaleString()} engagements</span>
-                        <span>{fmtDate(post.createdTime)}</span>
-                      </div>
+                      {!isBoosting && (
+                        <button
+                          onClick={() => { setBoostingPostId(post.id); setBoostError(null); setBoostSuccess(null); }}
+                          className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+                        >
+                          Boost
+                        </button>
+                      )}
                     </div>
+
+                    {isBoosting && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                          <div>
+                            <label className="block text-[10px] text-muted mb-0.5">Daily Budget ($)</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={boostBudget}
+                              onChange={(e) => setBoostBudget(e.target.value)}
+                              className="w-32 rounded border border-border bg-background px-2 py-1.5 text-xs"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setBoostingPostId(null)}
+                              className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-hover"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => submitBoost(post)}
+                              disabled={boosting}
+                              className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                            >
+                              {boosting ? "Creating…" : "Create Boost (paused)"}
+                            </button>
+                          </div>
+                        </div>
+                        {boostError && (
+                          <p className="mt-2 text-xs text-danger">{boostError}</p>
+                        )}
+                        <p className="mt-2 text-[10px] text-muted">
+                          Boost campaigns are created in PAUSED status — activate in Meta Ads Manager when you&apos;re ready to spend.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
