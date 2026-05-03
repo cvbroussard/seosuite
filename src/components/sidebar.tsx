@@ -47,7 +47,8 @@ const MODULES: Module[] = [
         label: "Connections",
         path: "/accounts",
         children: [
-          { label: "Meta (FB + IG)", path: "/accounts/meta" },
+          { label: "Facebook", path: "/accounts/facebook" },
+          { label: "Instagram", path: "/accounts/instagram" },
           { label: "Google Business", path: "/accounts/google-business" },
           { label: "YouTube", path: "/accounts/youtube" },
           { label: "TikTok", path: "/accounts/tiktok" },

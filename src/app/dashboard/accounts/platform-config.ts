@@ -35,7 +35,6 @@ export const PLATFORMS: PlatformConfig[] = [
     ],
     oauthRoute: "/api/auth/instagram",
     oauthReady: true,
-    hubTargetSlug: "meta",
     helpLinks: [
       { label: "Convert to Business Account", href: "https://help.instagram.com/502981923235522" },
       { label: "Link Instagram to Facebook Page", href: "https://help.instagram.com/570895513091465" },
@@ -60,7 +59,6 @@ export const PLATFORMS: PlatformConfig[] = [
     ],
     oauthRoute: "/api/auth/instagram",
     oauthReady: true,
-    hubTargetSlug: "meta",
     helpLinks: [
       { label: "Create a Facebook Page", href: "https://www.facebook.com/pages/create" },
       { label: "Page Roles and Permissions", href: "https://www.facebook.com/help/187316341316631" },
