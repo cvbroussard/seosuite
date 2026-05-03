@@ -137,7 +137,7 @@ export function CampaignsClient(_props: Props) {
   async function startConnectFlow() {
     setConnecting(true);
     try {
-      const res = await fetch("/api/auth/ads");
+      const res = await fetch("/api/auth/meta-ads");
       const data = await res.json();
       if (data.auth_url) {
         window.location.href = data.auth_url as string;

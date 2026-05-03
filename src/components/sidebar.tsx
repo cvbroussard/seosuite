@@ -20,6 +20,7 @@ interface Module {
   label: string;
   icon: React.ReactNode;
   subs: SubItem[];
+  enterpriseOnly?: boolean;
 }
 
 function Icon({ d, size = 16 }: { d: string; size?: number }) {
@@ -77,6 +78,7 @@ const MODULES: Module[] = [
   {
     label: "Promote",
     icon: ICONS.promote,
+    enterpriseOnly: true,
     subs: [
       { label: "Campaigns", path: "/campaigns" },
     ],
@@ -116,15 +118,18 @@ interface SidebarProps {
   sites: SiteInfo[];
   activeSiteId: string | null;
   role?: string;
+  plan?: string;
 }
 
-export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: SidebarProps) {
+export function Sidebar({ userName, sites, activeSiteId, role = "owner", plan = "" }: SidebarProps) {
   const pathname = usePathname();
   const isSubdomain =
     typeof window !== "undefined" &&
     window.location.hostname === "studio.tracpost.com";
   const prefix = isSubdomain ? "" : "/dashboard";
   const isOwner = role === "owner";
+  const isEnterprise = plan.toLowerCase().includes("enterprise");
+  const visibleModules = MODULES.filter((m) => !m.enterpriseOnly || isEnterprise);
 
   function isSubActive(subPath: string): boolean {
     const full = prefix + subPath;
@@ -137,14 +142,14 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
 
   // Single-expand — only one module open at a time
   const [expanded, setExpanded] = useState<string | null>(() => {
-    for (const mod of MODULES) {
+    for (const mod of visibleModules) {
       if (moduleContainsActive(mod)) return mod.label;
     }
     return null;
   });
 
   useEffect(() => {
-    for (const mod of MODULES) {
+    for (const mod of visibleModules) {
       if (moduleContainsActive(mod)) {
         setExpanded(mod.label);
         return;
@@ -182,7 +187,7 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner" }: Sideb
 
             {/* Module links */}
             <div className="flex flex-col gap-px">
-              {MODULES.map((mod) => {
+              {visibleModules.map((mod) => {
                 const subs = mod.subs;
                 const isExpanded = expanded === mod.label;
                 const containsActive = moduleContainsActive(mod);

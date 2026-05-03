@@ -14,7 +14,7 @@
 
 const GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
-const ADS_REDIRECT_PATH = "/api/auth/ads/callback";
+const ADS_REDIRECT_PATH = "/api/auth/meta-ads/callback";
 
 export const ADS_SCOPES = [
   "ads_management",

@@ -121,6 +121,7 @@ export default async function DashboardLayout({
             sites={session.sites}
             activeSiteId={session.activeSiteId}
             role={role}
+            plan={session.plan}
           />
         </div>
         <main className="flex-1 overflow-y-auto p-4 md:p-8">{children}</main>

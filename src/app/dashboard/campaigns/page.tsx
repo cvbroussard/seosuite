@@ -8,6 +8,9 @@ export default async function CampaignsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
   if (!session.activeSiteId) redirect("/dashboard");
+  // Promote module is enterprise-tier only — paid advertising features
+  // must be invisible to mid-tier subscribers per brand-positioning rule.
+  if (!session.plan.toLowerCase().includes("enterprise")) redirect("/dashboard");
 
   return <CampaignsClient siteId={session.activeSiteId} />;
 }
