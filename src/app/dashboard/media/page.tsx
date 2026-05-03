@@ -17,7 +17,7 @@ export default async function MediaPage({ searchParams }: Props) {
     return (
       <div className="p-4 space-y-6">
         <h1 className="mb-1 text-lg font-semibold">Media Library</h1>
-        <p className="py-12 text-center text-sm text-muted">Add a site first to start uploading media.</p>
+        <p className="py-12 text-center text-sm text-muted">Add a business first to start uploading media.</p>
       </div>
     );
   }

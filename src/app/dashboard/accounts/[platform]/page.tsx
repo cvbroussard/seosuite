@@ -21,7 +21,7 @@ export default async function PlatformPage({
   if (!siteId) {
     return (
       <div className="p-6">
-        <p className="text-xs text-muted">No active site selected. Choose a site from the site picker to manage connections.</p>
+        <p className="text-xs text-muted">No business selected. Choose a business from the picker to manage connections.</p>
       </div>
     );
   }

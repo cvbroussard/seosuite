@@ -87,7 +87,7 @@ export function SeoOverviewClient({
     <div className="p-4 space-y-6">
       <div>
         <h1 className="text-lg font-semibold">SEO</h1>
-        <p className="text-xs text-muted">{siteName} · site health and search visibility</p>
+        <p className="text-xs text-muted">{siteName} · website health and search visibility</p>
       </div>
 
       {/* Top-line metrics */}
@@ -152,7 +152,7 @@ export function SeoOverviewClient({
             </table>
           ) : (
             <p className="px-4 py-8 text-center text-xs text-muted">
-              Page scores will appear after your site is analyzed.
+              Page scores will appear after your website is analyzed.
             </p>
           )}
         </div>
@@ -186,7 +186,7 @@ export function SeoOverviewClient({
             </table>
           ) : (
             <p className="px-4 py-8 text-center text-xs text-muted">
-              Search data will appear after Google indexes your site. There's typically a 3-day delay.
+              Search data will appear after Google indexes your website. There's typically a 3-day delay.
             </p>
           )}
         </div>
@@ -216,7 +216,7 @@ export function SeoOverviewClient({
         <div className="rounded-xl border border-border bg-surface p-8 text-center shadow-card">
           <p className="text-sm font-medium">SEO data is being collected</p>
           <p className="mt-1 text-xs text-muted">
-            Page scores, search performance, and meta content will appear here as your site gets indexed and analyzed.
+            Page scores, search performance, and meta content will appear here as your website gets indexed and analyzed.
           </p>
         </div>
       )}

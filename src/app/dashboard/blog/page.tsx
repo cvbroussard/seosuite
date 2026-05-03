@@ -18,7 +18,7 @@ export default async function BlogPage({ searchParams }: Props) {
     return (
       <div className="p-4 space-y-6">
         <h1 className="mb-1 text-lg font-semibold">Blog</h1>
-        <p className="py-12 text-center text-sm text-muted">Add a site first.</p>
+        <p className="py-12 text-center text-sm text-muted">Add a business first.</p>
       </div>
     );
   }

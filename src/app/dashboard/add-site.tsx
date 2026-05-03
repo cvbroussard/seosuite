@@ -48,7 +48,7 @@ export function AddSiteForm() {
   return (
     <form onSubmit={handleSubmit} className="mx-auto w-full max-w-sm space-y-4">
       <div>
-        <label className="mb-1 block text-xs text-muted">Site Name</label>
+        <label className="mb-1 block text-xs text-muted">Business Name</label>
         <input
           type="text"
           value={name}

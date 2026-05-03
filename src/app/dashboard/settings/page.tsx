@@ -15,7 +15,7 @@ export default async function SettingsPage() {
     return (
       <div className="p-4 space-y-6">
         <h1>Settings</h1>
-        <p className="mt-2 py-12 text-center text-muted">No site configured yet.</p>
+        <p className="mt-2 py-12 text-center text-muted">No business configured yet.</p>
       </div>
     );
   }
@@ -64,11 +64,11 @@ export default async function SettingsPage() {
   return (
     <div className="p-4 space-y-6">
       <h1>Settings</h1>
-      <p className="mt-2 mb-8 text-muted">Site configuration and autopilot settings</p>
+      <p className="mt-2 mb-8 text-muted">Business configuration and autopilot settings</p>
 
-      {/* Site Profile */}
+      {/* Business Profile */}
       <section className="mb-8">
-        <h2 className="mb-4">Site Profile</h2>
+        <h2 className="mb-4">Business Profile</h2>
         <BusinessInfo
           initial={{
             name: (site?.name as string) || "",

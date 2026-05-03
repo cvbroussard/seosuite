@@ -94,15 +94,15 @@ export function ConnectionsOverview({
 
       {hasNoSites && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
-          <h2 className="text-sm font-medium mb-1">Create your first site to enable connections</h2>
+          <h2 className="text-sm font-medium mb-1">Create your first business to enable connections</h2>
           <p className="text-xs text-muted leading-relaxed">
-            A site is where TracPost publishes your content — every platform connection links to a site. Create a site first, then come back here to connect Facebook, Instagram, Google, and the rest.
+            A business is where TracPost publishes your content — every platform connection links to a business. Create one first, then come back here to connect Facebook, Instagram, Google, and the rest.
           </p>
           <Link
             href={`${prefix}/entities`}
             className="mt-3 inline-flex items-center text-xs font-medium text-accent hover:underline"
           >
-            Create a site →
+            Create a business →
           </Link>
         </div>
       )}

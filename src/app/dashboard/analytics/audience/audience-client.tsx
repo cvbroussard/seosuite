@@ -77,7 +77,7 @@ export function AudienceClient({ siteId }: { siteId: string }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-medium">Who visits your site</h2>
+          <h2 className="text-sm font-medium">Who visits your website</h2>
           <p className="text-xs text-muted">Geographic location and device breakdown of your visitors</p>
         </div>
         <select
@@ -132,7 +132,7 @@ export function AudienceClient({ siteId }: { siteId: string }) {
         {devices && devices.length > 0 && (
           <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
             <h3 className="text-sm font-medium mb-1">Devices</h3>
-            <p className="text-xs text-muted mb-4">How visitors access your site</p>
+            <p className="text-xs text-muted mb-4">How visitors access your website</p>
 
             <div className="flex items-center gap-8">
               {/* Pie chart */}

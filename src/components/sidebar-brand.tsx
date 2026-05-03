@@ -40,7 +40,7 @@ export function SidebarBrand({ userName, sites, activeSiteId, onSiteChange }: Si
           className={`flex items-center gap-2 text-sm font-medium text-foreground transition-colors ${sites.length > 1 ? "hover:text-accent" : ""}`}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-success" />
-          <span>{activeSite?.name || "No site"}</span>
+          <span>{activeSite?.name || "No business"}</span>
           {sites.length > 1 && (
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`ml-0.5 transition-transform ${open ? "rotate-180" : ""}`}>
               <polyline points="6 9 12 15 18 9" />

@@ -297,7 +297,7 @@ function CaptureForm() {
           )}
 
           {!siteId && (
-            <p className="text-center text-xs text-warning">Select a site first from the header</p>
+            <p className="text-center text-xs text-warning">Select a business first from the header</p>
           )}
         </div>
       )}

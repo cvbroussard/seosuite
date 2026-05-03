@@ -68,7 +68,7 @@ export function EngagementClient({ siteId }: { siteId: string }) {
       {/* Header + date range */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-medium">How visitors engage with your site</h2>
+          <h2 className="text-sm font-medium">How visitors engage with your website</h2>
           <p className="text-xs text-muted">Page performance, time on site, and engagement metrics</p>
         </div>
         <select

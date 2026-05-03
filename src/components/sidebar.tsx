@@ -269,7 +269,7 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner", plan = 
           </>
         ) : (
           <div className="mb-2 px-2.5 py-2">
-            <p className="text-[11px] text-muted">Select a site to access content tools</p>
+            <p className="text-[11px] text-muted">Select a business to access content tools</p>
           </div>
         )}
 

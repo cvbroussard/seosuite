@@ -13,7 +13,7 @@ export default async function EntitiesPage() {
     return (
       <div className="p-4 space-y-6">
         <h1 className="mb-1 text-lg font-semibold">Entities</h1>
-        <p className="mt-2 py-12 text-center text-muted">Select a site first.</p>
+        <p className="mt-2 py-12 text-center text-muted">Select a business first.</p>
       </div>
     );
   }

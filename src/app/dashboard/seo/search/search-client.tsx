@@ -65,7 +65,7 @@ export function SearchClient({ siteId }: { siteId: string }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">Search Performance</h1>
-          <p className="text-xs text-muted">Google Search Console · what people search to find your site</p>
+          <p className="text-xs text-muted">Google Search Console · what people search to find your website</p>
         </div>
         <select
           value={days}
@@ -170,7 +170,7 @@ export function SearchClient({ siteId }: { siteId: string }) {
         <div className="rounded-xl border border-border bg-surface p-8 text-center shadow-card">
           <p className="text-sm font-medium">Search data is being collected</p>
           <p className="mt-1 text-xs text-muted">
-            Google Search Console data appears after your site is verified and indexed. There's typically a 3-day delay.
+            Google Search Console data appears after your website is verified and indexed. There's typically a 3-day delay.
           </p>
         </div>
       )}
