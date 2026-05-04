@@ -764,6 +764,7 @@ export interface CreateBoostedAdParams {
   // CONTACT_US, SHOP_NOW, SIGN_UP, GET_QUOTE, CALL_NOW, MESSAGE_PAGE.
   ctaType?: string;
   ctaUrl?: string;          // Destination URL when CTA needs one
+  urlTags?: string;         // UTM template; defaults to TracPost standard if omitted
 }
 
 /**
@@ -812,16 +813,13 @@ export async function createBoostedAd(
     }
     creativeBody.set("call_to_action", JSON.stringify(ctaSpec));
 
-    // Auto-add UTM parameters via url_tags. Meta requires URL parameters
-    // to be acknowledged ("touched") before allowing publish on link CTAs;
-    // setting url_tags satisfies this AND gives subscribers attribution
-    // data in their downstream analytics. Meta resolves {{site_source_name}}
-    // to "fb" or "ig" depending on placement.
+    // URL parameters (UTM tracking). Caller-provided wins; otherwise
+    // fall back to TracPost's standard template.
     if (params.ctaUrl) {
-      creativeBody.set(
-        "url_tags",
-        "utm_source={{site_source_name}}&utm_medium=paid_social&utm_campaign=tracpost_boost&utm_content={{ad.id}}"
-      );
+      const tags = params.urlTags && params.urlTags.length > 0
+        ? params.urlTags
+        : "utm_source={{site_source_name}}&utm_medium=paid_social&utm_campaign=tracpost_boost&utm_content={{ad.id}}";
+      creativeBody.set("url_tags", tags);
     }
   }
 

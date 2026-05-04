@@ -12,5 +12,9 @@ export default async function CampaignsPage() {
   // must be invisible to mid-tier subscribers per brand-positioning rule.
   if (!session.plan.toLowerCase().includes("enterprise")) redirect("/dashboard");
 
-  return <CampaignsClient siteId={session.activeSiteId} />;
+  // Pass the active site's URL so the CTA URL input can pre-fill it
+  const activeSite = session.sites.find((s) => s.id === session.activeSiteId);
+  const siteUrl = activeSite?.url || "";
+
+  return <CampaignsClient siteId={session.activeSiteId} siteUrl={siteUrl} />;
 }

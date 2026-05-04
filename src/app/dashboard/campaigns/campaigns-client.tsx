@@ -5,6 +5,7 @@ import { PlatformIcon } from "@/components/platform-icons";
 
 interface Props {
   siteId: string;
+  siteUrl?: string;
 }
 
 interface AdAccount {
@@ -208,7 +209,8 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export function CampaignsClient(_props: Props) {
+export function CampaignsClient(props: Props) {
+  const defaultCtaUrl = props.siteUrl || "";
   const [activeTab, setActiveTab] = useState<"campaigns" | "promote">("campaigns");
 
   const [adAccount, setAdAccount] = useState<AdAccount | null>(null);
@@ -244,6 +246,11 @@ export function CampaignsClient(_props: Props) {
   const [boostTargetingScope, setBoostTargetingScope] = useState<"local" | "broad">("local");
   const [boostRadiusMiles, setBoostRadiusMiles] = useState("25");
   const [boostCtaType, setBoostCtaType] = useState<string>("NONE");
+  const [boostCtaUrl, setBoostCtaUrl] = useState<string>(defaultCtaUrl);
+  // URL parameters for tracking — defaults to TracPost's standard UTM template.
+  // Subscriber sees what'll be appended to their CTA URL; can override.
+  const DEFAULT_URL_TAGS = "utm_source={{site_source_name}}&utm_medium=paid_social&utm_campaign=tracpost_boost&utm_content={{ad.id}}";
+  const [boostUrlTags, setBoostUrlTags] = useState<string>(DEFAULT_URL_TAGS);
 
   // Reach estimate state
   interface BoostEstimate {
@@ -564,9 +571,14 @@ export function CampaignsClient(_props: Props) {
           radiusMiles: boostMode === "quick" && boostTargetingScope === "local"
             ? parseInt(boostRadiusMiles, 10) || 25
             : undefined,
-          // CTA override on the boosted ad creative — backend resolves
-          // the destination URL from sites.url when needed
+          // CTA override on the boosted ad creative
           ctaType: boostMode === "quick" && boostCtaType !== "NONE" ? boostCtaType : undefined,
+          ctaUrl: boostMode === "quick" && boostCtaType !== "NONE" && boostCtaType !== "CALL_NOW" && boostCtaType !== "MESSAGE_PAGE"
+            ? boostCtaUrl.trim()
+            : undefined,
+          urlTags: boostMode === "quick" && boostCtaType !== "NONE" && boostCtaType !== "CALL_NOW" && boostCtaType !== "MESSAGE_PAGE"
+            ? boostUrlTags.trim()
+            : undefined,
         }),
       });
       const data = await res.json();
@@ -1254,16 +1266,37 @@ export function CampaignsClient(_props: Props) {
                                 <option value="CALL_NOW">Call Now</option>
                                 <option value="MESSAGE_PAGE">Message Us</option>
                               </select>
-                              {boostCtaType !== "NONE" && boostCtaType !== "CALL_NOW" && boostCtaType !== "MESSAGE_PAGE" && (
-                                <p className="mt-1 text-[10px] text-muted">
-                                  CTA links to your business website. Per Meta, adding a CTA can lower cost per result by ~5-10%.
-                                </p>
-                              )}
                               {boostCtaType === "CALL_NOW" && (
                                 <p className="mt-1 text-[10px] text-muted">Uses your Page&apos;s phone number.</p>
                               )}
                               {boostCtaType === "MESSAGE_PAGE" && (
                                 <p className="mt-1 text-[10px] text-muted">Opens a Messenger conversation with your Page.</p>
+                              )}
+                              {boostCtaType !== "NONE" && boostCtaType !== "CALL_NOW" && boostCtaType !== "MESSAGE_PAGE" && (
+                                <div className="mt-2 space-y-2">
+                                  <div>
+                                    <label className="block text-[10px] text-muted mb-0.5">Destination URL</label>
+                                    <input
+                                      type="url"
+                                      value={boostCtaUrl}
+                                      onChange={(e) => setBoostCtaUrl(e.target.value)}
+                                      placeholder="https://your-website.com"
+                                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] text-muted mb-0.5">URL parameters (UTM tracking)</label>
+                                    <input
+                                      type="text"
+                                      value={boostUrlTags}
+                                      onChange={(e) => setBoostUrlTags(e.target.value)}
+                                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-[10px] font-mono"
+                                    />
+                                    <p className="mt-1 text-[10px] text-muted">
+                                      Appends to your URL for analytics attribution. <code className="text-foreground">{`{{site_source_name}}`}</code> resolves to &quot;fb&quot; / &quot;ig&quot; per placement; <code className="text-foreground">{`{{ad.id}}`}</code> resolves to the ad ID.
+                                    </p>
+                                  </div>
+                                </div>
                               )}
                             </div>
                             {/* Live reach estimate from Marketing API */}

@@ -76,6 +76,9 @@ export async function POST(req: NextRequest) {
     const [site] = await sql`SELECT url FROM sites WHERE id = ${session.activeSiteId} LIMIT 1`;
     if (site?.url) ctaUrl = String(site.url);
   }
+  // URL parameters (UTM tracking). Subscriber-provided wins; backend falls
+  // back to TracPost's standard template if not specified.
+  const urlTags = body.urlTags ? String(body.urlTags).trim() : "";
   // Status defaults: Quick Boost defaults to ACTIVE (matches Meta's native UX
   // when subscriber sees disclosure and clicks Create). Subscriber can opt
   // into "Save as paused" via UI toggle. Attach mode defaults to PAUSED for
@@ -231,6 +234,7 @@ export async function POST(req: NextRequest) {
         status: requestedStatus,
         ...(ctaType && ctaType !== "NONE" ? { ctaType } : {}),
         ...(ctaType && ctaType !== "NONE" && ctaUrl ? { ctaUrl } : {}),
+        ...(ctaType && ctaType !== "NONE" && urlTags ? { urlTags } : {}),
       },
       accessToken
     );
