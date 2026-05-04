@@ -38,6 +38,13 @@ function statusDotColor(status: number | null): string {
   return "bg-warning";
 }
 
+// Whether a campaign objective predates Meta's ODAX overhaul.
+// Legacy-objective campaigns reject new ad creation via the API.
+function isLegacyObjective(objective: string): boolean {
+  if (!objective) return false;
+  return !objective.startsWith("OUTCOME_");
+}
+
 // Friendly objective labels for subscriber-facing display
 function objectiveLabel(objective: string): string {
   switch (objective) {
@@ -745,6 +752,11 @@ export function CampaignsClient(_props: Props) {
                                   {c.specialAdCategories.join(" · ")}
                                 </span>
                               )}
+                              {isLegacyObjective(c.objective) && (
+                                <span className="rounded-full bg-muted/20 px-1.5 py-0.5 text-[9px] font-medium text-muted" title="Legacy objective — Meta no longer accepts new ads against this campaign">
+                                  legacy
+                                </span>
+                              )}
                             </div>
                             <p className="text-[10px] text-muted mt-0.5">{objectiveLabel(c.objective)} · started {fmtDate(c.startTime || c.createdTime)}</p>
                           </div>
@@ -974,11 +986,14 @@ export function CampaignsClient(_props: Props) {
                               className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
                             >
                               <option value="">— Select a campaign —</option>
-                              {campaigns.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.name || c.id} · {objectiveLabel(c.objective)} ({c.effectiveStatus.toLowerCase()})
-                                </option>
-                              ))}
+                              {campaigns.map((c) => {
+                                const legacy = isLegacyObjective(c.objective);
+                                return (
+                                  <option key={c.id} value={c.id} disabled={legacy}>
+                                    {c.name || c.id} · {objectiveLabel(c.objective)} ({c.effectiveStatus.toLowerCase()}){legacy ? " — legacy, can't add ads" : ""}
+                                  </option>
+                                );
+                              })}
                             </select>
                             {boostCampaignId && (() => {
                               const c = campaigns.find((x) => x.id === boostCampaignId);
@@ -989,6 +1004,11 @@ export function CampaignsClient(_props: Props) {
                                 </p>
                               );
                             })()}
+                            {campaigns.length > 0 && campaigns.every((c) => isLegacyObjective(c.objective)) && (
+                              <p className="mt-1 text-[10px] text-warning leading-relaxed">
+                                All campaigns in this account use legacy objectives. Meta no longer accepts new ads against these. Create a new campaign in <a href={adAccount ? metaAdsManagerUrl(adAccount.id) : "#"} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Meta Ads Manager</a> with a current objective (Traffic, Engagement, Leads, Awareness, or Sales) to enable boosts.
+                              </p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-[10px] text-muted mb-0.5">Daily Budget ($)</label>

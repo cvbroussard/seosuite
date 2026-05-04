@@ -209,6 +209,17 @@ export function objectiveLabel(objective: string): string {
 }
 
 /**
+ * Whether a campaign objective is a "legacy" objective from before
+ * Meta's ODAX (simplified objectives) overhaul. Legacy campaigns
+ * cannot accept new ad creation via the API — Meta returns
+ * subcode 2490492 if you try. New objectives start with OUTCOME_*.
+ */
+export function isLegacyObjective(objective: string): boolean {
+  if (!objective) return false;
+  return !objective.startsWith("OUTCOME_");
+}
+
+/**
  * Map a campaign objective to a valid optimization_goal we can use
  * when creating a new ad set inside that campaign. Conservative
  * choices: prefer broadly compatible goals (LINK_CLICKS) over narrow

@@ -137,6 +137,18 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
 
+    // Translate Meta's legacy-objective error into actionable coaching.
+    // Subcode 2490492: "Legacy objective is no longer available in ad
+    // creation." Happens when subscriber tries to add an ad to a
+    // pre-ODAX campaign (LINK_CLICKS, POST_ENGAGEMENT, etc.).
+    if (message.includes("2490492") || message.toLowerCase().includes("legacy objective")) {
+      return NextResponse.json({
+        error: "legacy_objective",
+        message:
+          "This campaign uses a legacy objective that Meta no longer accepts for new ads. Create a new campaign in Meta Ads Manager with a current objective (Traffic, Engagement, Leads, Awareness, or Sales), then attach this boost to it.",
+      }, { status: 400 });
+    }
+
     // Translate IG Page-link-style errors into actionable coaching.
     // Meta's typical error messages around this include phrases like
     // "Instagram account is not connected to a Page", "no Instagram
