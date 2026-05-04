@@ -38,6 +38,34 @@ function statusDotColor(status: number | null): string {
   return "bg-warning";
 }
 
+// Friendly objective labels for subscriber-facing display
+function objectiveLabel(objective: string): string {
+  switch (objective) {
+    case "OUTCOME_TRAFFIC": return "Traffic to website";
+    case "OUTCOME_ENGAGEMENT": return "Post engagement";
+    case "OUTCOME_LEADS": return "Lead generation";
+    case "OUTCOME_AWARENESS": return "Brand awareness";
+    case "OUTCOME_SALES": return "Sales / conversions";
+    case "OUTCOME_APP_PROMOTION": return "App promotion";
+    case "LINK_CLICKS": return "Traffic (legacy)";
+    case "POST_ENGAGEMENT": return "Engagement (legacy)";
+    case "PAGE_LIKES": return "Page likes (legacy)";
+    case "VIDEO_VIEWS": return "Video views (legacy)";
+    case "CONVERSIONS": return "Conversions (legacy)";
+    case "REACH": return "Reach (legacy)";
+    case "BRAND_AWARENESS": return "Brand awareness (legacy)";
+    case "LEAD_GENERATION": return "Lead generation (legacy)";
+    default: return objective || "Unknown";
+  }
+}
+
+function metaAdsManagerUrl(accountIdWithPrefix: string, campaignId?: string): string {
+  // accountIdWithPrefix is "act_xxx" — strip the prefix for the URL
+  const accountIdNumeric = accountIdWithPrefix.replace(/^act_/, "");
+  const base = `https://business.facebook.com/adsmanager/manage/campaigns?act=${accountIdNumeric}`;
+  return campaignId ? `${base}&selected_campaign_ids=${campaignId}` : base;
+}
+
 interface CampaignRow {
   id: string;
   name: string;
@@ -203,6 +231,7 @@ export function CampaignsClient(_props: Props) {
     setRefreshing(true);
     setRefreshMessage(null);
     try {
+      // Refresh ad accounts via Meta
       const res = await fetch("/api/dashboard/campaigns/refresh-ad-accounts", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
@@ -215,12 +244,36 @@ export function CampaignsClient(_props: Props) {
       const accounts = (listData.accounts || []) as AdAccount[];
       const before = allAdAccounts.length;
       setAllAdAccounts(accounts);
-      const added = accounts.length - before;
-      setRefreshMessage(
-        added > 0
-          ? `${added} new account${added !== 1 ? "s" : ""} discovered`
-          : `No new accounts (${data.discovered} accessible)`
-      );
+      const addedAccounts = accounts.length - before;
+
+      // Also refetch campaigns for the current account — Meta-side
+      // edits (new campaigns, status changes, budget tweaks) won't
+      // appear without this.
+      if (adAccount) {
+        const campaignsBefore = campaigns.length;
+        await refreshCampaigns();
+        // Drop ads cache so drill-downs refetch
+        setAdsByCampaign({});
+        // After refreshCampaigns, campaigns state may have been updated
+        // — check by querying the latest count via a separate fetch
+        const cRes = await fetch(`/api/dashboard/campaigns/list?adAccountId=${encodeURIComponent(adAccount.platformAssetId)}`);
+        const cData = await cRes.json();
+        const newCount = (cData.campaigns || []).length;
+        const addedCampaigns = newCount - campaignsBefore;
+
+        const parts: string[] = [];
+        if (addedAccounts > 0) parts.push(`${addedAccounts} new ad account${addedAccounts !== 1 ? "s" : ""}`);
+        if (addedCampaigns > 0) parts.push(`${addedCampaigns} new campaign${addedCampaigns !== 1 ? "s" : ""}`);
+        setRefreshMessage(
+          parts.length > 0 ? `Discovered ${parts.join(" + ")}` : "Up to date — nothing new from Meta"
+        );
+      } else {
+        setRefreshMessage(
+          addedAccounts > 0
+            ? `${addedAccounts} new account${addedAccounts !== 1 ? "s" : ""} discovered`
+            : `Up to date — ${data.discovered} accounts accessible`
+        );
+      }
     } catch (err) {
       setRefreshMessage(err instanceof Error ? err.message : "Network error");
     } finally {
@@ -443,12 +496,40 @@ export function CampaignsClient(_props: Props) {
 
   return (
     <div className="p-4">
-      {/* Ad Account header — picker dropdown */}
+      {/* Ad Account header — picker dropdown + prominent refresh */}
+      {refreshMessage && (
+        <div className="mb-3 rounded bg-accent/5 border border-accent/20 px-3 py-1.5 text-xs text-muted">
+          {refreshMessage}
+        </div>
+      )}
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-medium">Meta Ads</h2>
-          <p className="text-xs text-muted">Promote your best content to homeowners in your service area</p>
+          <p className="text-xs text-muted">
+            TracPost reads from Meta — changes you make in Meta Ads Manager won&apos;t appear here until you refresh.
+          </p>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refreshAdAccounts}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs hover:border-accent/40 transition-colors disabled:opacity-50"
+            title="Re-discover ad accounts and reload campaigns from Meta"
+          >
+            <span className={refreshing ? "animate-spin inline-block" : "inline-block"}>↻</span>
+            <span>{refreshing ? "Refreshing…" : "Refresh from Meta"}</span>
+          </button>
+          {adAccount && (
+            <a
+              href={metaAdsManagerUrl(adAccount.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs hover:border-accent/40 transition-colors"
+              title="Open this ad account in Meta Ads Manager"
+            >
+              Meta Ads Manager ↗
+            </a>
+          )}
         <div className="relative">
           <button
             onClick={() => setPickerOpen((v) => !v)}
@@ -473,22 +554,9 @@ export function CampaignsClient(_props: Props) {
 
           {pickerOpen && allAdAccounts.length > 0 && (
             <div className="absolute right-0 top-full z-50 mt-1 w-96 rounded-lg border border-border bg-surface shadow-xl">
-              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <div className="border-b border-border px-3 py-2">
                 <p className="text-[10px] text-muted uppercase tracking-wide">Ad Accounts</p>
-                <button
-                  onClick={refreshAdAccounts}
-                  disabled={refreshing}
-                  className="text-[10px] text-muted hover:text-accent disabled:opacity-50"
-                  title="Re-discover ad accounts from Meta (no re-authorization required)"
-                >
-                  {refreshing ? "Refreshing…" : "↻ Refresh"}
-                </button>
               </div>
-              {refreshMessage && (
-                <div className="border-b border-border bg-accent/5 px-3 py-1.5 text-[10px] text-muted">
-                  {refreshMessage}
-                </div>
-              )}
               <div className="max-h-96 overflow-y-auto">
                 {allAdAccounts.map((acct) => {
                   const isCurrent = acct.platformAssetId === adAccount.platformAssetId;
@@ -538,10 +606,11 @@ export function CampaignsClient(_props: Props) {
                 })}
               </div>
               <div className="border-t border-border px-3 py-2">
-                <p className="text-[10px] text-muted">{allAdAccounts.length} account{allAdAccounts.length !== 1 ? "s" : ""} accessible to your Meta authorization. Manage at <span className="text-foreground">business.facebook.com</span>.</p>
+                <p className="text-[10px] text-muted">{allAdAccounts.length} account{allAdAccounts.length !== 1 ? "s" : ""} accessible to your Meta authorization.</p>
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -792,21 +861,49 @@ export function CampaignsClient(_props: Props) {
 
                     {isBoosting && (
                       <div className="mt-3 pt-3 border-t border-border space-y-3">
+                        {campaigns.length === 0 ? (
+                          <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
+                            <p className="font-medium mb-1">No campaigns yet in this ad account</p>
+                            <p className="text-muted leading-relaxed mb-2">
+                              Boosts attach to existing campaigns. Set up a campaign in Meta Ads Manager (configure your audience, budget, and objective there), then come back to add this post to it.
+                            </p>
+                            {adAccount && (
+                              <a
+                                href={metaAdsManagerUrl(adAccount.id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center text-xs font-medium text-accent hover:underline"
+                              >
+                                Open Meta Ads Manager →
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                        <>
                         <div className="grid grid-cols-[1fr_140px] gap-3">
                           <div>
-                            <label className="block text-[10px] text-muted mb-0.5">Campaign</label>
+                            <label className="block text-[10px] text-muted mb-0.5">Attach to Campaign</label>
                             <select
                               value={boostCampaignId}
                               onChange={(e) => setBoostCampaignId(e.target.value)}
                               className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
                             >
-                              <option value="">+ Create a new campaign for this boost</option>
+                              <option value="">— Select a campaign —</option>
                               {campaigns.map((c) => (
                                 <option key={c.id} value={c.id}>
-                                  {c.name || c.id} ({c.effectiveStatus.toLowerCase()})
+                                  {c.name || c.id} · {objectiveLabel(c.objective)} ({c.effectiveStatus.toLowerCase()})
                                 </option>
                               ))}
                             </select>
+                            {boostCampaignId && (() => {
+                              const c = campaigns.find((x) => x.id === boostCampaignId);
+                              if (!c || !adAccount) return null;
+                              return (
+                                <p className="mt-1 text-[10px] text-muted">
+                                  Inheriting <span className="text-foreground">{objectiveLabel(c.objective)}</span> objective + audience targeting from this campaign. <a href={metaAdsManagerUrl(adAccount.id, c.id)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Edit in Meta Ads Manager →</a>
+                                </p>
+                              );
+                            })()}
                           </div>
                           <div>
                             <label className="block text-[10px] text-muted mb-0.5">Daily Budget ($)</label>
@@ -829,18 +926,20 @@ export function CampaignsClient(_props: Props) {
                             </button>
                             <button
                               onClick={() => submitBoost(post)}
-                              disabled={boosting}
+                              disabled={boosting || !boostCampaignId}
                               className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
                             >
                               {boosting ? "Creating…" : "Create Boost (paused)"}
                             </button>
                         </div>
                         {boostError && (
-                          <p className="mt-2 text-xs text-danger">{boostError}</p>
+                          <p className="text-xs text-danger">{boostError}</p>
                         )}
-                        <p className="mt-2 text-[10px] text-muted">
-                          Boost campaigns are created in PAUSED status — activate in Meta Ads Manager when you&apos;re ready to spend.
+                        <p className="text-[10px] text-muted">
+                          Boost is created in PAUSED status — activate in Meta Ads Manager when you&apos;re ready to spend.
                         </p>
+                        </>
+                        )}
                       </div>
                     )}
                   </div>

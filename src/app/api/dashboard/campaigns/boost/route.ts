@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { createCampaign, createAdSet, createBoostedAd } from "@/lib/meta-ads";
+import {
+  createAdSet,
+  createBoostedAd,
+  getCampaignSettings,
+  getFirstAdSetTargeting,
+  objectiveToOptimizationGoal,
+} from "@/lib/meta-ads";
 import { resolveAdAccount } from "@/lib/meta-ads-resolve";
 
 /**
@@ -38,11 +44,22 @@ export async function POST(req: NextRequest) {
   const igUsername = String(body.igUsername || "").trim();
   const name = String(body.name || "").trim() || `Boost: ${pageName || igUsername || "post"}`;
   const dailyBudgetDollars = Number(body.dailyBudgetDollars);
-  // Optional: attach this boost to an existing campaign instead of
-  // creating a new campaign for it. Empty string / null = create new.
-  const existingCampaignId = String(body.campaignId || "").trim();
+  // REQUIRED: existing campaign to attach this boost to. Boosts no
+  // longer create new campaigns — subscribers configure campaign
+  // structure (objective, audience, budget, special ad categories)
+  // intentionally in Meta Ads Manager. TracPost adds the boost as a
+  // new ad set + ad inside the chosen campaign, inheriting the
+  // campaign's objective and the first ad set's targeting.
+  const targetCampaignId = String(body.campaignId || "").trim();
   // Optional: explicit ad account choice; falls back to primary if absent
   const platformAssetId = body.adAccountId ? String(body.adAccountId) : null;
+
+  if (!targetCampaignId) {
+    return NextResponse.json({
+      error: "campaignId required",
+      message: "Boosts must attach to an existing campaign. Set up your campaign in Meta Ads Manager first, then try again.",
+    }, { status: 400 });
+  }
 
   if (platform === "facebook") {
     if (!postId || !pageId) {
@@ -72,26 +89,23 @@ export async function POST(req: NextRequest) {
   const { adAccountId, accessToken } = resolved;
 
   try {
-    // Either reuse the existing campaign or create a new one for this boost.
-    let campaignId: string;
-    if (existingCampaignId) {
-      campaignId = existingCampaignId;
-    } else {
-      const campaign = await createCampaign(
-        adAccountId,
-        { name, objective: "OUTCOME_ENGAGEMENT", status: "PAUSED" },
-        accessToken
-      );
-      campaignId = campaign.id;
-    }
+    // Inherit settings from the chosen campaign:
+    //   - objective → optimization_goal mapping for the new ad set
+    //   - first existing ad set's targeting → use it verbatim
+    // Subscriber's intentional Meta Ads Manager configuration is
+    // preserved instead of overwritten with broad defaults.
+    const campaign = await getCampaignSettings(targetCampaignId, accessToken);
+    const inheritedTargeting = await getFirstAdSetTargeting(targetCampaignId, accessToken);
+    const optimizationGoal = objectiveToOptimizationGoal(campaign.objective);
 
     const adSet = await createAdSet(
       adAccountId,
       {
         name: `${name} — ad set`,
-        campaignId,
+        campaignId: targetCampaignId,
         dailyBudgetCents: Math.round(dailyBudgetDollars * 100),
-        optimizationGoal: "POST_ENGAGEMENT",
+        optimizationGoal,
+        targeting: inheritedTargeting || undefined,
         status: "PAUSED",
       },
       accessToken
@@ -112,12 +126,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       platform,
-      campaignId,
+      campaignId: targetCampaignId,
+      campaignName: campaign.name,
       adSetId: adSet.id,
       adId: ad.adId,
       creativeId: ad.creativeId,
       status: "PAUSED",
-      attachedToExistingCampaign: !!existingCampaignId,
+      inheritedTargeting: inheritedTargeting !== null,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

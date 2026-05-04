@@ -158,6 +158,123 @@ export async function listCampaigns(
   }));
 }
 
+// ─── Objective helpers ──────────────────────────────────────────────
+
+/**
+ * Friendly subscriber-facing label for a Meta campaign objective.
+ * Maps the API's OUTCOME_* enum to plain English.
+ */
+export function objectiveLabel(objective: string): string {
+  switch (objective) {
+    case "OUTCOME_TRAFFIC": return "Traffic to website";
+    case "OUTCOME_ENGAGEMENT": return "Post engagement";
+    case "OUTCOME_LEADS": return "Lead generation";
+    case "OUTCOME_AWARENESS": return "Brand awareness";
+    case "OUTCOME_SALES": return "Sales / conversions";
+    case "OUTCOME_APP_PROMOTION": return "App promotion";
+    // Legacy objectives still sometimes returned by older campaigns
+    case "LINK_CLICKS": return "Traffic (legacy)";
+    case "POST_ENGAGEMENT": return "Engagement (legacy)";
+    case "PAGE_LIKES": return "Page likes (legacy)";
+    case "VIDEO_VIEWS": return "Video views (legacy)";
+    case "CONVERSIONS": return "Conversions (legacy)";
+    case "REACH": return "Reach (legacy)";
+    case "BRAND_AWARENESS": return "Brand awareness (legacy)";
+    case "LEAD_GENERATION": return "Lead generation (legacy)";
+    default: return objective;
+  }
+}
+
+/**
+ * Map a campaign objective to a valid optimization_goal we can use
+ * when creating a new ad set inside that campaign. Conservative
+ * choices: prefer broadly compatible goals (LINK_CLICKS) over narrow
+ * ones that require additional setup (CONVERSIONS needs pixel,
+ * LEAD_GENERATION needs lead form).
+ */
+export function objectiveToOptimizationGoal(objective: string): string {
+  switch (objective) {
+    case "OUTCOME_ENGAGEMENT":
+    case "POST_ENGAGEMENT":
+      return "POST_ENGAGEMENT";
+    case "OUTCOME_AWARENESS":
+    case "REACH":
+    case "BRAND_AWARENESS":
+      return "REACH";
+    case "OUTCOME_TRAFFIC":
+    case "LINK_CLICKS":
+    case "OUTCOME_LEADS":   // fallback — true LEAD_GENERATION needs lead form
+    case "OUTCOME_SALES":   // fallback — true CONVERSIONS needs pixel
+    default:
+      return "LINK_CLICKS";
+  }
+}
+
+/**
+ * Fetch a single campaign's full settings — objective, status,
+ * special_ad_categories, etc. Used by the boost flow to inherit
+ * proper config when creating a new ad set inside a campaign.
+ */
+export async function getCampaignSettings(
+  campaignId: string,
+  accessToken: string
+): Promise<{
+  id: string;
+  name: string;
+  objective: string;
+  status: string;
+  effectiveStatus: string;
+  specialAdCategories: string[];
+  buyingType: string | null;
+}> {
+  const fields = [
+    "id",
+    "name",
+    "objective",
+    "status",
+    "effective_status",
+    "special_ad_categories",
+    "buying_type",
+  ].join(",");
+  const res = await fetch(`${GRAPH_BASE}/${campaignId}?fields=${fields}&access_token=${accessToken}`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Get campaign settings failed: ${JSON.stringify(data.error || data)}`);
+  }
+  return {
+    id: String(data.id),
+    name: String(data.name || ""),
+    objective: String(data.objective || ""),
+    status: String(data.status || ""),
+    effectiveStatus: String(data.effective_status || ""),
+    specialAdCategories: Array.isArray(data.special_ad_categories) ? data.special_ad_categories.map(String) : [],
+    buyingType: data.buying_type ? String(data.buying_type) : null,
+  };
+}
+
+/**
+ * Fetch the first ad set under a campaign and return its targeting
+ * JSON. Used by the boost flow to inherit the subscriber's intentional
+ * audience configuration rather than using broad geo defaults.
+ *
+ * Returns null if the campaign has no ad sets yet.
+ */
+export async function getFirstAdSetTargeting(
+  campaignId: string,
+  accessToken: string
+): Promise<Record<string, unknown> | null> {
+  const res = await fetch(
+    `${GRAPH_BASE}/${campaignId}/adsets?fields=id,targeting&limit=1&access_token=${accessToken}`
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Get ad set targeting failed: ${JSON.stringify(data.error || data)}`);
+  }
+  if (!Array.isArray(data.data) || data.data.length === 0) return null;
+  const targeting = data.data[0].targeting;
+  return targeting && typeof targeting === "object" ? (targeting as Record<string, unknown>) : null;
+}
+
 // ─── Read: ads under a campaign or account ─────────────────────────
 
 export interface MetaAd {
@@ -286,7 +403,8 @@ export interface CreateAdSetParams {
   optimizationGoal?: string;       // default LINK_CLICKS
   billingEvent?: string;           // default IMPRESSIONS
   bidStrategy?: string;            // default LOWEST_COST_WITHOUT_CAP
-  countryCodes?: string[];         // default ['US']
+  countryCodes?: string[];         // default ['US'] — only used if no explicit targeting
+  targeting?: Record<string, unknown>;  // explicit targeting JSON (overrides countryCodes)
   status?: "ACTIVE" | "PAUSED";
 }
 
@@ -308,6 +426,11 @@ export async function createAdSet(
 ): Promise<{ id: string }> {
   const id = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
   const startTime = new Date(Date.now() + 60_000).toISOString();
+  // Prefer explicit targeting when provided (e.g., inherited from a parent
+  // campaign's existing ad set); otherwise fall back to broad country-only.
+  const targeting = params.targeting
+    ? params.targeting
+    : { geo_locations: { countries: params.countryCodes || ["US"] } };
   const body = new URLSearchParams({
     name: params.name,
     campaign_id: params.campaignId,
@@ -316,9 +439,7 @@ export async function createAdSet(
     optimization_goal: params.optimizationGoal || "LINK_CLICKS",
     bid_strategy: params.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
     start_time: startTime,
-    targeting: JSON.stringify({
-      geo_locations: { countries: params.countryCodes || ["US"] },
-    }),
+    targeting: JSON.stringify(targeting),
     status: params.status || "PAUSED",
     access_token: accessToken,
   });
