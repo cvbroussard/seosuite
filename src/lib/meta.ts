@@ -1,27 +1,44 @@
 /**
- * Meta/Instagram OAuth + Graph API utilities.
+ * TracPost — Pages OAuth + Graph API utilities.
+ *
+ * This module handles the organic Facebook Pages connection only.
+ * Per the three-app Meta architecture:
+ *   - TracPost — Pages   → this module     (FB Page management)
+ *   - TracPost — Visual-IG → lib/meta-ig.ts (organic IG via IG Login API)
+ *   - TracPost — Ads      → lib/meta-ads.ts (paid Marketing API)
+ *
+ * Each app has its own App ID / Secret, scope set, and review surface.
  *
  * Env vars required:
- *   META_APP_ID        — from developers.facebook.com
- *   META_APP_SECRET    — from developers.facebook.com
- *   NEXT_PUBLIC_APP_URL — e.g. https://tracpost.com or http://localhost:3099
+ *   META_PAGES_APP_ID     — TracPost — Pages app on Meta Developer Dashboard
+ *   META_PAGES_APP_SECRET — corresponding secret
+ *   NEXT_PUBLIC_APP_URL   — e.g. https://tracpost.com
+ *
+ * Legacy fallback to META_APP_ID / META_APP_SECRET retained while the
+ * three-app rollout completes — can be removed once the rename is verified
+ * in production.
  */
 
 const GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
+const PAGES_APP_ID = () => process.env.META_PAGES_APP_ID || process.env.META_APP_ID || "";
+const PAGES_APP_SECRET = () => process.env.META_PAGES_APP_SECRET || process.env.META_APP_SECRET || "";
+
 export function getMetaAuthUrl(state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.META_APP_ID!,
+    client_id: PAGES_APP_ID(),
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`,
+    // FB-only scopes — matches what TracPost — Pages is approved for.
+    // No instagram_*, no ads_* — those live in the dedicated apps.
     scope: [
-      "instagram_basic",
-      "instagram_content_publish",
+      "pages_show_list",
       "pages_read_engagement",
       "pages_manage_posts",
+      "pages_manage_engagement",
+      "pages_read_user_content",
       "read_insights",
       "business_management",
-      "ads_management",
-      "ads_read",
+      "public_profile",
     ].join(","),
     response_type: "code",
     state,
@@ -40,8 +57,8 @@ export async function exchangeCodeForToken(code: string): Promise<{
 }> {
   // Step 1: Short-lived token
   const shortRes = await fetch(`${GRAPH_BASE}/oauth/access_token?` + new URLSearchParams({
-    client_id: process.env.META_APP_ID!,
-    client_secret: process.env.META_APP_SECRET!,
+    client_id: PAGES_APP_ID(),
+    client_secret: PAGES_APP_SECRET(),
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`,
     code,
   }));
@@ -54,8 +71,8 @@ export async function exchangeCodeForToken(code: string): Promise<{
   // Step 2: Long-lived token
   const longRes = await fetch(`${GRAPH_BASE}/oauth/access_token?` + new URLSearchParams({
     grant_type: "fb_exchange_token",
-    client_id: process.env.META_APP_ID!,
-    client_secret: process.env.META_APP_SECRET!,
+    client_id: PAGES_APP_ID(),
+    client_secret: PAGES_APP_SECRET(),
     fb_exchange_token: shortData.access_token,
   }));
 
@@ -250,8 +267,8 @@ export async function refreshLongLivedToken(currentToken: string): Promise<{
 }> {
   const res = await fetch(`${GRAPH_BASE}/oauth/access_token?` + new URLSearchParams({
     grant_type: "fb_exchange_token",
-    client_id: process.env.META_APP_ID!,
-    client_secret: process.env.META_APP_SECRET!,
+    client_id: PAGES_APP_ID(),
+    client_secret: PAGES_APP_SECRET(),
     fb_exchange_token: currentToken,
   }));
 
