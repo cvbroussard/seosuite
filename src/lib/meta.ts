@@ -257,6 +257,57 @@ export async function discoverFacebookPages(
 }
 
 /**
+ * Fetch a Facebook Page's stored location data. Used to source local-area
+ * targeting for Quick Boost ("People in your local area" preset) — the
+ * Page's location is the authoritative source for where a business
+ * advertises locally.
+ *
+ * Returns lat/lon when available (preferred for precise targeting via
+ * custom_locations), city/state for fallback to city-key lookup.
+ */
+export interface PageLocation {
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  countryCode: string | null;
+  zip: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  street: string | null;
+  singleLineAddress: string | null;
+}
+
+export async function getPageLocation(
+  pageId: string,
+  pageAccessToken: string
+): Promise<PageLocation | null> {
+  const fields = "location,single_line_address";
+  const res = await fetch(
+    `${GRAPH_BASE}/${pageId}?fields=${fields}&access_token=${pageAccessToken}`
+  );
+  const data = await res.json();
+  if (!res.ok) return null;
+
+  const loc = (data.location || {}) as Record<string, unknown>;
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    city: loc.city ? String(loc.city) : null,
+    state: loc.state ? String(loc.state) : null,
+    country: loc.country ? String(loc.country) : null,
+    countryCode: loc.country_code ? String(loc.country_code) : null,
+    zip: loc.zip ? String(loc.zip) : null,
+    latitude: num(loc.latitude),
+    longitude: num(loc.longitude),
+    street: loc.street ? String(loc.street) : null,
+    singleLineAddress: data.single_line_address ? String(data.single_line_address) : null,
+  };
+}
+
+/**
  * Refresh a long-lived token before it expires.
  * Can be refreshed as long as the current token is still valid.
  * Returns a new 60-day token.

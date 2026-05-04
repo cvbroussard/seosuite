@@ -64,7 +64,11 @@ export async function POST(req: NextRequest) {
       },
       accessToken
     );
-    return NextResponse.json({ ...estimate, resolvedCityName: targetingResult.resolvedCityName });
+    return NextResponse.json({
+      ...estimate,
+      resolvedCityName: targetingResult.resolvedCityName,
+      targetingSource: targetingResult.source,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: "estimate_failed", message }, { status: 502 });
