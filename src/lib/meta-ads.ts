@@ -286,27 +286,45 @@ export async function getCampaignSettings(
   };
 }
 
+export interface InheritedAdSetSettings {
+  targeting: Record<string, unknown> | null;
+  optimizationGoal: string | null;
+  billingEvent: string | null;
+  bidStrategy: string | null;
+}
+
 /**
- * Fetch the first ad set under a campaign and return its targeting
- * JSON. Used by the boost flow to inherit the subscriber's intentional
- * audience configuration rather than using broad geo defaults.
+ * Fetch the first ad set under a campaign and return the settings the
+ * boost flow needs to inherit. Used to ensure new ad sets we create
+ * inside a parent campaign mirror the subscriber's existing
+ * configuration — Meta enforces consistency (same optimization_goal
+ * across ad sets when campaign uses lowest_cost bid strategy / CBO).
  *
- * Returns null if the campaign has no ad sets yet.
+ * Returns null if the campaign has no ad sets yet (we'd then fall
+ * back to default values).
  */
-export async function getFirstAdSetTargeting(
+export async function getFirstAdSetSettings(
   campaignId: string,
   accessToken: string
-): Promise<Record<string, unknown> | null> {
+): Promise<InheritedAdSetSettings | null> {
+  const fields = "id,targeting,optimization_goal,billing_event,bid_strategy";
   const res = await fetch(
-    `${GRAPH_BASE}/${campaignId}/adsets?fields=id,targeting&limit=1&access_token=${accessToken}`
+    `${GRAPH_BASE}/${campaignId}/adsets?fields=${fields}&limit=1&access_token=${accessToken}`
   );
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(`Get ad set targeting failed: ${JSON.stringify(data.error || data)}`);
+    throw new Error(`Get ad set settings failed: ${JSON.stringify(data.error || data)}`);
   }
   if (!Array.isArray(data.data) || data.data.length === 0) return null;
-  const targeting = data.data[0].targeting;
-  return targeting && typeof targeting === "object" ? (targeting as Record<string, unknown>) : null;
+  const adSet = data.data[0] as Record<string, unknown>;
+  return {
+    targeting: adSet.targeting && typeof adSet.targeting === "object"
+      ? (adSet.targeting as Record<string, unknown>)
+      : null,
+    optimizationGoal: adSet.optimization_goal ? String(adSet.optimization_goal) : null,
+    billingEvent: adSet.billing_event ? String(adSet.billing_event) : null,
+    bidStrategy: adSet.bid_strategy ? String(adSet.bid_strategy) : null,
+  };
 }
 
 // ─── Read: ads under a campaign or account ─────────────────────────

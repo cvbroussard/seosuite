@@ -4,7 +4,7 @@ import {
   createAdSet,
   createBoostedAd,
   getCampaignSettings,
-  getFirstAdSetTargeting,
+  getFirstAdSetSettings,
   objectiveToOptimizationGoal,
 } from "@/lib/meta-ads";
 import { resolveAdAccount } from "@/lib/meta-ads-resolve";
@@ -90,13 +90,20 @@ export async function POST(req: NextRequest) {
 
   try {
     // Inherit settings from the chosen campaign:
-    //   - objective → optimization_goal mapping for the new ad set
-    //   - first existing ad set's targeting → use it verbatim
-    // Subscriber's intentional Meta Ads Manager configuration is
-    // preserved instead of overwritten with broad defaults.
+    //   - First existing ad set's targeting, optimization_goal,
+    //     billing_event — use verbatim. Meta enforces consistency
+    //     across ad sets when campaign uses lowest_cost bid strategy
+    //     (Campaign Budget Optimization), so mirroring the existing
+    //     ad set is the only safe choice.
+    //   - If no ad set exists yet, fall back to mapping campaign
+    //     objective → reasonable optimization_goal default.
     const campaign = await getCampaignSettings(targetCampaignId, accessToken);
-    const inheritedTargeting = await getFirstAdSetTargeting(targetCampaignId, accessToken);
-    const optimizationGoal = objectiveToOptimizationGoal(campaign.objective);
+    const inheritedAdSet = await getFirstAdSetSettings(targetCampaignId, accessToken);
+
+    const optimizationGoal = inheritedAdSet?.optimizationGoal
+      || objectiveToOptimizationGoal(campaign.objective);
+    const billingEvent = inheritedAdSet?.billingEvent || "IMPRESSIONS";
+    const inheritedTargeting = inheritedAdSet?.targeting || null;
 
     const adSet = await createAdSet(
       adAccountId,
@@ -105,6 +112,7 @@ export async function POST(req: NextRequest) {
         campaignId: targetCampaignId,
         dailyBudgetCents: Math.round(dailyBudgetDollars * 100),
         optimizationGoal,
+        billingEvent,
         targeting: inheritedTargeting || undefined,
         status: "PAUSED",
       },
@@ -132,7 +140,7 @@ export async function POST(req: NextRequest) {
       adId: ad.adId,
       creativeId: ad.creativeId,
       status: "PAUSED",
-      inheritedTargeting: inheritedTargeting !== null,
+      inheritedFromExistingAdSet: inheritedAdSet !== null,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
