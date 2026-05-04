@@ -157,15 +157,12 @@ export async function POST(req: NextRequest) {
       });
       const advantagePlusTargeting = targetingResult.targeting;
 
-      // Engagement campaigns require promoted_object so Meta knows
-      // what's being engaged with (the Page for FB, the IG account for IG).
-      const promotedObject: Record<string, unknown> | undefined =
-        platform === "facebook" && pageId
-          ? { page_id: pageId }
-          : platform === "instagram" && igUserId
-          ? { instagram_actor_id: igUserId }
-          : undefined;
-
+      // For boosting an existing post:
+      //   destination_type: ON_POST tells Meta the engagement happens
+      //   on the post itself (the creative IS the engagement target).
+      //   This lets Meta accept POST_ENGAGEMENT optimization without
+      //   needing a Page-level promoted_object (which would imply
+      //   PAGE_LIKES optimization).
       adSetParams = {
         name: `${name} — ad set`,
         campaignId,
@@ -174,8 +171,8 @@ export async function POST(req: NextRequest) {
         billingEvent: "IMPRESSIONS",
         targeting: advantagePlusTargeting,
         status: requestedStatus,
+        destinationType: "ON_POST",
         ...(stopTime ? { stopTime } : {}),
-        ...(promotedObject ? { promotedObject } : {}),
       };
     } else {
       // ── Attach to existing campaign path ──────────────────────────

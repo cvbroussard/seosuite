@@ -647,6 +647,7 @@ export interface CreateAdSetParams {
   status?: "ACTIVE" | "PAUSED";
   stopTime?: string;               // ISO timestamp; ad set ends when reached
   promotedObject?: Record<string, unknown>; // e.g. { page_id: "123" } for engagement, { application_id: "..." } for app
+  destinationType?: string;        // e.g. "ON_POST" tells Meta engagement happens on the post itself
 }
 
 /**
@@ -695,6 +696,9 @@ export async function createAdSet(
   }
   if (params.promotedObject) {
     body.set("promoted_object", JSON.stringify(params.promotedObject));
+  }
+  if (params.destinationType) {
+    body.set("destination_type", params.destinationType);
   }
   const res = await fetch(`${GRAPH_BASE}/${id}/adsets`, {
     method: "POST",
