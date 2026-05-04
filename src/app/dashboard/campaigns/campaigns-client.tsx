@@ -144,14 +144,6 @@ export function CampaignsClient(_props: Props) {
 
   const [connecting, setConnecting] = useState(false);
 
-  // Campaign creation form state
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newObjective, setNewObjective] = useState("OUTCOME_TRAFFIC");
-  const [newBudget, setNewBudget] = useState("10");
-
   // Per-row insights expansion
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -331,38 +323,6 @@ export function CampaignsClient(_props: Props) {
       }
     } finally {
       setCampaignsLoading(false);
-    }
-  }
-
-  async function submitNewCampaign() {
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const res = await fetch("/api/dashboard/campaigns/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newName,
-          objective: newObjective,
-          dailyBudgetDollars: parseFloat(newBudget),
-          adAccountId: adAccount?.platformAssetId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setCreateError(data.message || data.error || "Create failed");
-        return;
-      }
-      // Reset form and refresh list
-      setShowCreateForm(false);
-      setNewName("");
-      setNewBudget("10");
-      setNewObjective("OUTCOME_TRAFFIC");
-      await refreshCampaigns();
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Network error");
-    } finally {
-      setCreating(false);
     }
   }
 
@@ -608,70 +568,9 @@ export function CampaignsClient(_props: Props) {
       {/* Campaigns Tab */}
       {activeTab === "campaigns" && (
         <div className="space-y-3">
-          {/* Create-campaign affordance */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted">All new campaigns are created in PAUSED status — activate them in Meta Ads Manager when you&apos;re ready to spend.</p>
-            <button
-              onClick={() => { setShowCreateForm((v) => !v); setCreateError(null); }}
-              className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
-            >
-              {showCreateForm ? "Cancel" : "+ New Campaign"}
-            </button>
-          </div>
-
-          {showCreateForm && (
-            <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
-              <h3 className="text-sm font-medium mb-3">Create Campaign</h3>
-              <div className="grid grid-cols-[1fr_180px_120px] gap-3">
-                <div>
-                  <label className="block text-[10px] text-muted mb-0.5">Campaign Name</label>
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="e.g. Spring Renovation Promotion"
-                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-muted mb-0.5">Objective</label>
-                  <select
-                    value={newObjective}
-                    onChange={(e) => setNewObjective(e.target.value)}
-                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-                  >
-                    <option value="OUTCOME_TRAFFIC">Traffic to website</option>
-                    <option value="OUTCOME_ENGAGEMENT">Post engagement</option>
-                    <option value="OUTCOME_LEADS">Lead generation</option>
-                    <option value="OUTCOME_AWARENESS">Brand awareness</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] text-muted mb-0.5">Daily Budget ($)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={newBudget}
-                    onChange={(e) => setNewBudget(e.target.value)}
-                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-                  />
-                </div>
-              </div>
-              {createError && (
-                <p className="mt-2 text-xs text-danger">{createError}</p>
-              )}
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  onClick={submitNewCampaign}
-                  disabled={creating || !newName.trim()}
-                  className="rounded bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-                >
-                  {creating ? "Creating…" : "Create (paused)"}
-                </button>
-              </div>
-            </div>
-          )}
+          <p className="text-xs text-muted">
+            Campaigns and audience structure are set up in <a href="https://business.facebook.com/adsmanager" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Meta Ads Manager</a>. TracPost surfaces them here for monitoring and lets you promote your top organic posts into existing campaigns from the <button onClick={() => setActiveTab("promote")} className="text-accent hover:underline">Promote a Post</button> tab.
+          </p>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl border border-border bg-surface p-3 shadow-card">
