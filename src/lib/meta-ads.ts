@@ -407,26 +407,53 @@ export async function getDeliveryEstimate(
     if (!res.ok) {
       throw new Error(`Delivery estimate failed: ${JSON.stringify(data.error || data)}`);
     }
+
+    // Log raw response for diagnosis — Meta's structure varies by API version
+    // and optimization_goal. Strip when we know exactly what we get.
+    console.log("delivery_estimate raw:", JSON.stringify(data));
+
     const row = (Array.isArray(data.data) && data.data.length > 0 ? data.data[0] : data) as Record<string, unknown>;
     const curve = (row.daily_outcomes_curve || []) as Array<Record<string, unknown>>;
-    const lastPoint = curve.length > 0 ? curve[curve.length - 1] : {};
+
+    // The curve has multiple points across spend levels. Find the point
+    // closest to our requested daily budget instead of just taking the last.
+    function findClosestPoint(): Record<string, unknown> {
+      if (curve.length === 0) return {};
+      let closest = curve[0];
+      let closestDiff = Infinity;
+      for (const point of curve) {
+        const pointSpend = Number(point.spend ?? point.daily_budget ?? 0);
+        const diff = Math.abs(pointSpend - args.dailyBudgetCents);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closest = point;
+        }
+      }
+      return closest;
+    }
+    const point = findClosestPoint();
 
     const num = (v: unknown): number | null => {
       if (v === null || v === undefined) return null;
       const n = Number(v);
-      return Number.isFinite(n) ? n : null;
+      return Number.isFinite(n) && n > 0 ? n : null;
     };
+
+    // Pull fields with multiple possible names — Meta varies them
+    const impressions = num(point.impressions ?? point.estimated_impressions);
+    const actions = num(point.actions ?? point.estimated_actions ?? point.post_engagement);
+    const reach = num(point.reach ?? point.estimated_reach);
 
     return {
       estimateReady: row.estimate_ready === true || curve.length > 0,
-      dailyImpressionsLower: num(lastPoint.impressions),
-      dailyImpressionsUpper: num(lastPoint.impressions),
-      dailyActionsLower: num(lastPoint.actions),
-      dailyActionsUpper: num(lastPoint.actions),
-      dailyReachLower: num((row as Record<string, unknown>).estimate_dau ?? lastPoint.reach),
-      dailyReachUpper: num((row as Record<string, unknown>).estimate_mau ?? lastPoint.reach),
-      audienceSizeLower: num((row as Record<string, unknown>).estimate_dau),
-      audienceSizeUpper: num((row as Record<string, unknown>).estimate_mau),
+      dailyImpressionsLower: impressions,
+      dailyImpressionsUpper: impressions,
+      dailyActionsLower: actions,
+      dailyActionsUpper: actions,
+      dailyReachLower: reach,
+      dailyReachUpper: reach,
+      audienceSizeLower: num(row.estimate_dau),
+      audienceSizeUpper: num(row.estimate_mau),
     };
   }
 
