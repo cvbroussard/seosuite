@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import {
+  createCampaign,
   createAdSet,
   createBoostedAd,
   getCampaignSettings,
@@ -44,20 +45,28 @@ export async function POST(req: NextRequest) {
   const igUsername = String(body.igUsername || "").trim();
   const name = String(body.name || "").trim() || `Boost: ${pageName || igUsername || "post"}`;
   const dailyBudgetDollars = Number(body.dailyBudgetDollars);
-  // REQUIRED: existing campaign to attach this boost to. Boosts no
-  // longer create new campaigns — subscribers configure campaign
-  // structure (objective, audience, budget, special ad categories)
-  // intentionally in Meta Ads Manager. TracPost adds the boost as a
-  // new ad set + ad inside the chosen campaign, inheriting the
-  // campaign's objective and the first ad set's targeting.
+  // Two boost modes:
+  //   1. Quick Boost (default) — create a fresh campaign + ad set + ad
+  //      with Advantage+ defaults. Mirrors Meta's native Boost button.
+  //      Bypasses inheritance issues from existing campaigns.
+  //   2. Attach to existing campaign — sophisticated path. Inherits
+  //      objective + targeting + optimization from existing ad set.
+  const quickBoost = body.quickBoost === true;
   const targetCampaignId = String(body.campaignId || "").trim();
   // Optional: explicit ad account choice; falls back to primary if absent
   const platformAssetId = body.adAccountId ? String(body.adAccountId) : null;
 
-  if (!targetCampaignId) {
+  // Quick Boost params (ignored when attaching to existing campaign)
+  const specialAdCategories = Array.isArray(body.specialAdCategories)
+    ? body.specialAdCategories.map(String)
+    : [];
+  const durationDays = Number(body.durationDays);
+  const runContinuously = body.runContinuously === true;
+
+  if (!quickBoost && !targetCampaignId) {
     return NextResponse.json({
       error: "campaignId required",
-      message: "Boosts must attach to an existing campaign. Set up your campaign in Meta Ads Manager first, then try again.",
+      message: "Either set quickBoost: true or provide a campaignId to attach the boost to.",
     }, { status: 400 });
   }
 
@@ -88,48 +97,96 @@ export async function POST(req: NextRequest) {
   const { adAccountId, accessToken } = resolved;
 
   try {
-    // Inherit settings from the chosen campaign:
-    //   - First existing ad set's targeting, optimization_goal,
-    //     billing_event — use verbatim. Meta enforces consistency
-    //     across ad sets when campaign uses lowest_cost bid strategy
-    //     (Campaign Budget Optimization), so mirroring the existing
-    //     ad set is the only safe choice.
-    //   - If no ad set exists yet, fall back to mapping campaign
-    //     objective → reasonable optimization_goal default.
-    const campaign = await getCampaignSettings(targetCampaignId, accessToken);
-    const inheritedAdSet = await getFirstAdSetSettings(targetCampaignId, accessToken);
+    let campaignId: string;
+    let campaignName: string;
+    let adSetParams: Parameters<typeof createAdSet>[1];
 
-    // CBO check: when the campaign has a budget set at the campaign
-    // level, Meta enforces "campaign budget XOR ad set budget" — we
-    // must NOT pass daily_budget on the ad set or Meta returns
-    // subcode 1885621.
-    if (!campaign.usesCBO && (!Number.isFinite(dailyBudgetDollars) || dailyBudgetDollars < 1)) {
-      return NextResponse.json({
-        error: "budget_required",
-        message: "This campaign uses ad-set budgets. Daily budget must be at least $1.",
-      }, { status: 400 });
-    }
+    if (quickBoost) {
+      // ── Quick Boost path ──────────────────────────────────────────
+      // Mirror Meta's native Boost button: fresh campaign, fresh ad set
+      // with Advantage+ defaults, fresh ad. PAUSED status — subscriber
+      // activates explicitly. Bypasses all the inheritance issues.
+      if (!Number.isFinite(dailyBudgetDollars) || dailyBudgetDollars < 1) {
+        return NextResponse.json({
+          error: "budget_required",
+          message: "Daily budget must be at least $1 for Quick Boost.",
+        }, { status: 400 });
+      }
 
-    const optimizationGoal = inheritedAdSet?.optimizationGoal
-      || objectiveToOptimizationGoal(campaign.objective);
-    const billingEvent = inheritedAdSet?.billingEvent || "IMPRESSIONS";
-    const inheritedTargeting = inheritedAdSet?.targeting || null;
+      const created = await createCampaign(
+        adAccountId,
+        {
+          name,
+          objective: "OUTCOME_ENGAGEMENT",
+          status: "PAUSED",
+          specialAdCategories,
+        },
+        accessToken
+      );
+      campaignId = created.id;
+      campaignName = name;
 
-    const adSet = await createAdSet(
-      adAccountId,
-      {
+      // Compute stop_time (end of duration) unless subscriber chose continuous
+      let stopTime: string | undefined;
+      if (!runContinuously && Number.isFinite(durationDays) && durationDays >= 1) {
+        stopTime = new Date(Date.now() + Math.floor(durationDays) * 86400000).toISOString();
+      }
+
+      // Advantage+ defaults via minimal targeting + targeting_optimization
+      // expansion_all flag. No specific placements = Advantage+ Placements
+      // (Meta picks across FB / IG / Messenger / Audience Network / WhatsApp).
+      const advantagePlusTargeting: Record<string, unknown> = {
+        geo_locations: { countries: ["US"] },
+        targeting_optimization: "expansion_all",
+        age_min: 18,
+        age_max: 65,
+      };
+
+      adSetParams = {
         name: `${name} — ad set`,
-        campaignId: targetCampaignId,
-        // Omit dailyBudgetCents when campaign uses CBO — Meta enforces
-        // budget at one level only.
+        campaignId,
+        dailyBudgetCents: Math.round(dailyBudgetDollars * 100),
+        optimizationGoal: "POST_ENGAGEMENT",
+        billingEvent: "IMPRESSIONS",
+        targeting: advantagePlusTargeting,
+        status: "PAUSED",
+        ...(stopTime ? { stopTime } : {}),
+      };
+    } else {
+      // ── Attach to existing campaign path ──────────────────────────
+      // Inherit objective + ad set settings from the chosen campaign.
+      // Meta enforces consistency across ad sets when campaign uses
+      // CBO (lowest_cost bid strategy).
+      const campaign = await getCampaignSettings(targetCampaignId, accessToken);
+      const inheritedAdSet = await getFirstAdSetSettings(targetCampaignId, accessToken);
+
+      if (!campaign.usesCBO && (!Number.isFinite(dailyBudgetDollars) || dailyBudgetDollars < 1)) {
+        return NextResponse.json({
+          error: "budget_required",
+          message: "This campaign uses ad-set budgets. Daily budget must be at least $1.",
+        }, { status: 400 });
+      }
+
+      campaignId = targetCampaignId;
+      campaignName = campaign.name;
+
+      const optimizationGoal = inheritedAdSet?.optimizationGoal
+        || objectiveToOptimizationGoal(campaign.objective);
+      const billingEvent = inheritedAdSet?.billingEvent || "IMPRESSIONS";
+      const inheritedTargeting = inheritedAdSet?.targeting || null;
+
+      adSetParams = {
+        name: `${name} — ad set`,
+        campaignId,
         ...(campaign.usesCBO ? {} : { dailyBudgetCents: Math.round(dailyBudgetDollars * 100) }),
         optimizationGoal,
         billingEvent,
         targeting: inheritedTargeting || undefined,
         status: "PAUSED",
-      },
-      accessToken
-    );
+      };
+    }
+
+    const adSet = await createAdSet(adAccountId, adSetParams, accessToken);
     const ad = await createBoostedAd(
       adAccountId,
       {
@@ -146,13 +203,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       platform,
-      campaignId: targetCampaignId,
-      campaignName: campaign.name,
+      campaignId,
+      campaignName,
       adSetId: adSet.id,
       adId: ad.adId,
       creativeId: ad.creativeId,
       status: "PAUSED",
-      inheritedFromExistingAdSet: inheritedAdSet !== null,
+      mode: quickBoost ? "quick_boost" : "attach_existing",
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

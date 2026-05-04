@@ -425,14 +425,13 @@ export interface CreateCampaignParams {
   name: string;
   objective: string;        // e.g. 'OUTCOME_TRAFFIC' | 'OUTCOME_ENGAGEMENT' | 'OUTCOME_LEADS'
   status?: "ACTIVE" | "PAUSED";
+  specialAdCategories?: string[];   // ['HOUSING'], ['EMPLOYMENT'], etc.
 }
 
 /**
  * Create a campaign in the given ad account. Returns the new campaign ID.
- * Defaults status to PAUSED so review-time creations don't accidentally
- * spend money. special_ad_categories=[] is correct for TracPost's
- * subscriber segment (contractors, restaurants, etc.) — no special
- * regulated categories.
+ * Defaults status to PAUSED so subscribers don't accidentally spend
+ * money. specialAdCategories defaults to [] (no regulated categories).
  */
 export async function createCampaign(
   adAccountId: string,
@@ -444,7 +443,7 @@ export async function createCampaign(
     name: params.name,
     objective: params.objective,
     status: params.status || "PAUSED",
-    special_ad_categories: JSON.stringify([]),
+    special_ad_categories: JSON.stringify(params.specialAdCategories || []),
     access_token: accessToken,
   });
   const res = await fetch(`${GRAPH_BASE}/${id}/campaigns`, {
@@ -470,6 +469,7 @@ export interface CreateAdSetParams {
   countryCodes?: string[];         // default ['US'] — only used if no explicit targeting
   targeting?: Record<string, unknown>;  // explicit targeting JSON (overrides countryCodes)
   status?: "ACTIVE" | "PAUSED";
+  stopTime?: string;               // ISO timestamp; ad set ends when reached
 }
 
 /**
@@ -512,6 +512,9 @@ export async function createAdSet(
     // bid_strategy is meaningful at ad-set level only when ad set
     // owns the budget. Under CBO, bid_strategy lives at campaign level.
     body.set("bid_strategy", params.bidStrategy || "LOWEST_COST_WITHOUT_CAP");
+  }
+  if (params.stopTime) {
+    body.set("end_time", params.stopTime);
   }
   const res = await fetch(`${GRAPH_BASE}/${id}/adsets`, {
     method: "POST",

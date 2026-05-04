@@ -229,9 +229,11 @@ export function CampaignsClient(_props: Props) {
 
   // Boost form state (per-post inline)
   const [boostingPostId, setBoostingPostId] = useState<string | null>(null);
+  const [boostMode, setBoostMode] = useState<"quick" | "attach">("quick");
   const [boostBudget, setBoostBudget] = useState("10");
-  // Optional: attach this boost to an existing campaign.
-  // "" = create a new campaign for this boost.
+  const [boostDuration, setBoostDuration] = useState("7");
+  const [boostContinuous, setBoostContinuous] = useState(false);
+  const [boostSpecialCategory, setBoostSpecialCategory] = useState("NONE");
   const [boostCampaignId, setBoostCampaignId] = useState("");
   const [boosting, setBoosting] = useState(false);
   const [boostError, setBoostError] = useState<string | null>(null);
@@ -451,8 +453,16 @@ export function CampaignsClient(_props: Props) {
           igUsername: post.igUsername ?? "",
           name: `Boost: ${post.caption.slice(0, 50) || post.id}`,
           dailyBudgetDollars: parseFloat(boostBudget),
-          campaignId: boostCampaignId || undefined,
           adAccountId: adAccount?.platformAssetId,
+          // Mode-specific fields
+          quickBoost: boostMode === "quick",
+          campaignId: boostMode === "attach" ? (boostCampaignId || undefined) : undefined,
+          // Quick Boost extras
+          durationDays: boostMode === "quick" ? parseInt(boostDuration, 10) : undefined,
+          runContinuously: boostMode === "quick" ? boostContinuous : undefined,
+          specialAdCategories: boostMode === "quick" && boostSpecialCategory !== "NONE"
+            ? [boostSpecialCategory]
+            : [],
         }),
       });
       const data = await res.json();
@@ -963,11 +973,94 @@ export function CampaignsClient(_props: Props) {
 
                     {isBoosting && (
                       <div className="mt-3 pt-3 border-t border-border space-y-3">
-                        {campaigns.length === 0 ? (
+                        {/* Mode selector */}
+                        <div className="flex gap-1 border-b border-border">
+                          <button
+                            onClick={() => setBoostMode("quick")}
+                            className={`px-3 py-1.5 text-[11px] transition-colors ${
+                              boostMode === "quick" ? "border-b-2 border-accent text-accent font-medium" : "text-muted hover:text-foreground"
+                            }`}
+                          >
+                            Quick Boost (recommended)
+                          </button>
+                          <button
+                            onClick={() => setBoostMode("attach")}
+                            className={`px-3 py-1.5 text-[11px] transition-colors ${
+                              boostMode === "attach" ? "border-b-2 border-accent text-accent font-medium" : "text-muted hover:text-foreground"
+                            }`}
+                          >
+                            Attach to existing campaign
+                          </button>
+                        </div>
+
+                        {boostMode === "quick" && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-muted leading-relaxed">
+                              Creates a fresh campaign with Meta&apos;s Advantage+ defaults — smart audience, smart placements, optimized for engagement. Mirrors Facebook&apos;s native &quot;Boost post&quot; button.
+                            </p>
+                            <div className="grid grid-cols-[140px_1fr_180px] gap-3">
+                              <div>
+                                <label className="block text-[10px] text-muted mb-0.5">Daily Budget ($)</label>
+                                <input
+                                  type="number"
+                                  min="2"
+                                  step="1"
+                                  value={boostBudget}
+                                  onChange={(e) => setBoostBudget(e.target.value)}
+                                  className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-muted mb-0.5">Duration</label>
+                                {boostContinuous ? (
+                                  <p className="text-xs py-1.5">Runs until manually paused</p>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="90"
+                                      step="1"
+                                      value={boostDuration}
+                                      onChange={(e) => setBoostDuration(e.target.value)}
+                                      className="w-16 rounded border border-border bg-background px-2 py-1.5 text-xs"
+                                    />
+                                    <span className="text-xs text-muted">days</span>
+                                  </div>
+                                )}
+                                <label className="mt-1 inline-flex items-center gap-1.5 text-[10px] text-muted cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={boostContinuous}
+                                    onChange={(e) => setBoostContinuous(e.target.checked)}
+                                    className="h-3 w-3"
+                                  />
+                                  Run continuously
+                                </label>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-muted mb-0.5">Special Ad Category</label>
+                                <select
+                                  value={boostSpecialCategory}
+                                  onChange={(e) => setBoostSpecialCategory(e.target.value)}
+                                  className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+                                >
+                                  <option value="NONE">None</option>
+                                  <option value="HOUSING">Housing</option>
+                                  <option value="EMPLOYMENT">Employment</option>
+                                  <option value="CREDIT">Credit</option>
+                                  <option value="ISSUES_ELECTIONS_POLITICS">Politics / Issues</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {boostMode === "attach" && campaigns.length === 0 && (
                           <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
                             <p className="font-medium mb-1">No campaigns yet in this ad account</p>
                             <p className="text-muted leading-relaxed mb-2">
-                              Boosts attach to existing campaigns. Set up a campaign in Meta Ads Manager (configure your audience, budget, and objective there), then come back to add this post to it.
+                              No existing campaigns to attach to. Either switch to <button onClick={() => setBoostMode("quick")} className="text-accent hover:underline">Quick Boost</button> above, or create a campaign in Meta Ads Manager first.
                             </p>
                             {adAccount && (
                               <a
@@ -980,7 +1073,9 @@ export function CampaignsClient(_props: Props) {
                               </a>
                             )}
                           </div>
-                        ) : (
+                        )}
+
+                        {boostMode === "attach" && campaigns.length > 0 && (
                         <>
                         {(() => {
                           const selectedCampaign = boostCampaignId ? campaigns.find((x) => x.id === boostCampaignId) : null;
@@ -1045,7 +1140,11 @@ export function CampaignsClient(_props: Props) {
                             </>
                           );
                         })()}
-                        <div className="flex items-center justify-end gap-2">
+                        </>
+                        )}
+
+                        {/* Submit / cancel — shared across both modes */}
+                        <div className="flex items-center justify-end gap-2 pt-1">
                             <button
                               onClick={() => { setBoostingPostId(null); setBoostCampaignId(""); }}
                               className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-hover"
@@ -1054,7 +1153,7 @@ export function CampaignsClient(_props: Props) {
                             </button>
                             <button
                               onClick={() => submitBoost(post)}
-                              disabled={boosting || !boostCampaignId}
+                              disabled={boosting || (boostMode === "attach" && !boostCampaignId) || (boostMode === "attach" && campaigns.length === 0)}
                               className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
                             >
                               {boosting ? "Creating…" : "Create Boost (paused)"}
@@ -1066,8 +1165,6 @@ export function CampaignsClient(_props: Props) {
                         <p className="text-[10px] text-muted">
                           Boost is created in PAUSED status — activate in Meta Ads Manager when you&apos;re ready to spend.
                         </p>
-                        </>
-                        )}
                       </div>
                     )}
                   </div>
