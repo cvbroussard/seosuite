@@ -157,6 +157,15 @@ export async function POST(req: NextRequest) {
       });
       const advantagePlusTargeting = targetingResult.targeting;
 
+      // Engagement campaigns require promoted_object so Meta knows
+      // what's being engaged with (the Page for FB, the IG account for IG).
+      const promotedObject: Record<string, unknown> | undefined =
+        platform === "facebook" && pageId
+          ? { page_id: pageId }
+          : platform === "instagram" && igUserId
+          ? { instagram_actor_id: igUserId }
+          : undefined;
+
       adSetParams = {
         name: `${name} — ad set`,
         campaignId,
@@ -166,6 +175,7 @@ export async function POST(req: NextRequest) {
         targeting: advantagePlusTargeting,
         status: requestedStatus,
         ...(stopTime ? { stopTime } : {}),
+        ...(promotedObject ? { promotedObject } : {}),
       };
     } else {
       // ── Attach to existing campaign path ──────────────────────────

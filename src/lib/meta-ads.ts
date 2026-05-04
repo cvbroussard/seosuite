@@ -646,6 +646,7 @@ export interface CreateAdSetParams {
   targeting?: Record<string, unknown>;  // explicit targeting JSON (overrides countryCodes)
   status?: "ACTIVE" | "PAUSED";
   stopTime?: string;               // ISO timestamp; ad set ends when reached
+  promotedObject?: Record<string, unknown>; // e.g. { page_id: "123" } for engagement, { application_id: "..." } for app
 }
 
 /**
@@ -691,6 +692,9 @@ export async function createAdSet(
   }
   if (params.stopTime) {
     body.set("end_time", params.stopTime);
+  }
+  if (params.promotedObject) {
+    body.set("promoted_object", JSON.stringify(params.promotedObject));
   }
   const res = await fetch(`${GRAPH_BASE}/${id}/adsets`, {
     method: "POST",
