@@ -811,6 +811,18 @@ export async function createBoostedAd(
       ctaSpec.value = { link: params.ctaUrl };
     }
     creativeBody.set("call_to_action", JSON.stringify(ctaSpec));
+
+    // Auto-add UTM parameters via url_tags. Meta requires URL parameters
+    // to be acknowledged ("touched") before allowing publish on link CTAs;
+    // setting url_tags satisfies this AND gives subscribers attribution
+    // data in their downstream analytics. Meta resolves {{site_source_name}}
+    // to "fb" or "ig" depending on placement.
+    if (params.ctaUrl) {
+      creativeBody.set(
+        "url_tags",
+        "utm_source={{site_source_name}}&utm_medium=paid_social&utm_campaign=tracpost_boost&utm_content={{ad.id}}"
+      );
+    }
   }
 
   const creativeRes = await fetch(`${GRAPH_BASE}/${id}/adcreatives`, {
