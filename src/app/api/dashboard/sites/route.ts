@@ -18,13 +18,20 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, businessType, location, domain, phone, existingAccounts } = body;
+  const { name, businessType, location, domain, phone, existingAccounts,
+    place_id, place_lat, place_lon, place_name } = body;
 
-  if (!name || !businessType || !location) {
+  if (!name || !businessType || !place_id) {
     return NextResponse.json(
-      { error: "name, businessType, and location are required" },
+      { error: "name, businessType, and a picked location are required" },
       { status: 400 }
     );
+  }
+  if (typeof place_id === "string" && place_id.startsWith("manual_")) {
+    return NextResponse.json({ error: "Synthetic placeId cannot be saved as canonical" }, { status: 400 });
+  }
+  if (typeof place_lat !== "number" || typeof place_lon !== "number") {
+    return NextResponse.json({ error: "place_lat and place_lon must be numbers" }, { status: 400 });
   }
 
   const blogSlug = slugify(name);
@@ -43,14 +50,23 @@ export async function POST(req: NextRequest) {
   const metadata = JSON.stringify(metaObj);
 
   const [site] = await sql`
-    INSERT INTO sites (subscription_id, name, domain, url, business_type, location, blog_slug, provisioning_status, metadata)
+    INSERT INTO sites (
+      subscription_id, name, domain, url, business_type, location,
+      place_id, place_lat, place_lon, place_name, place_set_at,
+      blog_slug, provisioning_status, metadata
+    )
     VALUES (
       ${session.subscriptionId},
       ${name},
       ${domain || null},
       ${url},
       ${businessType},
-      ${location},
+      ${location || place_name},
+      ${place_id},
+      ${place_lat},
+      ${place_lon},
+      ${place_name || null},
+      NOW(),
       ${finalSlug},
       'requested',
       ${metadata}::jsonb

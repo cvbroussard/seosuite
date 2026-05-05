@@ -31,6 +31,16 @@ export async function POST(req: NextRequest) {
   const name = (formData.get("name") as string)?.trim() || null;
   const businessType = (formData.get("business_type") as string)?.trim() || null;
   const location = (formData.get("location") as string)?.trim() || null;
+  // Canonical place fields — picker writes all 5 atomically. Empty string
+  // from FormData → null. Reject manual_* placeholders defensively.
+  const placeIdRaw = (formData.get("place_id") as string)?.trim() || "";
+  const placeId = placeIdRaw || null;
+  const placeLat = parseFloat((formData.get("place_lat") as string) || "");
+  const placeLon = parseFloat((formData.get("place_lon") as string) || "");
+  const placeName = (formData.get("place_name") as string)?.trim() || null;
+  if (placeId && placeId.startsWith("manual_")) {
+    return NextResponse.json({ error: "Synthetic placeId cannot be saved as canonical" }, { status: 400 });
+  }
   const phone = (formData.get("business_phone") as string) || null;
   const email = (formData.get("business_email") as string) || null;
   const logoFile = formData.get("business_logo") as File | null;
@@ -146,11 +156,23 @@ export async function POST(req: NextRequest) {
     ogDescription: ogDescription,
   };
 
+  // Canonical place: write all 5 atomically (set OR clear together). NULL
+  // place_id wipes lat/lon/name/set_at — keeps the column set consistent
+  // with the picker's on/off semantics.
+  const lat = placeId && Number.isFinite(placeLat) ? placeLat : null;
+  const lon = placeId && Number.isFinite(placeLon) ? placeLon : null;
+  const setAt = placeId ? new Date() : null;
+
   await sql`
     UPDATE sites
     SET name = ${name},
         business_type = ${businessType},
         location = ${location},
+        place_id = ${placeId},
+        place_lat = ${lat},
+        place_lon = ${lon},
+        place_name = ${placeId ? placeName : null},
+        place_set_at = ${setAt},
         business_phone = ${phone},
         business_email = ${email},
         business_logo = ${logoUrl},

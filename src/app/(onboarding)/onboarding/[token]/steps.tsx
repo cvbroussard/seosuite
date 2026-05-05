@@ -15,6 +15,7 @@ import {
   CoachingWalkthrough,
 } from "@/components/forms";
 import { PlatformIcon } from "@/components/platform-icons";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 interface StepProps {
   data: Record<string, unknown>;
@@ -111,11 +112,23 @@ const BUSINESS_TYPES = [
 export function Step2Business({ data, onSave, saving }: StepProps) {
   const [name, setName] = useState((data.business_name as string) || "");
   const [type, setType] = useState((data.business_type as string) || "");
-  const [location, setLocation] = useState((data.business_location as string) || "");
+  const [place, setPlace] = useState<PickedPlace | null>(() => {
+    const placeId = data.business_place_id as string | undefined;
+    const lat = data.business_place_lat as number | undefined;
+    const lon = data.business_place_lon as number | undefined;
+    if (!placeId || lat == null || lon == null) return null;
+    return {
+      placeId,
+      placeName: (data.business_place_name as string) || (data.business_location as string) || "",
+      formattedAddress: (data.business_location as string) || (data.business_place_name as string) || "",
+      lat,
+      lon,
+    };
+  });
   const [website, setWebsite] = useState((data.business_website as string) || "");
   const [touched, setTouched] = useState(false);
 
-  const valid = name.trim().length >= 2 && !!type && location.trim().length >= 2;
+  const valid = name.trim().length >= 2 && !!type && !!place;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -124,7 +137,15 @@ export function Step2Business({ data, onSave, saving }: StepProps) {
     onSave({
       business_name: name.trim(),
       business_type: type,
-      business_location: location.trim(),
+      // Legacy display string, kept populated for back-compat with anything
+      // that reads business_location from the JSONB submission.
+      business_location: place!.formattedAddress,
+      // Canonical place fields — operator-side provisioning uses these to
+      // populate sites.place_id / place_lat / place_lon / place_name / place_set_at.
+      business_place_id: place!.placeId,
+      business_place_lat: place!.lat,
+      business_place_lon: place!.lon,
+      business_place_name: place!.placeName,
       business_website: website.trim() || null,
     });
   }
@@ -155,14 +176,13 @@ export function Step2Business({ data, onSave, saving }: StepProps) {
 
       <div className="ow-field">
         <label className="ow-label">Where do you operate?</label>
-        <input
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="e.g., Pittsburgh, PA"
-          className="ow-input"
+        <LocationPicker
+          value={place}
+          onChange={setPlace}
+          placeholder="Search for your business or address"
+          required
         />
-        <p className="ow-help">City + state for local services. Region or country for online businesses.</p>
+        <p className="ow-help">Pick your business or street address from the list — this becomes the canonical location used across your published content.</p>
       </div>
 
       <div className="ow-field">

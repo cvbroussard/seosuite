@@ -1,12 +1,17 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 interface Props {
   initial: {
     name: string;
     business_type: string | null;
     location: string | null;
+    place_id: string | null;
+    place_lat: number | null;
+    place_lon: number | null;
+    place_name: string | null;
     business_phone: string | null;
     business_email: string | null;
     business_logo: string | null;
@@ -17,10 +22,21 @@ interface Props {
   };
 }
 
+function initialPlace(initial: Props["initial"]): PickedPlace | null {
+  if (!initial.place_id || initial.place_lat == null || initial.place_lon == null) return null;
+  return {
+    placeId: initial.place_id,
+    placeName: initial.place_name || initial.location || "",
+    formattedAddress: initial.location || initial.place_name || "",
+    lat: initial.place_lat,
+    lon: initial.place_lon,
+  };
+}
+
 export function BusinessInfo({ initial }: Props) {
   const [name, setName] = useState(initial.name);
   const [businessType, setBusinessType] = useState(initial.business_type || "");
-  const [location, setLocation] = useState(initial.location || "");
+  const [place, setPlace] = useState<PickedPlace | null>(initialPlace(initial));
   const [phone, setPhone] = useState(initial.business_phone || "");
   const [email, setEmail] = useState(initial.business_email || "");
   const [logoUrl, setLogoUrl] = useState(initial.business_logo || "");
@@ -121,7 +137,14 @@ export function BusinessInfo({ initial }: Props) {
     const formData = new FormData();
     formData.set("name", name);
     formData.set("business_type", businessType);
-    formData.set("location", location);
+    // Canonical place fields — picker is the only writer; "location" stays
+    // populated as the formatted display string for back-compat with surfaces
+    // that still read sites.location directly.
+    formData.set("location", place?.formattedAddress || "");
+    formData.set("place_id", place?.placeId || "");
+    formData.set("place_lat", place ? String(place.lat) : "");
+    formData.set("place_lon", place ? String(place.lon) : "");
+    formData.set("place_name", place?.placeName || "");
     formData.set("business_phone", phone);
     formData.set("business_email", email);
     if (logoFile) {
@@ -207,12 +230,10 @@ export function BusinessInfo({ initial }: Props) {
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted">Location</label>
-          <input
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className="w-full text-sm"
-            placeholder="Pittsburgh, PA"
+          <LocationPicker
+            value={place}
+            onChange={setPlace}
+            placeholder="Search for your business or address"
           />
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PhoneField } from "@/components/phone-input";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 interface SiteInfo {
   id: string;
@@ -38,7 +39,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
   const [step, setStep] = useState<FormStep>("closed");
   const [name, setName] = useState("");
   const [businessType, setBusinessType] = useState("");
-  const [location, setLocation] = useState("");
+  const [place, setPlace] = useState<PickedPlace | null>(null);
   const [domain, setDomain] = useState("");
   const [phone, setPhone] = useState("");
   const [existingAccounts, setExistingAccounts] = useState<Set<string>>(new Set());
@@ -52,7 +53,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
     setStep("closed");
     setName("");
     setBusinessType("");
-    setLocation("");
+    setPlace(null);
     setDomain("");
     setPhone("");
     setExistingAccounts(new Set());
@@ -70,7 +71,11 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
         body: JSON.stringify({
           name,
           businessType,
-          location,
+          location: place?.formattedAddress,
+          place_id: place?.placeId,
+          place_lat: place?.lat,
+          place_lon: place?.lon,
+          place_name: place?.placeName,
           domain: domain || undefined,
           phone: phone || undefined,
           existingAccounts: Array.from(existingAccounts),
@@ -140,11 +145,11 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
             </div>
             <div>
               <label className="mb-1 block text-xs text-muted">Location *</label>
-              <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Greater Pittsburgh, PA"
-                className="w-full text-sm"
+              <LocationPicker
+                value={place}
+                onChange={setPlace}
+                placeholder="Search for your business or address"
+                required
               />
             </div>
             <div>
@@ -203,7 +208,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
           <div className="mt-4 flex gap-3">
             <button
               onClick={() => setStep("confirm")}
-              disabled={!name || !businessType || !location}
+              disabled={!name || !businessType || !place}
               className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               Review
@@ -234,7 +239,7 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
             </div>
             <div className="flex justify-between border-b border-border py-2 text-sm">
               <span className="text-muted">Location</span>
-              <span>{location}</span>
+              <span>{place?.formattedAddress || place?.placeName || "—"}</span>
             </div>
             {domain && (
               <div className="flex justify-between border-b border-border py-2 text-sm">

@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { name, domain, blog_url, url, external_id, brand_voice, business_type, location } = body;
+    const { name, domain, blog_url, url, external_id, brand_voice, business_type,
+      location, place_id, place_lat, place_lon, place_name } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -20,15 +21,30 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    // Canonical place is optional here (Setup keeps location optional), but
+    // when present, all 4 must be set together and placeId can't be synthetic.
+    if (place_id) {
+      if (typeof place_id === "string" && place_id.startsWith("manual_")) {
+        return NextResponse.json({ error: "Synthetic placeId cannot be saved as canonical" }, { status: 400 });
+      }
+      if (typeof place_lat !== "number" || typeof place_lon !== "number") {
+        return NextResponse.json({ error: "place_lat and place_lon must be numbers" }, { status: 400 });
+      }
+    }
 
     const rows = await sql`
-      INSERT INTO sites (subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location)
+      INSERT INTO sites (
+        subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type,
+        location, place_id, place_lat, place_lon, place_name, place_set_at
+      )
       VALUES (
         ${auth.subscriptionId}, ${name},
         ${domain || null}, ${blog_url || null},
         ${url || (domain ? `https://${domain}` : null)},
         ${external_id || null}, ${JSON.stringify(brand_voice || {})},
-        ${business_type || null}, ${location || null}
+        ${business_type || null}, ${location || place_name || null},
+        ${place_id || null}, ${place_id ? place_lat : null}, ${place_id ? place_lon : null},
+        ${place_id ? (place_name || null) : null}, ${place_id ? new Date() : null}
       )
       RETURNING id, subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location, created_at
     `;

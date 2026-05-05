@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 type Step = "business" | "complete";
 
@@ -10,7 +11,7 @@ export default function SetupPage() {
   const [step, setStep] = useState<Step>("business");
   const [businessName, setBusinessName] = useState("");
   const [businessType, setBusinessType] = useState("");
-  const [location, setLocation] = useState("");
+  const [place, setPlace] = useState<PickedPlace | null>(null);
   const [siteUrl, setSiteUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -21,7 +22,7 @@ export default function SetupPage() {
     setError("");
 
     try {
-      // Create site with business type + location
+      // Create site with business type + canonical place
       const res = await fetch("/api/sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -29,7 +30,11 @@ export default function SetupPage() {
           name: businessName,
           url: siteUrl ? (siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`) : undefined,
           business_type: businessType,
-          location: location || undefined,
+          location: place?.formattedAddress,
+          place_id: place?.placeId,
+          place_lat: place?.lat,
+          place_lon: place?.lon,
+          place_name: place?.placeName,
         }),
       });
 
@@ -74,7 +79,7 @@ export default function SetupPage() {
           </div>
           <h1 className="mb-2">You're all set</h1>
           <p className="mb-2 text-muted">
-            {businessName} is ready. Your brand intelligence and content strategy are being assembled in the background.
+            {businessName}{place ? ` (${place.placeName})` : ""} is ready. Your brand intelligence and content strategy are being assembled in the background.
           </p>
           <p className="mb-8 text-sm text-muted">
             Our team will set up your social accounts and notify you when everything is live. In the meantime, download the app and start capturing content.
@@ -128,11 +133,10 @@ export default function SetupPage() {
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">Location</label>
-            <input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g., West Palm Beach, FL"
-              className="w-full px-3 py-2.5"
+            <LocationPicker
+              value={place}
+              onChange={setPlace}
+              placeholder="Search for your business or address"
             />
           </div>
 

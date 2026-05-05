@@ -25,6 +25,7 @@ export default async function SettingsPage() {
   const [[site], blogSettingsRows, [blogCounts], [lastArticle]] = await Promise.all([
     sql`
       SELECT s.name, s.url, s.business_type, s.location,
+             s.place_id, s.place_lat, s.place_lon, s.place_name,
              s.brand_voice, s.autopilot_enabled, s.cadence_config,
              s.content_pillars, s.pillar_config, s.autopilot_config, s.created_at,
              s.is_active, s.blog_cadence,
@@ -74,6 +75,10 @@ export default async function SettingsPage() {
             name: (site?.name as string) || "",
             business_type: (site?.business_type as string) || null,
             location: (site?.location as string) || null,
+            place_id: (site?.place_id as string) || null,
+            place_lat: site?.place_lat != null ? Number(site.place_lat) : null,
+            place_lon: site?.place_lon != null ? Number(site.place_lon) : null,
+            place_name: (site?.place_name as string) || null,
             business_phone: (site?.business_phone as string) || null,
             business_email: (site?.business_email as string) || null,
             business_logo: (site?.business_logo as string) || null,
