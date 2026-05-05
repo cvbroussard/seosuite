@@ -180,12 +180,16 @@ export function PlatformDetail({
             ) : conn?.connected ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between py-1.5 border-b border-border">
-                  <span className="text-[10px] text-muted">Account</span>
+                  <span className="text-[10px] text-muted">Connected Page</span>
                   <span className="text-xs font-medium">{conn.accountName || "—"}</span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 border-b border-border">
                   <span className="text-[10px] text-muted">Status</span>
-                  <span className={`text-xs font-medium ${conn.status === "active" ? "text-success" : "text-danger"}`}>
+                  <span className={`text-xs font-medium ${
+                    conn.status === "active" || conn.status === "connected"
+                      ? "text-success"
+                      : "text-danger"
+                  }`}>
                     {conn.status}
                   </span>
                 </div>
@@ -208,7 +212,7 @@ export function PlatformDetail({
 
                 {platform.multiAssetWarning && (
                   <div className="mt-3 rounded-md border border-warning/30 bg-warning/5 p-3">
-                    <p className="text-[10px] font-semibold text-warning uppercase tracking-wider mb-1">Reconnect note</p>
+                    <p className="text-[10px] font-semibold text-warning uppercase tracking-wider mb-1">Connection note</p>
                     <p className="text-xs text-foreground leading-relaxed">{platform.multiAssetWarning}</p>
                   </div>
                 )}
@@ -217,8 +221,9 @@ export function PlatformDetail({
                     onClick={handleConnect}
                     disabled={connecting || disconnecting}
                     className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50"
+                    title="Re-run OAuth to refresh the access token while keeping this Page bound to this site."
                   >
-                    {connecting ? "Reconnecting..." : "Reconnect"}
+                    {connecting ? "Refreshing..." : "Refresh token"}
                   </button>
                   {confirmDisconnect ? (
                     <>
