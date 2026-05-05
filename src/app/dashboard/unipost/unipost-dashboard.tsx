@@ -67,6 +67,7 @@ const PLATFORM_ICONS: Record<string, string> = {
   pinterest: "📌",
   linkedin: "💼",
   gbp: "📍",
+  blog: "📝",
 };
 
 type ViewMode = "firehose" | "campaign" | "channel";
