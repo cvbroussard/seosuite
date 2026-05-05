@@ -226,8 +226,18 @@ export function PlatformDetail({
           </div>
 
           {/* Connection status */}
-          <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
-            <h3 className="text-sm font-medium mb-3">Connection</h3>
+          <div className={`rounded-xl border p-4 shadow-card transition-colors ${
+            conn?.status === "pending_assignment"
+              ? "border-warning/40 bg-warning/5"
+              : "border-border bg-surface"
+          }`}>
+            <h3 className={`text-sm font-semibold mb-3 ${
+              conn?.status === "pending_assignment" ? "text-warning" : "font-medium"
+            }`}>
+              {conn?.status === "pending_assignment"
+                ? `Choose your ${platform.label} Page`
+                : "Connection"}
+            </h3>
             {loading ? (
               <div className="flex justify-center py-4">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
@@ -366,29 +376,37 @@ export function PlatformDetail({
               </div>
             ) : conn?.status === "pending_assignment" && conn.availableAssetList && conn.availableAssetList.length > 0 ? (
               <div className="space-y-3">
-                <p className="text-xs text-muted leading-relaxed">
-                  You granted access to {conn.availableAssets} {platform.label} {(conn.availableAssets ?? 0) === 1 ? "Page" : "Pages"}.
-                  Pick the one for this business — TracPost will bind it to this site. You can switch later if needed.
+                <p className="text-xs text-foreground leading-relaxed">
+                  You granted access to <span className="font-semibold">{conn.availableAssets} {platform.label} {(conn.availableAssets ?? 0) === 1 ? "Page" : "Pages"}</span>.
+                  Pick the one for this business — TracPost will bind it to this site.
+                  <span className="block mt-1 text-[11px] text-muted">One business = one Page. You can switch later if needed.</span>
                 </p>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {conn.availableAssetList.map((a) => (
                     <button
                       key={a.id}
                       onClick={() => handleAssignAsset(a.id)}
                       disabled={assigning || disconnecting}
-                      className="w-full text-left rounded border border-border bg-surface px-3 py-2 text-xs hover:border-accent disabled:opacity-50"
+                      className="group w-full text-left rounded-md border-2 border-border bg-surface px-3 py-3 text-xs transition-all hover:border-accent hover:bg-accent/5 hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <div className="font-medium">{a.assetName}</div>
-                      {a.connectedUserName && (
-                        <div className="text-[10px] text-muted mt-0.5">via {a.connectedUserName}</div>
-                      )}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold text-sm text-foreground">{a.assetName}</div>
+                          {a.connectedUserName && (
+                            <div className="text-[10px] text-muted mt-0.5">via {a.connectedUserName}</div>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-medium text-muted group-hover:text-accent transition-colors">
+                          {assigning ? "..." : "Pick →"}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
                 {error && (
                   <p className="text-xs text-danger">{error}</p>
                 )}
-                <div className="pt-3 mt-2 border-t border-border">
+                <div className="pt-3 mt-2 border-t border-warning/30">
                   {confirmDisconnect ? (
                     <div className="rounded-md border border-danger/30 bg-danger/5 p-3">
                       <p className="text-xs font-semibold text-danger mb-1">Disconnect without picking a Page?</p>
