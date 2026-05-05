@@ -48,10 +48,11 @@ export const PLATFORMS: PlatformConfig[] = [
     why: "Facebook Pages are the most trusted local presence — the first thing customers find when they search your business name.",
     accountType: "Facebook Page (not a personal profile)",
     prerequisites: [
-      "A Facebook Page for this business (not your personal profile)",
-      "Admin role on the Page",
-      "Page must be published (not in draft state)",
-      "Decide which Page belongs to this business — you'll select it during the connection step. One business = one Page.",
+      "You'll connect using your personal Facebook profile (Meta's OAuth always runs against a personal account).",
+      "During the connection process, you'll be required to select a Business Page — often shown as a Page with 'business' in parentheses.",
+      "Your personal profile must have an admin role on the Page.",
+      "The Page must be in Published state (not draft).",
+      "One business = one Page. Pick only the Page for this business — don't opt into 'all current and future Pages'.",
     ],
     whatWeDoWithIt: [
       "Publish posts, photos, and link shares to the connected Page",

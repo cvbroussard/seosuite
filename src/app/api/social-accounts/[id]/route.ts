@@ -27,7 +27,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  // Revoke token on Meta's side (best-effort — don't block disconnect on failure)
+  // Revoke token on Meta's side (best-effort — don't block disconnect on failure).
+  // Without this, Meta may silently reuse the existing OAuth grant on next
+  // Connect, skipping the asset picker — which defeats the fresh-start intent.
   if (account.access_token_encrypted) {
     try {
       const revokeRes = await fetch(
@@ -41,11 +43,28 @@ export async function DELETE(
     }
   }
 
-  // Remove site links first
+  // Cascade: cancel scheduled posts that depend on this connection.
+  // Per the connection lifecycle policy: drafts and published posts stay,
+  // only scheduled (locked-in publish time, queued for cron pickup) get cancelled.
+  // Subscriber pre-acknowledged via the confirm dialog.
+  const cascadeResult = await sql`
+    UPDATE social_posts
+    SET status = 'cancelled',
+        updated_at = NOW()
+    WHERE account_id = ${id}
+      AND status = 'scheduled'
+    RETURNING id
+  `;
+  const cancelledScheduledCount = cascadeResult.length;
+
+  // Remove site links (legacy site_social_links + new site_platform_assets via cascade)
   await sql`DELETE FROM site_social_links WHERE social_account_id = ${id}`;
 
-  // Remove the account
+  // platform_assets row(s) for this social_account; site_platform_assets cascades on FK
+  await sql`DELETE FROM platform_assets WHERE social_account_id = ${id}`;
+
+  // Remove the account row last (FK references resolved above)
   await sql`DELETE FROM social_accounts WHERE id = ${id}`;
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, cancelledScheduledCount });
 }

@@ -5,14 +5,26 @@ import Link from "next/link";
 import { PlatformIcon } from "@/components/platform-icons";
 import type { PlatformConfig } from "./platform-config";
 
+interface AvailableAsset {
+  id: string;
+  assetId: string;
+  assetName: string;
+  connectedUserName: string | null;
+  tokenExpiresAt: string | null;
+}
+
 interface ConnectionStatus {
   connected: boolean;
   accountId: string | null;
   accountName: string | null;
+  connectedUserName?: string | null;
+  socialAccountId?: string | null;
   status: string | null;
   tokenExpiresAt: string | null;
   published: number;
   scheduled: number;
+  availableAssets?: number;
+  availableAssetList?: AvailableAsset[];
 }
 
 function usePrefix() {
@@ -42,19 +54,56 @@ export function PlatformDetail({
 
   const [disconnecting, setDisconnecting] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [showSwitch, setShowSwitch] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [disconnectMessage, setDisconnectMessage] = useState("");
 
   async function handleDisconnect() {
-    if (!conn?.accountId) return;
+    const socialAccountId = conn?.socialAccountId || conn?.accountId;
+    if (!socialAccountId) return;
     setDisconnecting(true);
     try {
-      await fetch(`/api/social-accounts/${conn.accountId}`, { method: "DELETE" });
+      const res = await fetch(`/api/social-accounts/${socialAccountId}`, { method: "DELETE" });
+      const result = res.ok ? await res.json() : null;
+      if (result?.cancelledScheduledCount > 0) {
+        setDisconnectMessage(
+          `Disconnected. Cancelled ${result.cancelledScheduledCount} scheduled post${result.cancelledScheduledCount === 1 ? "" : "s"}.`,
+        );
+      } else {
+        setDisconnectMessage("Disconnected.");
+      }
       // Reload status
-      const res = await fetch(`/api/accounts/platform-status?site_id=${siteId}&platform=${platform.key}`);
-      const data = await res.ok ? await res.json() : { connected: false };
+      const statusRes = await fetch(`/api/accounts/platform-status?site_id=${siteId}&platform=${platform.key}`);
+      const data = statusRes.ok ? await statusRes.json() : { connected: false };
       setConn(data);
       setConfirmDisconnect(false);
     } finally {
       setDisconnecting(false);
+    }
+  }
+
+  async function handleAssignAsset(platformAssetId: string) {
+    setAssigning(true);
+    setError("");
+    try {
+      const res = await fetch("/api/accounts/assign-asset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ site_id: siteId, platform_asset_id: platformAssetId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Failed to bind asset");
+        return;
+      }
+      // Reload status to flip to connected state
+      const statusRes = await fetch(`/api/accounts/platform-status?site_id=${siteId}&platform=${platform.key}`);
+      const data = statusRes.ok ? await statusRes.json() : { connected: false };
+      setConn(data);
+      setShowSwitch(false);
+      setDisconnectMessage("");
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -183,6 +232,12 @@ export function PlatformDetail({
                   <span className="text-[10px] text-muted">Connected Page</span>
                   <span className="text-xs font-medium">{conn.accountName || "—"}</span>
                 </div>
+                {conn.connectedUserName && (
+                  <div className="flex items-center justify-between py-1.5 border-b border-border">
+                    <span className="text-[10px] text-muted">Connected as</span>
+                    <span className="text-xs font-medium">{conn.connectedUserName}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between py-1.5 border-b border-border">
                   <span className="text-[10px] text-muted">Status</span>
                   <span className={`text-xs font-medium ${
@@ -216,7 +271,37 @@ export function PlatformDetail({
                     <p className="text-xs text-foreground leading-relaxed">{platform.multiAssetWarning}</p>
                   </div>
                 )}
-                <div className="pt-3 mt-2 border-t border-border flex items-center gap-2">
+                {showSwitch && conn.availableAssetList && conn.availableAssetList.length > 0 ? (
+                  <div className="mt-3 rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold text-accent uppercase tracking-wider mb-1">Switch connected Page</p>
+                    <p className="text-xs text-muted leading-relaxed">
+                      Pick a different Page for this business. The current binding will be replaced. (One business = one Page.)
+                    </p>
+                    {conn.availableAssetList.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => handleAssignAsset(a.id)}
+                        disabled={assigning || a.id === conn.accountId}
+                        className="w-full text-left rounded border border-border bg-surface px-3 py-2 text-xs hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="font-medium">{a.assetName}</div>
+                        {a.connectedUserName && (
+                          <div className="text-[10px] text-muted mt-0.5">via {a.connectedUserName}</div>
+                        )}
+                        {a.id === conn.accountId && (
+                          <div className="text-[10px] text-success mt-0.5">currently connected</div>
+                        )}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setShowSwitch(false)}
+                      className="w-full rounded border border-border px-3 py-1.5 text-[10px] text-muted hover:bg-surface-hover"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : null}
+                <div className="pt-3 mt-2 border-t border-border flex items-center gap-2 flex-wrap">
                   <button
                     onClick={handleConnect}
                     disabled={connecting || disconnecting}
@@ -225,23 +310,43 @@ export function PlatformDetail({
                   >
                     {connecting ? "Refreshing..." : "Refresh token"}
                   </button>
+                  <button
+                    onClick={() => setShowSwitch(!showSwitch)}
+                    disabled={connecting || disconnecting}
+                    className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50"
+                    title="Bind a different Page to this site without re-running OAuth."
+                  >
+                    Switch Page
+                  </button>
                   {confirmDisconnect ? (
-                    <>
-                      <span className="text-[10px] text-danger">Disconnect?</span>
-                      <button
-                        onClick={handleDisconnect}
-                        disabled={disconnecting}
-                        className="rounded border border-danger/30 px-2 py-1 text-[10px] text-danger hover:bg-danger/10 disabled:opacity-50"
-                      >
-                        {disconnecting ? "..." : "Yes"}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDisconnect(false)}
-                        className="rounded border border-border px-2 py-1 text-[10px] text-muted hover:bg-surface-hover"
-                      >
-                        No
-                      </button>
-                    </>
+                    <div className="basis-full mt-2 rounded-md border border-danger/30 bg-danger/5 p-3">
+                      <p className="text-xs font-semibold text-danger mb-1">Disconnect this Page?</p>
+                      <p className="text-[11px] text-foreground leading-relaxed mb-2">
+                        Disconnecting will:
+                      </p>
+                      <ul className="text-[11px] text-foreground leading-relaxed mb-3 space-y-0.5 ml-4 list-disc">
+                        <li>Revoke TracPost&apos;s access on Meta&apos;s side</li>
+                        <li>Cancel any posts scheduled on this Page</li>
+                        <li>Stop new comments from syncing to your inbox</li>
+                        <li>Keep your published posts and historical analytics</li>
+                      </ul>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleDisconnect}
+                          disabled={disconnecting}
+                          className="rounded border border-danger/30 bg-danger/10 px-3 py-1 text-xs font-medium text-danger hover:bg-danger/20 disabled:opacity-50"
+                        >
+                          {disconnecting ? "Disconnecting..." : "Yes, disconnect"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDisconnect(false)}
+                          disabled={disconnecting}
+                          className="rounded border border-border px-3 py-1 text-xs text-muted hover:bg-surface-hover"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <button
                       onClick={() => setConfirmDisconnect(true)}
@@ -253,8 +358,38 @@ export function PlatformDetail({
                   )}
                 </div>
               </div>
+            ) : conn?.status === "pending_assignment" && conn.availableAssetList && conn.availableAssetList.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted leading-relaxed">
+                  You granted access to {conn.availableAssets} {platform.label} {(conn.availableAssets ?? 0) === 1 ? "Page" : "Pages"}.
+                  Pick the one for this business — TracPost will bind it to this site. You can switch later if needed.
+                </p>
+                <div className="space-y-1.5">
+                  {conn.availableAssetList.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => handleAssignAsset(a.id)}
+                      disabled={assigning}
+                      className="w-full text-left rounded border border-border bg-surface px-3 py-2 text-xs hover:border-accent disabled:opacity-50"
+                    >
+                      <div className="font-medium">{a.assetName}</div>
+                      {a.connectedUserName && (
+                        <div className="text-[10px] text-muted mt-0.5">via {a.connectedUserName}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {error && (
+                  <p className="text-xs text-danger">{error}</p>
+                )}
+              </div>
             ) : (
               <div className="space-y-3">
+                {disconnectMessage && (
+                  <div className="rounded-md border border-success/30 bg-success/5 p-3">
+                    <p className="text-xs text-success font-medium">{disconnectMessage}</p>
+                  </div>
+                )}
                 <p className="text-xs text-muted">
                   {platform.oauthReady
                     ? "Ready to connect. Make sure you've completed the prerequisites above, then click the button below."

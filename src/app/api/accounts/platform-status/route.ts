@@ -24,8 +24,9 @@ export async function GET(req: NextRequest) {
 
   // 1. New model: check site_platform_assets for an assigned asset on this platform
   const [assignedAsset] = await sql`
-    SELECT pa.id AS asset_id, pa.asset_name, pa.social_account_id,
-           sa.token_expires_at, sa.status AS account_status
+    SELECT pa.id AS platform_asset_id, pa.asset_id, pa.asset_name, pa.social_account_id,
+           sa.token_expires_at, sa.status AS account_status,
+           sa.account_name AS connected_user_name
     FROM site_platform_assets spa
     JOIN platform_assets pa ON pa.id = spa.platform_asset_id
     JOIN social_accounts sa ON sa.id = pa.social_account_id
@@ -41,8 +42,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       connected: true,
       status: "connected",
-      accountId: assignedAsset.asset_id,
+      accountId: assignedAsset.platform_asset_id,
       accountName: assignedAsset.asset_name,
+      connectedUserName: assignedAsset.connected_user_name,
+      socialAccountId: assignedAsset.social_account_id,
       tokenExpiresAt: assignedAsset.token_expires_at ? String(assignedAsset.token_expires_at) : null,
       published: 0,
       scheduled: 0,
@@ -69,6 +72,8 @@ export async function GET(req: NextRequest) {
       status: legacyAccount.status,
       accountId: legacyAccount.id,
       accountName: legacyAccount.account_name,
+      connectedUserName: null, // legacy model didn't track separate connected user identity
+      socialAccountId: legacyAccount.id,
       tokenExpiresAt: legacyAccount.token_expires_at ? String(legacyAccount.token_expires_at) : null,
       published: legacyAccount.published || 0,
       scheduled: legacyAccount.scheduled || 0,
@@ -86,12 +91,15 @@ export async function GET(req: NextRequest) {
   `;
 
   if (pendingAsset) {
-    const [count] = await sql`
-      SELECT COUNT(*)::int AS available
+    const assets = await sql`
+      SELECT pa.id, pa.asset_id, pa.asset_name, pa.metadata,
+             sa.account_name AS connected_user_name,
+             sa.token_expires_at
       FROM platform_assets pa
       JOIN social_accounts sa ON sa.id = pa.social_account_id
       WHERE pa.platform = ${platform}
         AND sa.subscription_id = ${session.subscriptionId}
+      ORDER BY pa.asset_name
     `;
     return NextResponse.json({
       connected: false,
@@ -101,7 +109,14 @@ export async function GET(req: NextRequest) {
       tokenExpiresAt: null,
       published: 0,
       scheduled: 0,
-      availableAssets: count.available,
+      availableAssets: assets.length,
+      availableAssetList: assets.map((a) => ({
+        id: a.id,
+        assetId: a.asset_id,
+        assetName: a.asset_name,
+        connectedUserName: a.connected_user_name,
+        tokenExpiresAt: a.token_expires_at ? String(a.token_expires_at) : null,
+      })),
     });
   }
 
