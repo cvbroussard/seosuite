@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { LocationPicker, type PickedPlace } from "@/components/location-picker";
+import { PhoneE164Field } from "@/components/forms";
 
 interface Props {
   initial: {
@@ -240,12 +241,10 @@ export function BusinessInfo({ initial }: Props) {
 
       <div>
         <label className="mb-1 block text-xs text-muted">Business Phone</label>
-        <input
-          type="tel"
+        <PhoneE164Field
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="w-full text-sm"
-          placeholder="(412) 555-0100"
+          onChange={setPhone}
+          ariaLabel="Business phone"
         />
       </div>
 

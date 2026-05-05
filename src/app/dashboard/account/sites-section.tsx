@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PhoneField } from "@/components/phone-input";
+import { PhoneE164Field } from "@/components/forms";
 import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 interface SiteInfo {
@@ -163,10 +163,10 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
             </div>
             <div>
               <label className="mb-1 block text-xs text-muted">Business Phone</label>
-              <PhoneField
+              <PhoneE164Field
                 value={phone}
                 onChange={setPhone}
-                className="w-full text-sm"
+                ariaLabel="Business phone"
               />
               <p className="mt-1 text-[11px] text-dim">
                 Shown on your Google Business listing. Used for verification.

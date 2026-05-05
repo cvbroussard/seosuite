@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { PhoneField } from "@/components/phone-input";
+import { PhoneE164Field } from "@/components/forms";
 import { confirm, toast } from "@/components/feedback";
 
 interface Member {
@@ -272,10 +272,10 @@ export function TeamMembers({
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-muted">Phone</label>
-                    <PhoneField
+                    <PhoneE164Field
                       value={editPhone}
                       onChange={setEditPhone}
-                      className="w-full text-sm"
+                      ariaLabel="Phone"
                     />
                   </div>
                   <div>

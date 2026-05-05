@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PhoneField } from "@/components/phone-input";
+import { PhoneE164Field } from "@/components/forms";
 
 interface Props {
   userId: string;
@@ -169,11 +169,10 @@ export function AccountProfile({ userId, initialName, initialPhone, hasPassword 
       <div className="flex items-center justify-between border-b border-border py-2">
         <span className="text-sm text-muted">Phone</span>
         <div className="flex items-center gap-2">
-          <PhoneField
+          <PhoneE164Field
             value={companyPhone}
             onChange={setCompanyPhone}
-            className="px-2 py-1"
-            style={{ width: 180 }}
+            ariaLabel="Phone"
           />
           <button
             onClick={saveCompanyPhone}
