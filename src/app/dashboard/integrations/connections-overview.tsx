@@ -222,7 +222,7 @@ function PlatformGrid({
         return (
           <Link
             key={platform.key}
-            href={`${prefix}/accounts/${targetSlug}`}
+            href={`${prefix}/integrations/${targetSlug}`}
             className={`${tileBase} ${tileInteractive}`}
           >
             <TileBody
