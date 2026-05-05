@@ -38,6 +38,21 @@ export async function GET(req: NextRequest) {
   `;
 
   if (assignedAsset) {
+    // Also fetch the full list of available assets for this platform so the
+    // Switch Page picker on the connected card has data to render. This is
+    // the same query used in the pending_assignment branch — subscribers in
+    // either state see the same selectable list (one is the initial pick,
+    // the other is a re-pick).
+    const allAssets = await sql`
+      SELECT pa.id, pa.asset_id, pa.asset_name,
+             sa.account_name AS connected_user_name,
+             sa.token_expires_at
+      FROM platform_assets pa
+      JOIN social_accounts sa ON sa.id = pa.social_account_id
+      WHERE pa.platform = ${platform}
+        AND sa.subscription_id = ${session.subscriptionId}
+      ORDER BY pa.asset_name
+    `;
     // For now we don't track per-asset published/scheduled counts in the new model
     return NextResponse.json({
       connected: true,
@@ -49,6 +64,14 @@ export async function GET(req: NextRequest) {
       tokenExpiresAt: assignedAsset.token_expires_at ? String(assignedAsset.token_expires_at) : null,
       published: 0,
       scheduled: 0,
+      availableAssets: allAssets.length,
+      availableAssetList: allAssets.map((a) => ({
+        id: a.id,
+        assetId: a.asset_id,
+        assetName: a.asset_name,
+        connectedUserName: a.connected_user_name,
+        tokenExpiresAt: a.token_expires_at ? String(a.token_expires_at) : null,
+      })),
     });
   }
 
