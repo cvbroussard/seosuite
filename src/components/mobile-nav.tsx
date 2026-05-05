@@ -14,7 +14,7 @@ const baseNav = [
   { label: "Inbox", path: "/inbox", icon: "▤" },
   { label: "Spotlight", path: "/spotlight", icon: "✦" },
   { label: "Integrations", path: "/integrations", icon: "◉" },
-  { label: "Settings", path: "/settings", icon: "⚙" },
+  { label: "Business", path: "/business", icon: "⚙" },
 ];
 
 export function MobileNav({ userName }: { userName: string }) {

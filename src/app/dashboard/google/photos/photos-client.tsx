@@ -186,7 +186,7 @@ export function PhotosClient({ siteId, connected, photos, coverUrl, logoUrl, cov
         </div>
 
         <a
-          href="/dashboard/settings"
+          href="/dashboard/business"
           className="relative h-36 w-36 overflow-hidden rounded-xl bg-surface-hover group border border-border block"
         >
           {logoUrl ? (

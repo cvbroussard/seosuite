@@ -39,10 +39,10 @@ export function SiteDeactivation({ siteId, siteName, isActive: initialActive }: 
     return (
       <section className="mb-8">
         <div className="rounded-lg bg-warning/10 p-4">
-          <p className="font-medium text-warning">This site is deactivated</p>
+          <p className="font-medium text-warning">This business is deactivated</p>
           <p className="mt-1 text-sm text-muted">
             Content generation is paused for <strong>{siteName}</strong>. All data is preserved.
-            Reactivating will count toward your plan&apos;s site limit.
+            Reactivating will count toward your plan&apos;s business limit.
           </p>
           {error && <p className="mt-2 text-sm text-danger">{error}</p>}
           <button
@@ -50,7 +50,7 @@ export function SiteDeactivation({ siteId, siteName, isActive: initialActive }: 
             disabled={toggling}
             className="mt-3 bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
-            {toggling ? "Reactivating..." : "Reactivate Site"}
+            {toggling ? "Reactivating..." : "Reactivate Business"}
           </button>
         </div>
       </section>
@@ -59,9 +59,9 @@ export function SiteDeactivation({ siteId, siteName, isActive: initialActive }: 
 
   return (
     <section className="mb-8">
-      <h2 className="mb-1 text-muted">Deactivate Site</h2>
+      <h2 className="mb-1 text-muted">Deactivate Business</h2>
       <p className="mb-4 text-sm text-muted">
-        Pause content generation for <strong>{siteName}</strong>. All data is preserved and the site
+        Pause content generation for <strong>{siteName}</strong>. All data is preserved and the business
         can be reactivated at any time. Deactivating frees a slot toward your plan limit.
       </p>
 
@@ -88,7 +88,7 @@ export function SiteDeactivation({ siteId, siteName, isActive: initialActive }: 
           onClick={() => setShowConfirm(true)}
           className="border border-warning/40 px-4 py-2 text-sm font-medium text-warning hover:bg-warning/10"
         >
-          Deactivate This Site
+          Deactivate This Business
         </button>
       )}
     </section>

@@ -207,7 +207,7 @@ export function BusinessInfo({ initial }: Props) {
       </p>
 
       <div>
-        <label className="mb-1 block text-xs text-muted">Site Name</label>
+        <label className="mb-1 block text-xs text-muted">Business Name</label>
         <input
           type="text"
           value={name}
@@ -359,7 +359,7 @@ export function BusinessInfo({ initial }: Props) {
 
       <div className="mt-6 mb-2 border-t border-border pt-4">
         <h3 className="text-sm font-medium mb-1">Social Sharing Preview</h3>
-        <p className="text-xs text-muted mb-4">Controls how your site appears when shared on social media, Slack, or search results.</p>
+        <p className="text-xs text-muted mb-4">Controls how your business appears when shared on social media, Slack, or search results.</p>
       </div>
 
       <div>

@@ -3,8 +3,8 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { SubscriptionName } from "./subscription-name";
 import { SitesSection } from "../sites-section";
-import { ApiKeySection } from "../../settings/api-key-section";
-import { AccountActions } from "../../settings/account-actions";
+import { ApiKeySection } from "../../business/api-key-section";
+import { AccountActions } from "../../business/account-actions";
 
 export const dynamic = "force-dynamic";
 

@@ -38,7 +38,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/account/mobile-app": "Team",
   "/account/team": "Team",
   "/account/subscription": "Subscription",
-  "/settings": "Settings",
+  "/business": "Business",
 };
 
 export function PageHeader({ siteName, siteIcon, sites, activeSiteId, children }: PageHeaderProps) {

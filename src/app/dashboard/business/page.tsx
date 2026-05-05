@@ -64,8 +64,8 @@ export default async function SettingsPage() {
 
   return (
     <div className="p-4 space-y-6">
-      <h1>Settings</h1>
-      <p className="mt-2 mb-8 text-muted">Business configuration and autopilot settings</p>
+      <h1>Business</h1>
+      <p className="mt-2 mb-8 text-muted">Profile, autopilot, brand voice, and blog configuration</p>
 
       {/* Business Profile */}
       <section className="mb-8">
@@ -202,7 +202,7 @@ export default async function SettingsPage() {
       {/* Site Deactivation */}
       <SiteDeactivation
         siteId={siteId}
-        siteName={site?.name ? String(site.name) : "this site"}
+        siteName={site?.name ? String(site.name) : "this business"}
         isActive={site?.is_active !== false}
       />
     </div>

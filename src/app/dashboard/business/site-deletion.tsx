@@ -87,7 +87,7 @@ export function SiteDeletion({
     return (
       <section className="mb-8">
         <div className="rounded-lg bg-warning/10 p-4">
-          <p className="font-medium text-warning">Site deletion requested</p>
+          <p className="font-medium text-warning">Business deletion requested</p>
           <p className="mt-1 text-sm text-muted">
             Your request to delete <strong>{siteName}</strong> is pending review.
             {deletionRequestedAt && (
@@ -115,7 +115,7 @@ export function SiteDeletion({
     return (
       <section className="mb-8">
         <div className="rounded-lg bg-danger/10 p-4">
-          <p className="font-medium text-danger">Site scheduled for deletion</p>
+          <p className="font-medium text-danger">Business scheduled for deletion</p>
           <p className="mt-1 text-sm text-muted">
             <strong>{siteName}</strong> has been approved for deletion and will be removed within 30 days.
             Export your data before then.
@@ -141,7 +141,7 @@ export function SiteDeletion({
               onClick={() => setShowConfirm(true)}
               className="mt-3 border border-accent/40 px-4 py-1.5 text-sm font-medium text-accent hover:bg-accent/10"
             >
-              Restore This Site
+              Restore This Business
             </button>
           )}
         </div>
@@ -151,7 +151,7 @@ export function SiteDeletion({
 
   return (
     <section className="mb-8">
-      <h2 className="mb-1 text-muted">Delete Site</h2>
+      <h2 className="mb-1 text-muted">Delete Business</h2>
       <p className="mb-4 text-sm text-muted">
         Request deletion of <strong>{siteName}</strong>. The platform team will review your request.
         Your data is preserved until the request is approved.
@@ -161,12 +161,12 @@ export function SiteDeletion({
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Why are you deleting this site? (optional)
+              Why are you deleting this business? (optional)
             </label>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Closing this location, consolidating sites, etc."
+              placeholder="Closing this location, consolidating businesses, etc."
               className="w-full px-3 py-2.5"
             />
           </div>
@@ -191,7 +191,7 @@ export function SiteDeletion({
           onClick={() => setShowConfirm(true)}
           className="border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10"
         >
-          Delete This Site
+          Delete This Business
         </button>
       )}
     </section>

@@ -59,7 +59,7 @@ const MODULES: Module[] = [
         ],
       },
       { label: "Google Profile", path: "/google/profile" },
-      { label: "Settings", path: "/settings" },
+      { label: "Business", path: "/business" },
     ],
   },
   {
