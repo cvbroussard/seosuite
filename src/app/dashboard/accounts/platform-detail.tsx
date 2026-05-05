@@ -326,14 +326,16 @@ export function PlatformDetail({
                   >
                     {connecting ? "Refreshing..." : "Refresh token"}
                   </button>
-                  <button
-                    onClick={() => setShowSwitch(!showSwitch)}
-                    disabled={connecting || disconnecting}
-                    className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50"
-                    title="Bind a different Page to this site without re-running OAuth."
-                  >
-                    Switch Page
-                  </button>
+                  {(conn.availableAssetList?.length ?? 0) > 1 && (
+                    <button
+                      onClick={() => setShowSwitch(!showSwitch)}
+                      disabled={connecting || disconnecting}
+                      className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50"
+                      title="Bind a different Page to this site without re-running OAuth."
+                    >
+                      Switch Page
+                    </button>
+                  )}
                   {confirmDisconnect ? (
                     <div className="basis-full mt-2 rounded-md border border-danger/30 bg-danger/5 p-3">
                       <p className="text-xs font-semibold text-danger mb-1">Disconnect this Page?</p>
