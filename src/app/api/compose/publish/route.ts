@@ -43,6 +43,30 @@ export async function POST(req: NextRequest) {
   const hashtags = Array.isArray(body.hashtags) ? body.hashtags : [];
   const scheduledAt = body.scheduled_at as string | undefined;
 
+  // Reach data (enterprise tier only). For mode='organic' (or absent),
+  // existing publish flow runs. For mode='paid' or 'both', the reach
+  // targeting + budget + duration are captured on the post row so the
+  // downstream boost-after-publish chain can fire when wired.
+  const reachMode = (body.reach_mode as "organic" | "paid" | "both" | undefined) || "organic";
+  const reachData = reachMode === "organic" ? null : {
+    mode: reachMode,
+    latitude: body.reach_latitude as number | undefined,
+    longitude: body.reach_longitude as number | undefined,
+    radiusMiles: body.reach_radius_miles as number | undefined,
+    placeName: body.reach_place_name as string | undefined,
+    placeId: body.reach_place_id as string | undefined,
+    isOverride: Boolean(body.reach_is_override),
+    dailyBudgetDollars: body.reach_daily_budget_dollars as number | undefined,
+    durationDays: body.reach_duration_days as number | undefined,
+  };
+
+  if (reachData && (!reachData.latitude || !reachData.longitude || !reachData.radiusMiles)) {
+    return NextResponse.json(
+      { error: "Paid/Both mode requires latitude, longitude, and radius_miles" },
+      { status: 400 },
+    );
+  }
+
   if (!templateId) return NextResponse.json({ error: "template_id required" }, { status: 400 });
 
   // Fetch template
@@ -118,12 +142,23 @@ export async function POST(req: NextRequest) {
   // status='scheduled' rows where scheduled_at <= NOW()
   const effectiveScheduledAt = scheduledAt ? new Date(scheduledAt).toISOString() : new Date().toISOString();
 
+  // Build the post metadata. Reach data lives on metadata so the
+  // downstream boost-after-publish chain (Phase 4 follow-up) can
+  // pick it up without schema changes. The reach_mode is the routing
+  // key for the chain.
+  const postMetadata: Record<string, unknown> = {
+    source: "compose",
+  };
+  if (reachData) {
+    postMetadata.reach = reachData;
+  }
+
   const [inserted] = await sql`
     INSERT INTO social_posts (
       account_id, source_asset_id, status, authority,
       caption, hashtags, media_urls, media_type, link_url,
       scheduled_at, ai_generated, trigger_type,
-      template_id, content_type
+      template_id, content_type, metadata
     )
     VALUES (
       ${accountId}, ${sourceAssetId ?? null}, 'scheduled', 'subscriber',
@@ -132,15 +167,46 @@ export async function POST(req: NextRequest) {
       ${template.format},
       ${link ?? null},
       ${effectiveScheduledAt}, false, 'compose_manual',
-      ${templateId}, 'post'
+      ${templateId}, 'post',
+      ${JSON.stringify(postMetadata)}::jsonb
     )
     RETURNING id, status, scheduled_at
   `;
+
+  // Mode-aware response so the UI can show the right success state.
+  // Boost-after-publish chain integration is the next iteration of
+  // task #92 — for now reach data is persisted so the chain can fire
+  // when wired without losing what the subscriber configured.
+  const responseExtras: Record<string, unknown> = {};
+  if (reachData?.mode === "paid") {
+    responseExtras.note =
+      "Paid-only mode requires direct ad-creative creation (Meta dark post pattern). " +
+      "That integration is the next iteration of Compose. For now your post is queued " +
+      "as organic only. To run a paid-only ad immediately, use Promote → Quick Boost " +
+      "after this post publishes.";
+    responseExtras.modeFallback = "organic";
+  } else if (reachData?.mode === "both") {
+    responseExtras.note =
+      "Post is queued for organic publish. Auto-boost-after-publish chain wires in next. " +
+      "After this publishes (within minutes), use Promote → Quick Boost to amplify it with " +
+      "your selected reach settings ($" + (reachData.dailyBudgetDollars ?? 7) + "/day, " +
+      (reachData.radiusMiles ?? 10) + " mi radius).";
+    responseExtras.boostQueued = false;
+    responseExtras.boostSettings = {
+      latitude: reachData.latitude,
+      longitude: reachData.longitude,
+      radiusMiles: reachData.radiusMiles,
+      dailyBudgetDollars: reachData.dailyBudgetDollars,
+      durationDays: reachData.durationDays,
+    };
+  }
 
   return NextResponse.json({
     postId: inserted.id,
     status: inserted.status,
     scheduledAt: inserted.scheduled_at,
     publishingTarget: template.platform,
+    reachMode: reachMode,
+    ...responseExtras,
   });
 }

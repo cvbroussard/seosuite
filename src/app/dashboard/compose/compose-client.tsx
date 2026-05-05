@@ -38,6 +38,17 @@ interface PublishResponse {
   status: string;
   scheduledAt: string;
   publishingTarget: string;
+  reachMode?: ReachMode;
+  note?: string;
+  modeFallback?: string;
+  boostQueued?: boolean;
+  boostSettings?: {
+    latitude: number;
+    longitude: number;
+    radiusMiles: number;
+    dailyBudgetDollars: number;
+    durationDays: number;
+  };
 }
 
 type ComposeStep = "select" | "reach" | "recommend" | "review" | "published";
@@ -231,6 +242,25 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         .split(/\s+/)
         .map((t) => t.trim())
         .filter((t) => t.startsWith("#") && t.length > 1);
+
+      // Reach payload — only included when the Reach step ran (enterprise tier).
+      // Mid-tier subscribers skip the Reach step entirely; reach_mode defaults
+      // to organic at the API.
+      const reachPayload: Record<string, unknown> = {};
+      if (reachContext?.isEnterprise) {
+        reachPayload.reach_mode = reachMode;
+        if (reachMode !== "organic") {
+          reachPayload.reach_latitude = reachLat;
+          reachPayload.reach_longitude = reachLon;
+          reachPayload.reach_radius_miles = reachRadius;
+          reachPayload.reach_place_name = reachPlaceName;
+          reachPayload.reach_place_id = reachOverride?.placeId ?? null;
+          reachPayload.reach_is_override = Boolean(reachOverride);
+          reachPayload.reach_daily_budget_dollars = reachBudget;
+          reachPayload.reach_duration_days = reachDuration;
+        }
+      }
+
       const res = await fetch("/api/compose/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -240,6 +270,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
           caption,
           link,
           hashtags,
+          ...reachPayload,
         }),
       });
       if (!res.ok) {
@@ -656,6 +687,14 @@ function PublishedView({ result, template }: { result: PublishResponse; template
   const scheduledTime = new Date(result.scheduledAt);
   const now = Date.now();
   const isImmediate = scheduledTime.getTime() <= now + 60000;
+  const showsModeNote = Boolean(result.note);
+  const headline =
+    result.reachMode === "both" && result.boostQueued
+      ? "Queued for publishing AND amplification"
+      : result.reachMode === "paid" && !result.modeFallback
+      ? "Ad campaign created"
+      : "Queued for publishing";
+
   return (
     <div className="rounded-xl border border-success/30 bg-success/5 p-6 space-y-3">
       <div className="flex items-center gap-3">
@@ -663,12 +702,18 @@ function PublishedView({ result, template }: { result: PublishResponse; template
           ✓
         </div>
         <div>
-          <h2 className="text-lg font-semibold">Queued for publishing</h2>
+          <h2 className="text-lg font-semibold">{headline}</h2>
           <p className="text-xs text-muted mt-0.5">
             {template?.name} → {prettyPlatformName(result.publishingTarget)}
+            {result.reachMode && result.reachMode !== "organic" && (
+              <span className="ml-2 rounded-full bg-accent/15 text-accent px-2 py-0.5 text-[10px]">
+                Reach: {result.reachMode}
+              </span>
+            )}
           </p>
         </div>
       </div>
+
       <div className="space-y-1 text-sm">
         <p className="text-foreground">
           {isImmediate
@@ -677,7 +722,14 @@ function PublishedView({ result, template }: { result: PublishResponse; template
         </p>
         <p className="text-xs text-muted font-mono">post_id: {result.postId}</p>
       </div>
-      <div className="flex gap-2 pt-2">
+
+      {showsModeNote && (
+        <div className="rounded-md border border-warning/30 bg-warning/5 p-3 text-xs text-foreground leading-relaxed">
+          {result.note}
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-2 flex-wrap">
         <Link
           href="/dashboard/calendar"
           className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
@@ -685,11 +737,19 @@ function PublishedView({ result, template }: { result: PublishResponse; template
           View in Calendar →
         </Link>
         <Link
-          href="/dashboard/unipost"
+          href="/dashboard/unifeed"
           className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
         >
-          View history →
+          View in Unifeed →
         </Link>
+        {result.reachMode === "both" && (
+          <Link
+            href="/dashboard/campaigns"
+            className="rounded border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs text-accent hover:bg-accent/10"
+          >
+            Boost via Promote →
+          </Link>
+        )}
       </div>
     </div>
   );
