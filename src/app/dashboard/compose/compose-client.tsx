@@ -60,6 +60,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
   const [chosenAssetIds, setChosenAssetIds] = useState<string[]>([]);
   const [caption, setCaption] = useState("");
   const [link, setLink] = useState("");
+  const [hashtagsText, setHashtagsText] = useState("");
 
   // Trigger-step state
   const [publishing, setPublishing] = useState(false);
@@ -102,6 +103,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
       setChosenAssetIds(data.recommended.map((a) => a.id));
       setCaption(data.captionStub);
       setLink(data.link);
+      setHashtagsText(data.hashtags.join(" "));
     } finally {
       setRecommendLoading(false);
     }
@@ -114,6 +116,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
     setChosenAssetIds([]);
     setCaption("");
     setLink("");
+    setHashtagsText("");
     setError("");
     setPublishResult(null);
   }
@@ -139,6 +142,11 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
     setPublishing(true);
     setError("");
     try {
+      // Parse hashtags: split on whitespace, keep #-prefixed words.
+      const hashtags = hashtagsText
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter((t) => t.startsWith("#") && t.length > 1);
       const res = await fetch("/api/compose/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -147,6 +155,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
           asset_ids: chosenAssetIds,
           caption,
           link,
+          hashtags,
         }),
       });
       if (!res.ok) {
@@ -215,10 +224,12 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
             chosenAssetIds={chosenAssetIds}
             caption={caption}
             link={link}
+            hashtagsText={hashtagsText}
             error={error}
             publishing={publishing}
             onCaptionChange={setCaption}
             onLinkChange={setLink}
+            onHashtagsChange={setHashtagsText}
             onSwapAsset={swapAsset}
             onRemoveAsset={removeAsset}
             onAddAsset={addAsset}
@@ -316,10 +327,12 @@ interface RecommendReviewProps {
   chosenAssetIds: string[];
   caption: string;
   link: string;
+  hashtagsText: string;
   error: string;
   publishing: boolean;
   onCaptionChange: (v: string) => void;
   onLinkChange: (v: string) => void;
+  onHashtagsChange: (v: string) => void;
   onSwapAsset: (oldId: string, newId: string) => void;
   onRemoveAsset: (id: string) => void;
   onAddAsset: (id: string) => void;
@@ -328,8 +341,8 @@ interface RecommendReviewProps {
 }
 
 function RecommendReviewView(props: RecommendReviewProps) {
-  const { step, recommendation, chosenAssetIds, caption, link, error, publishing,
-          onCaptionChange, onLinkChange, onRemoveAsset, onAddAsset, onProceedToReview, onPublish } = props;
+  const { step, recommendation, chosenAssetIds, caption, link, hashtagsText, error, publishing,
+          onCaptionChange, onLinkChange, onHashtagsChange, onRemoveAsset, onAddAsset, onProceedToReview, onPublish } = props;
   const isReview = step === "review";
   const assetsById = new Map<string, AssetOption>();
   for (const a of recommendation.recommended) assetsById.set(a.id, a);
@@ -411,6 +424,27 @@ function RecommendReviewView(props: RecommendReviewProps) {
               placeholder="https://..."
               className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm font-mono focus:border-accent focus:outline-none"
             />
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+          <h3 className="text-sm font-semibold mb-2">Hashtags</h3>
+          {isReview ? (
+            <p className="text-sm text-foreground">
+              {hashtagsText.trim() || <span className="text-muted italic">(no hashtags)</span>}
+            </p>
+          ) : (
+            <>
+              <input
+                value={hashtagsText}
+                onChange={(e) => onHashtagsChange(e.target.value)}
+                placeholder="#example #another"
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm focus:border-accent focus:outline-none"
+              />
+              <p className="mt-1 text-[10px] text-muted">
+                Space-separated. Only words starting with # are kept.
+              </p>
+            </>
           )}
         </div>
 

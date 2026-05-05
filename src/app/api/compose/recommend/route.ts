@@ -78,7 +78,8 @@ export async function GET(req: NextRequest) {
 
   // Find candidate assets — most recent matching, quality-sorted
   const assets = await sql`
-    SELECT id, storage_url, media_type, context_note, quality_score, created_at
+    SELECT id, storage_url, media_type, context_note, content_pillar,
+           quality_score, created_at
     FROM media_assets
     WHERE site_id = ${siteId}
       AND media_type = ANY(${allowedTypes}::text[])
@@ -105,6 +106,19 @@ export async function GET(req: NextRequest) {
     qualityScore: a.quality_score,
   }));
 
+  // Caption stub — start with the first recommended asset's context_note
+  // (populated by the autopilot triage/captioning pipeline). Gives the
+  // subscriber a meaningful starting point that reflects what they
+  // captured, not an empty box. Subscriber can edit freely in the UI.
+  // Future: full Brand-DNA-voiced caption generation via LLM.
+  const captionStub = (assets[0]?.context_note as string | null) || "";
+
+  // Hashtag stub — basic platform + content_pillar lookup. Cheap v1
+  // suggestions; future enhancement reads tag preferences from
+  // Brand DNA and includes industry-trending tags.
+  const contentPillar = (assets[0]?.content_pillar as string | null) || null;
+  const hashtags = suggestHashtags(template.platform as string, contentPillar);
+
   return NextResponse.json({
     template: {
       id: template.id,
@@ -115,9 +129,42 @@ export async function GET(req: NextRequest) {
     slotCount,
     recommended,
     alternatives,
-    captionStub: "",
+    captionStub,
     link: siteUrl,
     cta: { type: "LEARN_MORE", label: "Learn More", url: siteUrl },
-    hashtags: [] as string[],
+    hashtags,
   });
+}
+
+/**
+ * Suggest a small starter hashtag set based on platform + content pillar.
+ * Intentionally cheap — gives the subscriber something to start with that
+ * they can edit. Phase 5 enhancement reads Brand-DNA tag preferences and
+ * adds trending tags per industry from cross-tenant intelligence.
+ *
+ * Pinterest gets more tag-heavy results since that platform's discovery
+ * is search-driven; Story/Reel formats stay light.
+ */
+function suggestHashtags(platform: string, pillar: string | null): string[] {
+  const platformDefaults: Record<string, string[]> = {
+    facebook: [],
+    instagram: ["#smallbusiness", "#local"],
+    pinterest: ["#design", "#inspiration", "#ideas"],
+    tiktok: ["#smallbusiness", "#fyp"],
+    linkedin: [],
+    blog: [],
+  };
+  const pillarHashtags: Record<string, string[]> = {
+    kitchen: ["#kitchenremodel", "#kitchendesign"],
+    bath: ["#bathroomremodel", "#bathroomdesign"],
+    renovation: ["#homerenovation", "#beforeandafter"],
+    landscape: ["#landscaping", "#outdoorliving"],
+    food: ["#foodie", "#localrestaurant"],
+    salon: ["#hairsalon", "#beforeandafter"],
+  };
+  const out = [...(platformDefaults[platform] || [])];
+  if (pillar && pillarHashtags[pillar]) {
+    out.push(...pillarHashtags[pillar]);
+  }
+  return out;
 }
