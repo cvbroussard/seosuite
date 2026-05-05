@@ -375,7 +375,7 @@ export function PlatformDetail({
                     <button
                       key={a.id}
                       onClick={() => handleAssignAsset(a.id)}
-                      disabled={assigning}
+                      disabled={assigning || disconnecting}
                       className="w-full text-left rounded border border-border bg-surface px-3 py-2 text-xs hover:border-accent disabled:opacity-50"
                     >
                       <div className="font-medium">{a.assetName}</div>
@@ -388,6 +388,45 @@ export function PlatformDetail({
                 {error && (
                   <p className="text-xs text-danger">{error}</p>
                 )}
+                <div className="pt-3 mt-2 border-t border-border">
+                  {confirmDisconnect ? (
+                    <div className="rounded-md border border-danger/30 bg-danger/5 p-3">
+                      <p className="text-xs font-semibold text-danger mb-1">Disconnect without picking a Page?</p>
+                      <p className="text-[11px] text-foreground leading-relaxed mb-2">
+                        Disconnecting will:
+                      </p>
+                      <ul className="text-[11px] text-foreground leading-relaxed mb-3 space-y-0.5 ml-4 list-disc">
+                        <li>Revoke TracPost&apos;s access on Meta&apos;s side</li>
+                        <li>Remove the granted Pages from TracPost (no Page will be bound)</li>
+                        <li>You can reconnect anytime to start over</li>
+                      </ul>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleDisconnect}
+                          disabled={disconnecting}
+                          className="rounded border border-danger/30 bg-danger/10 px-3 py-1 text-xs font-medium text-danger hover:bg-danger/20 disabled:opacity-50"
+                        >
+                          {disconnecting ? "Disconnecting..." : "Yes, disconnect"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDisconnect(false)}
+                          disabled={disconnecting}
+                          className="rounded border border-border px-3 py-1 text-xs text-muted hover:bg-surface-hover"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDisconnect(true)}
+                      disabled={assigning || disconnecting}
+                      className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-danger hover:border-danger/30 disabled:opacity-50"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-3">

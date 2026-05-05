@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
   if (pendingAsset) {
     const assets = await sql`
       SELECT pa.id, pa.asset_id, pa.asset_name, pa.metadata,
+             sa.id AS social_account_id,
              sa.account_name AS connected_user_name,
              sa.token_expires_at
       FROM platform_assets pa
@@ -101,11 +102,16 @@ export async function GET(req: NextRequest) {
         AND sa.subscription_id = ${session.subscriptionId}
       ORDER BY pa.asset_name
     `;
+    // The OAuth grant we'd revoke if the subscriber disconnects from this
+    // pending state — typically all assets share the same social_account
+    // (one OAuth grant produced N Pages). Use the first row's social_account_id.
+    const socialAccountId = (assets[0]?.social_account_id as string | undefined) ?? null;
     return NextResponse.json({
       connected: false,
       status: "pending_assignment",
       accountId: null,
       accountName: null,
+      socialAccountId,
       tokenExpiresAt: null,
       published: 0,
       scheduled: 0,
