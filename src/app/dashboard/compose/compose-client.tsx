@@ -422,6 +422,23 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         onNavigate={setStep}
       />
 
+      {/* Selected-topic chip — persists on the styling steps (Template +
+          Distribution). Hidden from Recommend onward because the topic
+          has been absorbed into editable content (link/caption/assets) —
+          showing it there would be redundant. Click jumps back to Topic. */}
+      {selectedAnchor && (step === "select" || step === "reach") && (
+        <button
+          type="button"
+          onClick={backToTopic}
+          className="group inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs hover:border-accent transition-colors"
+          aria-label="Change topic"
+        >
+          <span className="text-[10px] font-mono uppercase tracking-wide text-muted">Topic</span>
+          <span className="text-foreground font-medium truncate max-w-[280px]">{selectedAnchor.title}</span>
+          <span className="text-[10px] text-muted group-hover:text-accent transition-colors">change →</span>
+        </button>
+      )}
+
       {loading ? (
         <CenterSpinner />
       ) : error && step === "select" ? (
@@ -524,7 +541,7 @@ function StepIndicator({
   const steps: Array<{ key: ComposeStep; label: string }> = includeReach
     ? [
         { key: "topic", label: "Topic" },
-        { key: "select", label: "Select" },
+        { key: "select", label: "Template" },
         { key: "reach", label: "Distribution" },
         { key: "recommend", label: "Recommend" },
         { key: "review", label: "Review" },
@@ -532,7 +549,7 @@ function StepIndicator({
       ]
     : [
         { key: "topic", label: "Topic" },
-        { key: "select", label: "Select" },
+        { key: "select", label: "Template" },
         { key: "recommend", label: "Recommend" },
         { key: "review", label: "Review" },
         { key: "published", label: "Trigger" },
