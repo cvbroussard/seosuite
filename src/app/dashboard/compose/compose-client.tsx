@@ -57,7 +57,23 @@ interface PublishResponse {
   };
 }
 
-type ComposeStep = "select" | "reach" | "recommend" | "review" | "published";
+// Subscriber-facing step labels diverge from internal type ids per the
+// dual-track messaging principle. "topic" → "Topic" in UI; "reach" →
+// "Distribution"; "published" → "Trigger". See StepIndicator below.
+type ComposeStep = "topic" | "select" | "reach" | "recommend" | "review" | "published";
+
+interface ComposeAnchor {
+  id: string;
+  type: "blog_post" | "project";
+  title: string;
+  slug: string;
+  contentPillar: string | null;
+  heroUrl: string | null;
+  excerpt: string | null;
+  publishedAt: string | null;
+  usedCount: number;
+  url: string;
+}
 type ReachMode = "organic" | "paid" | "both";
 
 interface ReachContext {
@@ -97,7 +113,13 @@ interface ComposeClientProps {
 }
 
 export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
-  const [step, setStep] = useState<ComposeStep>("select");
+  const [step, setStep] = useState<ComposeStep>("topic");
+  // Anchor-first Step 1 — the subject the post will surface. Subscriber
+  // sees this labeled as "Topic"; internal type stays "anchor".
+  const [selectedAnchor, setSelectedAnchor] = useState<ComposeAnchor | null>(null);
+  const [anchors, setAnchors] = useState<ComposeAnchor[]>([]);
+  const [anchorsLoading, setAnchorsLoading] = useState(false);
+  const [anchorsError, setAnchorsError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PostTemplate[]>([]);
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +175,20 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
       .catch(() => setError("Failed to load templates"))
       .finally(() => setLoading(false));
   }, []);
+
+  // Anchor pool load — fires when the Topic step is active and we haven't
+  // loaded yet. Subscriber-facing label is "Topic"; the API returns the
+  // active site's published blog posts + active/complete projects.
+  useEffect(() => {
+    if (step !== "topic" || anchors.length > 0 || anchorsLoading) return;
+    setAnchorsLoading(true);
+    setAnchorsError(null);
+    fetch("/api/compose/anchors")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((d) => setAnchors(d.anchors || []))
+      .catch(() => setAnchorsError("Failed to load topics"))
+      .finally(() => setAnchorsLoading(false));
+  }, [step, anchors.length, anchorsLoading]);
 
   // Group templates by platform
   const grouped: Record<string, PostTemplate[]> = {};
@@ -210,7 +246,9 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
       setRecommendation(data);
       setChosenAssetIds(data.recommended.map((a) => a.id));
       setCaption(data.captionStub);
-      setLink(data.link);
+      // Anchor wins — the Topic step is the explicit destination choice.
+      // Fall back to the recommendation's inferred link if no anchor.
+      setLink(selectedAnchor?.url || data.link);
       setHashtagsText(data.hashtags.join(" "));
     } finally {
       setRecommendLoading(false);
@@ -241,6 +279,12 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
     setReachOverride(null);
     setReachBudget(7);
     setReachDuration(5);
+  }
+
+  function backToTopic() {
+    backToSelect();
+    setSelectedAnchor(null);
+    setStep("topic");
   }
 
   function backToRecommend() {
@@ -295,6 +339,18 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         ? { immediate: true }
         : { scheduled_at: new Date(scheduledFor).toISOString() };
 
+      // Anchor metadata — the Topic the subscriber picked. Persisted on
+      // social_posts.metadata.anchor_id|anchor_type|anchor_slug so future
+      // usage queries can switch from slug-string-matching to precise
+      // attribution. See /api/compose/anchors usageCounts comment.
+      const anchorPayload: Record<string, unknown> = selectedAnchor
+        ? {
+            anchor_id: selectedAnchor.id,
+            anchor_type: selectedAnchor.type,
+            anchor_slug: selectedAnchor.slug,
+          }
+        : {};
+
       const res = await fetch("/api/compose/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -304,6 +360,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
           caption,
           link,
           hashtags,
+          ...anchorPayload,
           ...reachPayload,
           ...triggerPayload,
         }),
@@ -327,6 +384,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         <div>
           <h1 className="text-lg font-semibold">Compose</h1>
           <p className="text-xs text-muted mt-0.5">
+            {step === "topic" && "Pick the topic this post will surface — TracPost handles the rest."}
             {step === "select" && "Pick a template — TracPost will assemble the rest."}
             {step === "reach" && "Choose how this content will be distributed."}
             {step === "recommend" && `Reviewing the recommended package for ${selectedTemplate?.name ?? "your template"}.`}
@@ -334,11 +392,12 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
             {step === "published" && (publishResult?.status === "published" ? "Your post is live." : publishResult?.status === "failed" ? "Publish failed." : "Your post is scheduled.")}
           </p>
         </div>
-        {step !== "select" && step !== "published" && (
+        {step !== "topic" && step !== "published" && (
           <button
             onClick={
               step === "review" ? backToRecommend
               : step === "recommend" && reachContext?.isEnterprise ? () => setStep("reach")
+              : step === "select" ? backToTopic
               : backToSelect
             }
             className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
@@ -348,7 +407,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         )}
         {step === "published" && (
           <button
-            onClick={backToSelect}
+            onClick={backToTopic}
             className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
           >
             Compose another
@@ -367,6 +426,18 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         <CenterSpinner />
       ) : error && step === "select" ? (
         <ErrorBox error={error} />
+      ) : step === "topic" ? (
+        <TopicPicker
+          anchors={anchors}
+          loading={anchorsLoading}
+          error={anchorsError}
+          selectedId={selectedAnchor?.id ?? null}
+          onSelect={(a) => {
+            setSelectedAnchor(a);
+            setLink(a.url);
+            setStep("select");
+          }}
+        />
       ) : step === "select" ? (
         templates.length === 0 ? (
           <NoTemplatesEmpty connectedCount={connectedPlatforms.length} />
@@ -447,18 +518,20 @@ function StepIndicator({
   includeReach: boolean;
   onNavigate?: (step: ComposeStep) => void;
 }) {
+  // Subscriber-facing label "Topic" maps to internal step id "topic"
+  // (anchor-first paradigm — see project_tracpost_anchor_first_compose.md).
+  // "Distribution" maps to "reach"; "Trigger" maps to "published".
   const steps: Array<{ key: ComposeStep; label: string }> = includeReach
     ? [
+        { key: "topic", label: "Topic" },
         { key: "select", label: "Select" },
-        // Subscriber-facing label is "Distribution" (per 2026-05-05 decision —
-        // "Reach" carries Meta-branded baggage; this step is mode selection,
-        // not control of audience reach). Internal type id stays "reach".
         { key: "reach", label: "Distribution" },
         { key: "recommend", label: "Recommend" },
         { key: "review", label: "Review" },
         { key: "published", label: "Trigger" },
       ]
     : [
+        { key: "topic", label: "Topic" },
         { key: "select", label: "Select" },
         { key: "recommend", label: "Recommend" },
         { key: "review", label: "Review" },
@@ -514,6 +587,88 @@ function StepIndicator({
             )}
             {i < steps.length - 1 && <span className="mx-1 text-muted">→</span>}
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TopicPicker({
+  anchors,
+  loading,
+  error,
+  selectedId,
+  onSelect,
+}: {
+  anchors: ComposeAnchor[];
+  loading: boolean;
+  error: string | null;
+  selectedId: string | null;
+  onSelect: (a: ComposeAnchor) => void;
+}) {
+  if (loading) return <CenterSpinner />;
+  if (error) return <ErrorBox error={error} />;
+  if (anchors.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-surface p-8 text-center">
+        <div className="text-sm font-semibold mb-1">No topics yet</div>
+        <p className="text-xs text-muted leading-relaxed max-w-md mx-auto">
+          Topics are pages on your site — published articles or active projects — that
+          your social posts will point at. As your library fills in, they show up here
+          as one-click options.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {anchors.map((a) => {
+        const isSelected = a.id === selectedId;
+        return (
+          <button
+            key={a.id}
+            onClick={() => onSelect(a)}
+            className={`group text-left rounded-xl border bg-surface shadow-card hover:shadow-md transition-all overflow-hidden ${
+              isSelected ? "border-accent ring-1 ring-accent" : "border-border hover:border-accent"
+            }`}
+          >
+            <div className="aspect-[16/9] bg-surface-hover relative overflow-hidden">
+              {a.heroUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={a.heroUrl} alt={a.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[10px] text-muted">
+                  no thumbnail
+                </div>
+              )}
+              <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                <span className="text-[9px] font-mono uppercase tracking-wide bg-black/60 text-white rounded px-1.5 py-0.5">
+                  {a.type === "blog_post" ? "article" : "project"}
+                </span>
+                {a.contentPillar && (
+                  <span className="text-[9px] font-mono uppercase tracking-wide bg-accent/80 text-white rounded px-1.5 py-0.5">
+                    {a.contentPillar}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="p-3">
+              <div className="text-sm font-semibold mb-1 line-clamp-2">{a.title}</div>
+              {a.excerpt && (
+                <p className="text-[11px] text-muted leading-relaxed line-clamp-2 mb-2">
+                  {a.excerpt}
+                </p>
+              )}
+              <div className="flex items-center justify-between text-[10px] text-muted">
+                <span>
+                  {a.usedCount === 0
+                    ? "Not yet used"
+                    : `Used in ${a.usedCount} ${a.usedCount === 1 ? "post" : "posts"}`}
+                </span>
+                <span className="group-hover:text-accent transition-colors">Pick →</span>
+              </div>
+            </div>
+          </button>
         );
       })}
     </div>
