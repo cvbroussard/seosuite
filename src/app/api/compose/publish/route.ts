@@ -84,11 +84,21 @@ export async function POST(req: NextRequest) {
   `;
   if (!template) return NextResponse.json({ error: "Template not found" }, { status: 404 });
 
-  // Resolve the social_account that handles this platform for this site
+  // Resolve the social_account + platform_asset that handles this platform
+  // for this site. We need ALL of: social_account_id (for the FK on
+  // social_posts), and the platform_asset's platform/asset_id/metadata
+  // (which the publisher needs to pick the right adapter and route to
+  // the right per-platform target — FB Page ID, IG account ID, etc.).
+  // Without these, publisher falls back to social_accounts.platform which
+  // is 'meta' for the umbrella OAuth grant — and no 'meta' adapter exists
+  // post-decoupling, so publish errors with "Unsupported platform: meta".
   let accountId: string | null = null;
+  let assetPlatform: string | null = null;
+  let assetId: string | null = null;
+  let assetMetadata: Record<string, unknown> = {};
   if (template.platform !== "blog") {
     const [bound] = await sql`
-      SELECT pa.social_account_id
+      SELECT pa.social_account_id, pa.platform, pa.asset_id, pa.metadata
       FROM site_platform_assets spa
       JOIN platform_assets pa ON pa.id = spa.platform_asset_id
       JOIN social_accounts sa ON sa.id = pa.social_account_id
@@ -104,6 +114,9 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     accountId = bound.social_account_id as string;
+    assetPlatform = bound.platform as string;
+    assetId = bound.asset_id as string;
+    assetMetadata = (bound.metadata || {}) as Record<string, unknown>;
   } else {
     // Blog publishes to the TracPost-owned property — no social_account
     // needed in the legacy sense, but social_posts.account_id is NOT NULL.
@@ -149,15 +162,33 @@ export async function POST(req: NextRequest) {
   // status='scheduled' rows where scheduled_at <= NOW()
   const effectiveScheduledAt = scheduledAt ? new Date(scheduledAt).toISOString() : new Date().toISOString();
 
-  // Build the post metadata. Reach data lives on metadata so the
-  // downstream boost-after-publish chain (Phase 4 follow-up) can
-  // pick it up without schema changes. The reach_mode is the routing
-  // key for the chain.
+  // Build the post metadata. Carries:
+  //   - source: 'compose' (provenance)
+  //   - reach: reachData (for the boost-after-publish chain when mode=both)
+  //   - platform: the asset's platform (e.g. 'facebook' / 'instagram') —
+  //     publisher uses this to pick the adapter, NOT social_accounts.platform
+  //     which is the umbrella 'meta' for legacy OAuth grants
+  //   - platform_account_id_override: the actual per-asset target id
+  //     (FB Page ID, IG account ID) — publisher uses this as the
+  //     platform_account_id, NOT social_accounts.account_id which is
+  //     the user-level id for umbrella grants
+  //   - asset_metadata: per-asset metadata including page_access_token
+  //     for FB Pages (each Page has its own access token derived from
+  //     the user grant; publisher needs this to publish AS the Page)
   const postMetadata: Record<string, unknown> = {
     source: "compose",
   };
   if (reachData) {
     postMetadata.reach = reachData;
+  }
+  if (assetPlatform) {
+    postMetadata.platform = assetPlatform;
+  }
+  if (assetId) {
+    postMetadata.platform_account_id_override = assetId;
+  }
+  if (assetMetadata && Object.keys(assetMetadata).length > 0) {
+    postMetadata.asset_metadata = assetMetadata;
   }
 
   const [inserted] = await sql`
