@@ -29,6 +29,18 @@ export const facebookAdapter: PlatformAdapter = {
     const isVideo = mediaType?.startsWith("video") || false;
     const imageUrl = mediaUrls[0];
 
+    // For photo/video posts that ALSO carry a linkUrl, Meta's /photos
+    // and /videos endpoints don't accept a `link` field — the URL would
+    // be silently dropped. Append it to the caption/description text
+    // instead so it surfaces as clickable text on the rendered post.
+    // Link-only posts (no media) keep using the /feed endpoint with a
+    // proper `link` parameter, which renders Meta's auto-scraped link
+    // preview card. CTA buttons are an ads-only feature — boosted via
+    // the boost-after-publish chain, not addressable on organic posts.
+    const captionWithLink = linkUrl && (imageUrl || isVideo)
+      ? `${caption}\n\n${linkUrl}`
+      : caption;
+
     let postId: string;
 
     if (linkUrl && !imageUrl) {
@@ -48,13 +60,13 @@ export const facebookAdapter: PlatformAdapter = {
       }
       postId = data.id;
     } else if (isVideo && imageUrl) {
-      // Video post
+      // Video post — link (when present) gets appended to description text.
       const res = await fetch(`${GRAPH_BASE}/${pageId}/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_url: imageUrl,
-          description: caption,
+          description: captionWithLink,
           access_token: accessToken,
         }),
       });
@@ -64,13 +76,13 @@ export const facebookAdapter: PlatformAdapter = {
       }
       postId = data.id;
     } else if (imageUrl) {
-      // Photo post
+      // Photo post — link (when present) gets appended to caption text.
       const res = await fetch(`${GRAPH_BASE}/${pageId}/photos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: imageUrl,
-          caption,
+          caption: captionWithLink,
           access_token: accessToken,
         }),
       });
