@@ -299,7 +299,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
           <h1 className="text-lg font-semibold">Compose</h1>
           <p className="text-xs text-muted mt-0.5">
             {step === "select" && "Pick a template — TracPost will assemble the rest."}
-            {step === "reach" && "Choose how this content will reach your audience."}
+            {step === "reach" && "Choose how this content will be distributed."}
             {step === "recommend" && `Reviewing the recommended package for ${selectedTemplate?.name ?? "your template"}.`}
             {step === "review" && "Final review before publishing."}
             {step === "published" && "Your post is queued for publishing."}
@@ -328,7 +328,11 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
       </header>
 
       {/* Step pills — include Reach for enterprise tier */}
-      <StepIndicator step={step} includeReach={Boolean(reachContext?.isEnterprise)} />
+      <StepIndicator
+        step={step}
+        includeReach={Boolean(reachContext?.isEnterprise)}
+        onNavigate={setStep}
+      />
 
       {loading ? (
         <CenterSpinner />
@@ -401,11 +405,22 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
   );
 }
 
-function StepIndicator({ step, includeReach }: { step: ComposeStep; includeReach: boolean }) {
+function StepIndicator({
+  step,
+  includeReach,
+  onNavigate,
+}: {
+  step: ComposeStep;
+  includeReach: boolean;
+  onNavigate?: (step: ComposeStep) => void;
+}) {
   const steps: Array<{ key: ComposeStep; label: string }> = includeReach
     ? [
         { key: "select", label: "Select" },
-        { key: "reach", label: "Reach" },
+        // Subscriber-facing label is "Distribution" (per 2026-05-05 decision —
+        // "Reach" carries Meta-branded baggage; this step is mode selection,
+        // not control of audience reach). Internal type id stays "reach".
+        { key: "reach", label: "Distribution" },
         { key: "recommend", label: "Recommend" },
         { key: "review", label: "Review" },
         { key: "published", label: "Trigger" },
@@ -419,25 +434,55 @@ function StepIndicator({ step, includeReach }: { step: ComposeStep; includeReach
   const activeIndex = steps.findIndex((s) => s.key === step);
   return (
     <div className="flex items-center gap-2 text-xs">
-      {steps.map((s, i) => (
-        <div key={s.key} className="flex items-center gap-2">
+      {steps.map((s, i) => {
+        // Completed steps (i < activeIndex) become clickable back-nav.
+        // Current step + future steps stay inert.
+        const isCompleted = i < activeIndex;
+        const isClickable = isCompleted && onNavigate;
+        const dot = (
           <div
-            className={`flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-medium ${
-              i < activeIndex
+            className={`flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-medium transition-opacity ${
+              isCompleted
                 ? "bg-success text-white"
                 : i === activeIndex
                 ? "bg-accent text-white"
                 : "bg-surface-hover text-muted"
-            }`}
+            } ${isClickable ? "group-hover:opacity-80" : ""}`}
           >
             {i + 1}
           </div>
-          <span className={i === activeIndex ? "font-medium text-foreground" : "text-muted"}>
+        );
+        const label = (
+          <span
+            className={`${i === activeIndex ? "font-medium text-foreground" : "text-muted"} ${
+              isClickable ? "group-hover:text-foreground group-hover:underline" : ""
+            }`}
+          >
             {s.label}
           </span>
-          {i < steps.length - 1 && <span className="mx-1 text-muted">→</span>}
-        </div>
-      ))}
+        );
+        return (
+          <div key={s.key} className="flex items-center gap-2">
+            {isClickable ? (
+              <button
+                type="button"
+                onClick={() => onNavigate(s.key)}
+                className="group flex items-center gap-2 cursor-pointer"
+                aria-label={`Back to ${s.label}`}
+              >
+                {dot}
+                {label}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                {dot}
+                {label}
+              </div>
+            )}
+            {i < steps.length - 1 && <span className="mx-1 text-muted">→</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -505,7 +550,7 @@ interface RecommendReviewProps {
 
 function RecommendReviewView(props: RecommendReviewProps) {
   const { step, recommendation, chosenAssetIds, caption, link, hashtagsText, error, publishing,
-          onCaptionChange, onLinkChange, onHashtagsChange, onRemoveAsset, onAddAsset, onProceedToReview, onPublish } = props;
+          onCaptionChange, onLinkChange, onHashtagsChange, onSwapAsset, onRemoveAsset, onAddAsset, onProceedToReview, onPublish } = props;
   const isReview = step === "review";
   const assetsById = new Map<string, AssetOption>();
   for (const a of recommendation.recommended) assetsById.set(a.id, a);
@@ -532,13 +577,26 @@ function RecommendReviewView(props: RecommendReviewProps) {
           {!isReview && unused.length > 0 && (
             <details className="mt-3">
               <summary className="cursor-pointer text-xs text-muted hover:text-foreground">
-                Add another asset ({unused.length} available)
+                {chosen.length < recommendation.slotCount
+                  ? `Add another asset (${unused.length} available)`
+                  : `Swap to a different asset (${unused.length} available)`}
               </summary>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {unused.map((a) => (
                   <button
                     key={a.id}
-                    onClick={() => onAddAsset(a.id)}
+                    onClick={() => {
+                      // Single-slot or already-full templates: clicking an
+                      // alternative SWAPS for the last chosen asset rather than
+                      // adding past the slot cap. Multi-slot templates with
+                      // room: ADD up to slotCount.
+                      if (chosen.length < recommendation.slotCount) {
+                        onAddAsset(a.id);
+                      } else {
+                        const lastChosenId = chosen[chosen.length - 1]?.id;
+                        if (lastChosenId) onSwapAsset(lastChosenId, a.id);
+                      }
+                    }}
                     className="group relative aspect-square rounded border border-border overflow-hidden hover:border-accent"
                   >
                     {a.type === "image" ? (
@@ -626,15 +684,10 @@ function RecommendReviewView(props: RecommendReviewProps) {
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
-          <h3 className="text-sm font-semibold mb-2">CTA</h3>
-          <p className="text-sm text-foreground">
-            {recommendation.cta.label}
-          </p>
-          <p className="text-[11px] text-muted mt-1 font-mono break-all">
-            → {recommendation.cta.url}
-          </p>
-        </div>
+        {/* CTA card removed for organic-only posts — Meta doesn't support
+            per-post CTA buttons on organic FB/IG, so showing this field here
+            suggested configurability that didn't exist. For paid/both modes,
+            CTA wiring lands in task #108 (boost-after-publish chain). */}
 
         <div className="pt-2">
           {!isReview ? (
@@ -883,7 +936,14 @@ function ReachPickerView(props: ReachPickerProps) {
             active={mode === "organic"}
             label="🌱 Organic"
             sublabel="Free reach via your followers"
-            onClick={() => onModeChange("organic")}
+            onClick={() => {
+              onModeChange("organic");
+              // When organic is the only enabled mode (no ads connection),
+              // clicking the tile is the same as clicking Continue — the
+              // subscriber has no other choice to deliberate. Saves them
+              // hunting for the Continue button as a separate action.
+              if (!canRunMetaPaid) onContinue();
+            }}
           />
           <ModeTab
             mode="paid"
@@ -1024,12 +1084,13 @@ function ReachPickerView(props: ReachPickerProps) {
         </div>
       )}
 
-      {/* Continue */}
-      <div className="flex justify-end gap-2 pt-2">
+      {/* Continue — centered so the eye lands on it after the tile selection,
+          rather than hunting in the right corner. */}
+      <div className="flex justify-center gap-2 pt-2">
         <button
           onClick={onContinue}
           disabled={isPaidMode && !hasCoords}
-          className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          className="rounded bg-accent px-6 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           Continue with {mode === "organic" ? "Organic" : mode === "paid" ? "Paid" : "Both"} →
         </button>
