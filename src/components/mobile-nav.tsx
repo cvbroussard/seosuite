@@ -10,7 +10,7 @@ const baseNav = [
   { label: "Brand", path: "/brand", icon: "◈" },
   { label: "Capture", path: "/capture", icon: "◎" },
   { label: "Media", path: "/media", icon: "▣" },
-  { label: "Calendar", path: "/calendar", icon: "▦" },
+  { label: "On Deck", path: "/on-deck", icon: "▦" },
   { label: "Inbox", path: "/inbox", icon: "▤" },
   { label: "Spotlight", path: "/spotlight", icon: "✦" },
   { label: "Integrations", path: "/integrations", icon: "◉" },

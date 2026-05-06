@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
   const link = (body.link as string | undefined) || null;
   const hashtags = Array.isArray(body.hashtags) ? body.hashtags : [];
   const scheduledAt = body.scheduled_at as string | undefined;
+  // Synchronous publish path — bypass the cron queue entirely. When
+  // immediate=true, the post is inserted then publishPost() is called
+  // inline, returning the FB permalink in the response. Subscriber
+  // sees "Published — View on Facebook →" instantly. When immediate is
+  // absent (or false), legacy scheduled behavior applies (insert with
+  // scheduled_at, cron picks up).
+  const immediate = body.immediate === true;
 
   // Reach data (enterprise tier only). For mode='organic' (or absent),
   // existing publish flow runs. For mode='paid' or 'both', the reach
@@ -199,6 +206,41 @@ export async function POST(req: NextRequest) {
       dailyBudgetDollars: reachData.dailyBudgetDollars,
       durationDays: reachData.durationDays,
     };
+  }
+
+  // Synchronous publish path — call publisher inline, return Meta
+  // permalink in the response. Trust artifact: subscriber clicked
+  // "Publish now", we deliver "now", and they see the live post link
+  // in the same response cycle.
+  if (immediate) {
+    const { publishPost } = await import("@/lib/pipeline/publisher");
+    const result = await publishPost(inserted.id as string);
+    if (!result.success) {
+      return NextResponse.json({
+        postId: inserted.id,
+        status: "failed",
+        error: result.error || "Publish failed",
+        publishingTarget: template.platform,
+        reachMode,
+        ...responseExtras,
+      }, { status: 502 });
+    }
+    // Re-query to grab the platform_post_url that publishPost wrote
+    // on success — that's the FB/IG permalink we surface.
+    const [published] = await sql`
+      SELECT status, platform_post_id, platform_post_url, published_at
+      FROM social_posts WHERE id = ${inserted.id as string}
+    `;
+    return NextResponse.json({
+      postId: inserted.id,
+      status: published?.status || "published",
+      publishedAt: published?.published_at,
+      platformPostId: published?.platform_post_id,
+      platformPostUrl: published?.platform_post_url,
+      publishingTarget: template.platform,
+      reachMode,
+      ...responseExtras,
+    });
   }
 
   return NextResponse.json({

@@ -248,7 +248,7 @@ export const PERMISSIONS: ReviewerPermission[] = [
       "TracPost's core value proposition is automated social publishing. The subscriber-facing manual flow follows Select → Recommend → Review → Trigger: the subscriber picks a template or asset, sees the TracPost platform's recommended caption + assembly, reviews the preview, and clicks Publish. The TracPost platform then publishes to the connected Page via the Pages API.",
     testSteps: [
       "Complete the pages_show_list test above to bind a connected Page.",
-      "Navigate to 'Compose' or 'Calendar' in the sidebar.",
+      "Navigate to 'Compose' or 'On Deck' in the sidebar.",
       "Select a template or media asset from the picker.",
       "Review the prepared post (caption, assets, target connected Page).",
       "Click 'Publish now'.",
@@ -257,11 +257,11 @@ export const PERMISSIONS: ReviewerPermission[] = [
     ],
     expectedOutcome:
       "The TracPost app confirms the publish with the Facebook post ID. Visiting the connected Page shows the new post in the feed.",
-    demoLink: "https://app.tracpost.com/dashboard/calendar",
+    demoLink: "https://app.tracpost.com/dashboard/on-deck",
     status: "partial",
     gaps: [
-      "BUILD (interim, for v1 review): if calendar/compose flow doesn't already follow Select → Recommend → Review → Trigger cleanly, ship a minimal manual publish surface that does. Full template-first refactor is task #82 (post-review).",
-      "VERIFY: existing /dashboard/calendar manual publish path works end-to-end and the success state shows the Facebook post ID for reviewer verification",
+      "BUILD (interim, for v1 review): if On Deck / Compose flow doesn't already follow Select → Recommend → Review → Trigger cleanly, ship a minimal manual publish surface that does. Full template-first refactor is task #82 (post-review).",
+      "VERIFY: existing /dashboard/on-deck manual publish path works end-to-end and the success state shows the Facebook post ID for reviewer verification",
       "VERIFY: the subscriber's click is the trigger (not a cron-fired autopilot publish — that doesn't satisfy review)",
       "TEST DATA: the subscriber's media library on test2 needs at least one asset suitable for FB",
       "MANUAL-FIRST RULE: this scope's autopilot path can wait — review needs the manual click-to-publish flow visible and clean",
@@ -415,7 +415,7 @@ export const PERMISSIONS: ReviewerPermission[] = [
       "Instagram is the highest-priority publishing platform for most subscribers (visual businesses). The subscriber-facing flow follows Select → Recommend → Review → Trigger: the subscriber picks an Instagram template (Single Image, Carousel, Reel), sees the TracPost platform's prepared package, reviews the preview, clicks Publish. The TracPost platform then publishes to the connected Instagram account via the IG Login API.",
     testSteps: [
       "Complete the instagram_business_basic test to bind a connected Instagram account.",
-      "Navigate to 'Compose' or 'Calendar'.",
+      "Navigate to 'Compose' or 'On Deck'.",
       "Select an Instagram template (or asset in the interim flow).",
       "Review the prepared post (caption, asset, target connected Instagram account).",
       "Click 'Publish to Instagram'.",
@@ -424,7 +424,7 @@ export const PERMISSIONS: ReviewerPermission[] = [
     ],
     expectedOutcome:
       "The TracPost app confirms the publish with the IG media ID. Visiting the connected Instagram account shows the new post.",
-    demoLink: "https://app.tracpost.com/dashboard/calendar",
+    demoLink: "https://app.tracpost.com/dashboard/on-deck",
     status: "gap",
     gaps: [
       "BUILD/VERIFY: same as pages_manage_posts — manual IG publish flow must follow Select → Recommend → Review → Trigger. May share the same publish surface as FB or be a separate flow.",

@@ -70,7 +70,7 @@ const MODULES: Module[] = [
       { label: "Media", path: "/media" },
       { label: "Entities", path: "/entities" },
       { label: "Compose", path: "/compose" },
-      { label: "Calendar", path: "/calendar" },
+      { label: "On Deck", path: "/on-deck" },
       { label: "Unifeed", path: "/unifeed" },
       { label: "GBP Photos", path: "/google/photos" },
     ],

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { seoFilename } from "@/lib/seo-filename";
+import { getTimezoneForCoords } from "@/lib/google-timezone";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -163,6 +164,15 @@ export async function POST(req: NextRequest) {
   const lon = placeId && Number.isFinite(placeLon) ? placeLon : null;
   const setAt = placeId ? new Date() : null;
 
+  // Timezone follows canonical place. When place is set, resolve IANA
+  // tz from Google Time Zone API and persist; when place is cleared,
+  // wipe timezone too (it's anchored to the place). Failures (missing
+  // API key, network error) leave tz NULL — backfill script can fix
+  // later. Subscribers can't schedule until tz is resolved per the gate.
+  const timezone = lat != null && lon != null
+    ? await getTimezoneForCoords(lat, lon)
+    : null;
+
   await sql`
     UPDATE sites
     SET name = ${name},
@@ -173,6 +183,7 @@ export async function POST(req: NextRequest) {
         place_lon = ${lon},
         place_name = ${placeId ? placeName : null},
         place_set_at = ${setAt},
+        timezone = ${timezone},
         business_phone = ${phone},
         business_email = ${email},
         business_logo = ${logoUrl},

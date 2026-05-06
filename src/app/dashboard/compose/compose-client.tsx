@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ScheduledCountdown } from "@/components/scheduled-countdown";
 
 interface PostTemplate {
   id: string;
@@ -36,7 +37,12 @@ interface RecommendResponse {
 interface PublishResponse {
   postId: string;
   status: string;
-  scheduledAt: string;
+  scheduledAt?: string;
+  // Synchronous publish path (immediate=true) returns these — the
+  // subscriber sees "Published — View on Facebook →" instantly.
+  publishedAt?: string;
+  platformPostId?: string;
+  platformPostUrl?: string;
   publishingTarget: string;
   reachMode?: ReachMode;
   note?: string;
@@ -120,6 +126,21 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
   // Trigger-step state
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResponse | null>(null);
+  // Schedule fork — "now" fires the publisher synchronously via the
+  // immediate=true path (no cron wait, FB permalink in response).
+  // "schedule" persists scheduled_at and the cron picks it up later.
+  const [triggerMode, setTriggerMode] = useState<"now" | "schedule">("now");
+  // Default schedule target: tomorrow at 10am local. Subscriber tweaks
+  // via the picker. Stored as ISO datetime string for the API + the
+  // <input type="datetime-local"> two-way binding.
+  const [scheduledFor, setScheduledFor] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(10, 0, 0, 0);
+    // Format for datetime-local input: YYYY-MM-DDTHH:mm
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
 
   // Initial template list load
   useEffect(() => {
@@ -267,6 +288,13 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         }
       }
 
+      // Trigger fork: "now" hits the synchronous publish path
+      // (immediate=true), "schedule" passes scheduled_at and rides the
+      // queue. The On Deck page + countdown make the wait observable.
+      const triggerPayload: Record<string, unknown> = triggerMode === "now"
+        ? { immediate: true }
+        : { scheduled_at: new Date(scheduledFor).toISOString() };
+
       const res = await fetch("/api/compose/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -277,6 +305,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
           link,
           hashtags,
           ...reachPayload,
+          ...triggerPayload,
         }),
       });
       if (!res.ok) {
@@ -302,7 +331,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
             {step === "reach" && "Choose how this content will be distributed."}
             {step === "recommend" && `Reviewing the recommended package for ${selectedTemplate?.name ?? "your template"}.`}
             {step === "review" && "Final review before publishing."}
-            {step === "published" && "Your post is queued for publishing."}
+            {step === "published" && (publishResult?.status === "published" ? "Your post is live." : publishResult?.status === "failed" ? "Publish failed." : "Your post is scheduled.")}
           </p>
         </div>
         {step !== "select" && step !== "published" && (
@@ -386,6 +415,10 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
             hashtagsText={hashtagsText}
             error={error}
             publishing={publishing}
+            triggerMode={triggerMode}
+            scheduledFor={scheduledFor}
+            onTriggerModeChange={setTriggerMode}
+            onScheduledForChange={setScheduledFor}
             onCaptionChange={setCaption}
             onLinkChange={setLink}
             onHashtagsChange={setHashtagsText}
@@ -538,6 +571,10 @@ interface RecommendReviewProps {
   hashtagsText: string;
   error: string;
   publishing: boolean;
+  triggerMode: "now" | "schedule";
+  scheduledFor: string;
+  onTriggerModeChange: (m: "now" | "schedule") => void;
+  onScheduledForChange: (v: string) => void;
   onCaptionChange: (v: string) => void;
   onLinkChange: (v: string) => void;
   onHashtagsChange: (v: string) => void;
@@ -550,6 +587,7 @@ interface RecommendReviewProps {
 
 function RecommendReviewView(props: RecommendReviewProps) {
   const { step, recommendation, chosenAssetIds, caption, link, hashtagsText, error, publishing,
+          triggerMode, scheduledFor, onTriggerModeChange, onScheduledForChange,
           onCaptionChange, onLinkChange, onHashtagsChange, onSwapAsset, onRemoveAsset, onAddAsset, onProceedToReview, onPublish } = props;
   const isReview = step === "review";
   const assetsById = new Map<string, AssetOption>();
@@ -699,13 +737,57 @@ function RecommendReviewView(props: RecommendReviewProps) {
               Review →
             </button>
           ) : (
-            <button
-              onClick={onPublish}
-              disabled={publishing}
-              className="w-full rounded bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-            >
-              {publishing ? "Publishing..." : "Publish now"}
-            </button>
+            <div className="space-y-3">
+              {/* Schedule fork — Publish Now (synchronous, FB permalink in
+                  response) vs Schedule for later (queues, On Deck shows
+                  countdown). Subscriber chooses; we route internally. */}
+              <div className="rounded border border-border bg-surface p-3 space-y-2">
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="trigger-mode"
+                    checked={triggerMode === "now"}
+                    onChange={() => onTriggerModeChange("now")}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium">Publish now</p>
+                    <p className="text-[11px] text-muted">Goes live on the platform within seconds</p>
+                  </div>
+                </label>
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="trigger-mode"
+                    checked={triggerMode === "schedule"}
+                    onChange={() => onTriggerModeChange("schedule")}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium">Schedule for later</p>
+                    <p className="text-[11px] text-muted">Lands on On Deck with a live countdown</p>
+                    {triggerMode === "schedule" && (
+                      <input
+                        type="datetime-local"
+                        value={scheduledFor}
+                        onChange={(e) => onScheduledForChange(e.target.value)}
+                        min={new Date().toISOString().slice(0, 16)}
+                        className="mt-2 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+                      />
+                    )}
+                  </div>
+                </label>
+              </div>
+              <button
+                onClick={onPublish}
+                disabled={publishing}
+                className="w-full rounded bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {publishing
+                  ? (triggerMode === "now" ? "Publishing..." : "Scheduling...")
+                  : (triggerMode === "now" ? "Publish now" : "Schedule")}
+              </button>
+            </div>
           )}
           {!isReview && chosen.length < recommendation.slotCount && (
             <p className="text-[11px] text-muted mt-2">
@@ -743,22 +825,40 @@ function AssetTile({ asset, onRemove }: { asset: AssetOption; onRemove?: () => v
 }
 
 function PublishedView({ result, template }: { result: PublishResponse; template: PostTemplate | null }) {
-  const scheduledTime = new Date(result.scheduledAt);
-  const now = Date.now();
-  const isImmediate = scheduledTime.getTime() <= now + 60000;
+  // Three render branches based on what the publisher actually did:
+  //   1. Live — immediate publish succeeded (has platformPostUrl)
+  //   2. Scheduled — queued for future delivery (has scheduledAt in future)
+  //   3. Failed — status='failed' (publisher rejected the immediate publish)
+  const isLive = result.status === "published" && Boolean(result.platformPostUrl);
+  const isFailed = result.status === "failed";
+  const scheduledTime = result.scheduledAt ? new Date(result.scheduledAt) : null;
+
   const showsModeNote = Boolean(result.note);
-  const headline =
-    result.reachMode === "both" && result.boostQueued
-      ? "Queued for publishing AND amplification"
-      : result.reachMode === "paid" && !result.modeFallback
-      ? "Ad campaign created"
-      : "Queued for publishing";
+  let headline: string;
+  if (isFailed) {
+    headline = "Publish failed";
+  } else if (isLive) {
+    headline = "Published — live on Facebook";
+  } else if (result.reachMode === "both" && result.boostQueued) {
+    headline = "Scheduled — publishing AND amplifying";
+  } else if (result.reachMode === "paid" && !result.modeFallback) {
+    headline = "Ad campaign created";
+  } else {
+    headline = "Scheduled for delivery";
+  }
+
+  const accentClass = isFailed
+    ? "border-danger/30 bg-danger/5"
+    : "border-success/30 bg-success/5";
+  const iconClass = isFailed
+    ? "bg-danger/20 text-danger"
+    : "bg-success/20 text-success";
 
   return (
-    <div className="rounded-xl border border-success/30 bg-success/5 p-6 space-y-3">
+    <div className={`rounded-xl border p-6 space-y-3 ${accentClass}`}>
       <div className="flex items-center gap-3">
-        <div className="rounded-full bg-success/20 w-10 h-10 flex items-center justify-center text-success text-lg">
-          ✓
+        <div className={`rounded-full w-10 h-10 flex items-center justify-center text-lg ${iconClass}`}>
+          {isFailed ? "✗" : "✓"}
         </div>
         <div>
           <h2 className="text-lg font-semibold">{headline}</h2>
@@ -774,12 +874,47 @@ function PublishedView({ result, template }: { result: PublishResponse; template
       </div>
 
       <div className="space-y-1 text-sm">
-        <p className="text-foreground">
-          {isImmediate
-            ? "Should appear on the platform within the next few minutes."
-            : `Scheduled for ${scheduledTime.toLocaleString()}.`}
-        </p>
-        <p className="text-xs text-muted font-mono">post_id: {result.postId}</p>
+        {isLive ? (
+          <p className="text-foreground">
+            Your post is live on the platform.
+            {result.platformPostUrl && (
+              <>
+                {" "}
+                <a
+                  href={result.platformPostUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline font-medium"
+                >
+                  View on {prettyPlatformName(result.publishingTarget)} →
+                </a>
+              </>
+            )}
+          </p>
+        ) : isFailed ? (
+          <p className="text-danger">
+            The publish call to {prettyPlatformName(result.publishingTarget)} failed. Check the integration token in Integrations and try again.
+          </p>
+        ) : scheduledTime ? (
+          <p className="text-foreground flex items-center gap-2 flex-wrap">
+            <span>Will publish on</span>
+            <span className="font-medium">{scheduledTime.toLocaleString()}</span>
+            <span className="rounded bg-accent/5 border border-accent/20 px-2 py-0.5 text-[11px] text-accent">
+              <span className="text-muted">in</span>{" "}
+              <ScheduledCountdown scheduledAt={scheduledTime} />
+            </span>
+          </p>
+        ) : null}
+        {/* Internal post_id is engineering detail — tucked behind a
+            disclosure so subscribers see a clean success state but can
+            still surface it for support tickets if needed. */}
+        <details className="text-[11px] text-muted">
+          <summary className="cursor-pointer hover:text-foreground">Details</summary>
+          <p className="mt-1 font-mono">post_id: {result.postId}</p>
+          {result.platformPostId && (
+            <p className="font-mono">platform_post_id: {result.platformPostId}</p>
+          )}
+        </details>
       </div>
 
       {showsModeNote && (
@@ -790,10 +925,10 @@ function PublishedView({ result, template }: { result: PublishResponse; template
 
       <div className="flex gap-2 pt-2 flex-wrap">
         <Link
-          href="/dashboard/calendar"
+          href="/dashboard/on-deck"
           className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
         >
-          View in Calendar →
+          View On Deck →
         </Link>
         <Link
           href="/dashboard/unifeed"

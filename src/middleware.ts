@@ -30,7 +30,7 @@ function extractSlugFromHost(hostname: string, prefix: string): string | null {
  * Subdomain-based routing middleware.
  *
  * Production:
- *   studio.tracpost.com/calendar     → rewrites to /dashboard/calendar
+ *   studio.tracpost.com/on-deck      → rewrites to /dashboard/on-deck
  *   platform.tracpost.com/subscribers → rewrites to /admin/subscribers
  *   tracpost.com/blog                → /tenant/tracpost/blog (next.config rewrite)
  *   blog.b2construct.com/my-article  → /tenant/b2construct/blog/my-article
@@ -259,7 +259,7 @@ export async function middleware(req: NextRequest) {
     if (pathname.startsWith("/dashboard")) {
       return NextResponse.next();
     }
-    // Rewrite: /calendar → /dashboard/calendar, / → /dashboard
+    // Rewrite: /on-deck → /dashboard/on-deck, / → /dashboard, etc. — generic prefix.
     const rewritePath = pathname === "/" ? "/dashboard" : `/dashboard${pathname}`;
     const url = req.nextUrl.clone();
     url.pathname = rewritePath;

@@ -25,7 +25,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/capture": "Capture",
   "/media": "Media",
   "/blog": "Blog",
-  "/calendar": "Calendar",
+  "/on-deck": "On Deck",
   "/inbox": "Inbox",
   "/seo": "SEO",
   "/spotlight": "Spotlight",

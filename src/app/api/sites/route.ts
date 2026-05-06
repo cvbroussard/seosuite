@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getTimezoneForCoords } from "@/lib/google-timezone";
 
 /**
  * POST /api/sites — Create a site under the authenticated subscriber.
@@ -32,10 +33,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Resolve timezone from canonical place coords. Returns null when
+    // place isn't set OR Google API fails — backfill picks it up later.
+    const timezone = place_id
+      ? await getTimezoneForCoords(place_lat, place_lon)
+      : null;
+
     const rows = await sql`
       INSERT INTO sites (
         subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type,
-        location, place_id, place_lat, place_lon, place_name, place_set_at
+        location, place_id, place_lat, place_lon, place_name, place_set_at, timezone
       )
       VALUES (
         ${auth.subscriptionId}, ${name},
@@ -44,7 +51,8 @@ export async function POST(req: NextRequest) {
         ${external_id || null}, ${JSON.stringify(brand_voice || {})},
         ${business_type || null}, ${location || place_name || null},
         ${place_id || null}, ${place_id ? place_lat : null}, ${place_id ? place_lon : null},
-        ${place_id ? (place_name || null) : null}, ${place_id ? new Date() : null}
+        ${place_id ? (place_name || null) : null}, ${place_id ? new Date() : null},
+        ${timezone}
       )
       RETURNING id, subscription_id, name, domain, blog_url, url, external_id, brand_voice, business_type, location, created_at
     `;

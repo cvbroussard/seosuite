@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ScheduledCountdown } from "@/components/scheduled-countdown";
 
 interface Post {
   id: string;
@@ -16,7 +17,7 @@ interface Post {
   trigger_type: string | null;
 }
 
-export default function CalendarPage() {
+export default function OnDeckPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [vetoingId, setVetoingId] = useState<string | null>(null);
@@ -88,8 +89,8 @@ export default function CalendarPage() {
 
   return (
     <div className="p-4 space-y-6">
-      <h1 className="mb-1 text-lg font-semibold">Content Calendar</h1>
-      <p className="mb-8 text-sm text-muted">Review scheduled posts and veto before they publish</p>
+      <h1 className="mb-1 text-lg font-semibold">On Deck</h1>
+      <p className="mb-8 text-sm text-muted">Posts queued for publishing — TracPost will deliver them at the scheduled moment.</p>
 
       {loading ? (
         <p className="py-12 text-center text-sm text-muted">Loading...</p>
@@ -174,7 +175,7 @@ export default function CalendarPage() {
                           onClick={() => setExpanded(isExpanded ? null : post.id)}
                           className="min-w-0 flex-1 text-left"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
                               {post.platform}
                             </span>
@@ -186,6 +187,14 @@ export default function CalendarPage() {
                             <span className="text-[10px] text-muted">
                               {post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : "—"}
                             </span>
+                            {/* Live countdown — the trust artifact. Subscribers see TracPost
+                                is alive, watching, ready to deliver at the scheduled moment. */}
+                            {post.scheduled_at && (
+                              <span className="rounded bg-accent/5 border border-accent/20 px-2 py-0.5 text-[10px] text-accent flex items-center gap-1">
+                                <span className="text-muted">in</span>
+                                <ScheduledCountdown scheduledAt={post.scheduled_at} />
+                              </span>
+                            )}
                           </div>
                           <p className={`mt-1 text-sm ${isExpanded ? "" : "truncate"}`}>
                             {post.caption || "Awaiting caption"}

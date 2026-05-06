@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { slugify } from "@/lib/blog";
 import { cookieDomain } from "@/lib/subdomains";
 import { signCookie } from "@/lib/cookie-sign";
+import { getTimezoneForCoords } from "@/lib/google-timezone";
 
 /**
  * POST /api/dashboard/sites
@@ -49,10 +50,14 @@ export async function POST(req: NextRequest) {
   if (phone) metaObj.phone = phone;
   const metadata = JSON.stringify(metaObj);
 
+  // Resolve timezone from canonical place coords (Google Time Zone API).
+  // Failures leave tz NULL — backfill script can populate later.
+  const timezone = await getTimezoneForCoords(place_lat, place_lon);
+
   const [site] = await sql`
     INSERT INTO sites (
       subscription_id, name, domain, url, business_type, location,
-      place_id, place_lat, place_lon, place_name, place_set_at,
+      place_id, place_lat, place_lon, place_name, place_set_at, timezone,
       blog_slug, provisioning_status, metadata
     )
     VALUES (
@@ -67,6 +72,7 @@ export async function POST(req: NextRequest) {
       ${place_lon},
       ${place_name || null},
       NOW(),
+      ${timezone},
       ${finalSlug},
       'requested',
       ${metadata}::jsonb
