@@ -925,7 +925,14 @@ function PublishedView({ result, template }: { result: PublishResponse; template
 
       <div className="flex gap-2 pt-2 flex-wrap">
         <Link
-          href="/dashboard/on-deck"
+          href={
+            // Anchor-link directly to the just-scheduled post on On Deck
+            // (browser auto-scrolls). For live/failed posts there's no
+            // scheduled-state to land on, so use the page-level link.
+            result.status === "scheduled"
+              ? `/dashboard/on-deck#post-${result.postId}`
+              : "/dashboard/on-deck"
+          }
           className="rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
         >
           View On Deck →
@@ -1065,12 +1072,15 @@ function ReachPickerView(props: ReachPickerProps) {
         <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">
           How will this content reach your audience?
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        {/* Both tile is hidden when paid is gated off — it's redundant
+            when Paid itself isn't reachable. Switch to 2-col grid in that
+            case so the Organic + Paid pair fills the row cleanly. */}
+        <div className={canRunMetaPaid ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-2"}>
           <ModeTab
             mode="organic"
             active={mode === "organic"}
             label="🌱 Organic"
-            sublabel="Free reach via your followers"
+            sublabel="Free — algorithm decides who sees it"
             onClick={() => {
               onModeChange("organic");
               // When organic is the only enabled mode (no ads connection),
@@ -1084,30 +1094,22 @@ function ReachPickerView(props: ReachPickerProps) {
             mode="paid"
             active={mode === "paid"}
             label="💰 Paid"
-            sublabel="Reach beyond your followers"
+            sublabel="Paid — you choose who sees it"
             disabled={!canRunMetaPaid}
+            disabledCoaching={paidGateCoaching ?? undefined}
             onClick={() => onModeChange("paid")}
           />
-          <ModeTab
-            mode="both"
-            active={mode === "both"}
-            label="✨ Both"
-            sublabel="Permanent on Page + amplified"
-            disabled={!canRunMetaPaid}
-            onClick={() => onModeChange("both")}
-            recommended
-          />
+          {canRunMetaPaid && (
+            <ModeTab
+              mode="both"
+              active={mode === "both"}
+              label="✨ Both"
+              sublabel="Permanent on Page + amplified"
+              onClick={() => onModeChange("both")}
+              recommended
+            />
+          )}
         </div>
-        {paidGateCoaching && (
-          <div className="mt-2 text-[11px] text-muted">
-            <a
-              href={paidGateCoaching.href}
-              className="text-accent hover:underline"
-            >
-              {paidGateCoaching.message} →
-            </a>
-          </div>
-        )}
       </div>
 
       {/* Map + location override — only relevant for paid/both modes
@@ -1324,6 +1326,7 @@ function ModeTab({
   sublabel,
   recommended,
   disabled,
+  disabledCoaching,
   onClick,
 }: {
   mode: ReachMode;
@@ -1332,8 +1335,28 @@ function ModeTab({
   sublabel: string;
   recommended?: boolean;
   disabled?: boolean;
+  disabledCoaching?: { message: string; href: string };
   onClick: () => void;
 }) {
+  // When disabled WITH coaching, render as a non-button div so the
+  // embedded <a> link inside is clickable (nested buttons/anchors are
+  // invalid HTML and Chrome swallows the inner click). Without
+  // coaching, normal disabled <button>.
+  if (disabled && disabledCoaching) {
+    return (
+      <div className="relative rounded-xl border-2 border-border bg-surface p-4 text-left">
+        <div className="text-sm font-semibold opacity-50">{label}</div>
+        <div className="mt-1 text-[11px] text-muted leading-snug opacity-50">{sublabel}</div>
+        <a
+          href={disabledCoaching.href}
+          className="mt-3 block text-[11px] text-accent hover:underline leading-snug"
+        >
+          {disabledCoaching.message} →
+        </a>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={onClick}

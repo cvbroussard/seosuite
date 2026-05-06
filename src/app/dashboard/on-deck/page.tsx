@@ -104,7 +104,7 @@ export default function OnDeckPage() {
                 {drafts.map((post) => {
                   const isExpanded = expanded === post.id;
                   return (
-                    <div key={post.id} className="rounded-lg border border-warning/30 bg-surface">
+                    <div key={post.id} id={`post-${post.id}`} className="rounded-lg border border-warning/30 bg-surface scroll-mt-20">
                       <div className="flex items-start justify-between p-4">
                         <button
                           onClick={() => setExpanded(isExpanded ? null : post.id)}
@@ -169,7 +169,7 @@ export default function OnDeckPage() {
                 {scheduled.map((post) => {
                   const isExpanded = expanded === post.id;
                   return (
-                    <div key={post.id} className="rounded-lg border border-border bg-surface">
+                    <div key={post.id} id={`post-${post.id}`} className="rounded-lg border border-border bg-surface scroll-mt-20">
                       <div className="flex items-start justify-between p-4">
                         <button
                           onClick={() => setExpanded(isExpanded ? null : post.id)}
@@ -236,7 +236,7 @@ export default function OnDeckPage() {
               <h2 className="mb-3 text-sm font-medium text-success">Published ({published.length})</h2>
               <div className="space-y-2">
                 {published.map((post) => (
-                  <div key={post.id} className="rounded-lg border border-border bg-surface p-4">
+                  <div key={post.id} id={`post-${post.id}`} className="rounded-lg border border-border bg-surface p-4 scroll-mt-20">
                     <div className="flex items-start justify-between">
                       <div>
                         {post.platform_post_url ? (
@@ -263,7 +263,7 @@ export default function OnDeckPage() {
               <h2 className="mb-3 text-sm font-medium text-muted">Vetoed ({vetoed.length})</h2>
               <div className="space-y-2">
                 {vetoed.map((post) => (
-                  <div key={post.id} className="rounded-lg border border-border bg-surface p-4 opacity-60">
+                  <div key={post.id} id={`post-${post.id}`} className="rounded-lg border border-border bg-surface p-4 opacity-60 scroll-mt-20">
                     <p className="text-sm line-through">{post.caption || "—"}</p>
                     <p className="mt-1 text-xs text-muted">{post.account_name} ({post.platform})</p>
                   </div>

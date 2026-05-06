@@ -26,6 +26,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Site not found" }, { status: 404 });
   }
 
+  // Two bind models in flight during the migration:
+  //   - Legacy: site_social_links (old per-site connection model)
+  //   - New: site_platform_assets → platform_assets (decoupled FB/IG/Ads model)
+  // Compose writes social_posts via the new model; older autopilot posts
+  // were written via legacy. UNION both so On Deck surfaces both, otherwise
+  // the new-model posts (e.g. anything from Compose) are invisible to the
+  // calendar — the trust-artifact countdown breaks because the post itself
+  // doesn't appear in the queue.
   const posts = await sql`
     SELECT sp.id, sp.caption, sp.hashtags, sp.status, sp.scheduled_at,
            sp.published_at, sp.content_pillar, sp.platform_post_url,
@@ -34,8 +42,16 @@ export async function GET(req: NextRequest) {
            sa.account_name, sa.platform
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
-    JOIN site_social_links ssl ON ssl.social_account_id = sa.id
-    WHERE ssl.site_id = ${siteId}
+    WHERE sa.id IN (
+      SELECT ssl.social_account_id
+      FROM site_social_links ssl
+      WHERE ssl.site_id = ${siteId}
+      UNION
+      SELECT pa.social_account_id
+      FROM site_platform_assets spa
+      JOIN platform_assets pa ON pa.id = spa.platform_asset_id
+      WHERE spa.site_id = ${siteId}
+    )
     ORDER BY COALESCE(sp.scheduled_at, sp.created_at) DESC
     LIMIT 100
   `;
