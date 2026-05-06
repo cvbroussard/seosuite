@@ -58,7 +58,10 @@ export default async function SettingsPage() {
   };
 
   const brandVoice = (site?.brand_voice || {}) as Record<string, unknown>;
-  const cadence = (site?.cadence_config || {}) as Record<string, number>;
+  // cadence_config evolved from Record<string, number> to
+  // Record<string, PlatformCadence> (object with frequency, time_windows,
+  // etc.). Type as unknown and coerce in the renderer to handle both shapes.
+  const cadence = (site?.cadence_config || {}) as Record<string, unknown>;
   const pillars = (site?.content_pillars || []) as string[];
   const autopilotConfig = (site?.autopilot_config || {}) as Record<string, unknown>;
 
@@ -107,12 +110,20 @@ export default async function SettingsPage() {
           <div className="mb-5">
             <label className="mb-2 block text-sm text-muted">Publishing Cadence</label>
             <div className="flex flex-wrap gap-6">
-              {Object.entries(cadence).map(([platform, count]) => (
-                <div key={platform}>
-                  <p className="text-2xl font-semibold">{count}</p>
-                  <p className="text-sm text-muted">{platform}/week</p>
-                </div>
-              ))}
+              {Object.entries(cadence).map(([platform, val]) => {
+                // Legacy: number (posts/week). Current: PlatformCadence object
+                // with .frequency. Coerce to a printable count either way.
+                const count =
+                  typeof val === "number"
+                    ? val
+                    : (val as { frequency?: number } | null)?.frequency ?? 0;
+                return (
+                  <div key={platform}>
+                    <p className="text-2xl font-semibold">{count}</p>
+                    <p className="text-sm text-muted">{platform}/week</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
