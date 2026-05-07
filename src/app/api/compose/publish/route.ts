@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
   const link = (body.link as string | undefined) || null;
   const hashtags = Array.isArray(body.hashtags) ? body.hashtags : [];
   const scheduledAt = body.scheduled_at as string | undefined;
+
+  // Anchor (Topic) metadata — the v2 anchor the subscriber pointed at.
+  // Persisted on social_posts.metadata.anchor_* so the engagement-polling
+  // pipeline + analytics can attribute results back to the source page.
+  const anchorId = body.anchor_id as string | undefined;
+  const anchorType = body.anchor_type as "blog_post" | "project" | "service" | undefined;
+  const anchorSlug = body.anchor_slug as string | undefined;
   // Synchronous publish path — bypass the cron queue entirely. When
   // immediate=true, the post is inserted then publishPost() is called
   // inline, returning the FB permalink in the response. Subscriber
@@ -189,6 +196,11 @@ export async function POST(req: NextRequest) {
   }
   if (assetMetadata && Object.keys(assetMetadata).length > 0) {
     postMetadata.asset_metadata = assetMetadata;
+  }
+  if (anchorId && anchorType) {
+    postMetadata.anchor_id = anchorId;
+    postMetadata.anchor_type = anchorType;
+    if (anchorSlug) postMetadata.anchor_slug = anchorSlug;
   }
 
   const [inserted] = await sql`

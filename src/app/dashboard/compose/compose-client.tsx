@@ -67,7 +67,7 @@ type ComposeStep = "topic" | "select" | "reach" | "recommend" | "review" | "publ
 
 interface ComposeAnchor {
   id: string;
-  type: "blog_post" | "project";
+  type: "blog_post" | "project" | "service";
   title: string;
   slug: string;
   contentPillar: string | null;
@@ -667,7 +667,7 @@ function TopicPicker({
               )}
               <div className="absolute top-2 left-2 flex items-center gap-1.5">
                 <span className="text-[9px] font-mono uppercase tracking-wide bg-black/60 text-white rounded px-1.5 py-0.5">
-                  {a.type === "blog_post" ? "article" : "project"}
+                  {a.type === "blog_post" ? "article" : a.type === "project" ? "project" : "service"}
                 </span>
                 {a.contentPillar && (
                   <span className="text-[9px] font-mono uppercase tracking-wide bg-accent/80 text-white rounded px-1.5 py-0.5">

@@ -5,17 +5,16 @@ import { getSession } from "@/lib/session";
 /**
  * GET /api/compose/anchors
  *
- * Returns the active site's anchor pool — the published blog articles
- * and active/complete projects that a Compose post can point at.
+ * Returns the active site's v2 anchor pool — published blog articles,
+ * active projects, and active services. Each anchor is a Topic the
+ * subscriber can pick on Step 1 of Compose.
  *
- * Each anchor carries its own URL on the subscriber's site, a hero
- * thumbnail, content pillar tag, and a usage count (how many times
- * the anchor has been used as a link target by past social posts —
- * inferred from social_posts.link_url containing the anchor's slug).
+ * v2 ONLY. No fallback to legacy blog_posts/projects tables. Per the
+ * v2 cutover discipline (project_tracpost_v2_article_schema.md), an
+ * empty v2 pool means an empty picker — no silent fallback.
  *
- * The picker is the new Step 1 of the anchor-first Compose wizard
- * (per project_tracpost_anchor_first_compose.md). Subscriber-facing
- * label is "Topic"; the internal/architectural term is "anchor".
+ * Each anchor carries: id, type (blog_post|project|service), title,
+ * slug, hero thumbnail, content pillar, excerpt, usage count, full URL.
  */
 export async function GET(_req: NextRequest) {
   const session = await getSession();
@@ -23,42 +22,52 @@ export async function GET(_req: NextRequest) {
   const siteId = session.activeSiteId;
   if (!siteId) return NextResponse.json({ error: "No active site" }, { status: 400 });
 
-  // Site URL becomes the URL prefix for anchor links.
+  // Site URL = anchor URL prefix.
   const [siteRow] = await sql`SELECT url FROM sites WHERE id = ${siteId}`;
   const siteUrl = (siteRow?.url as string | null)?.replace(/\/+$/, "") || "";
 
-  // Blog articles: published only.
+  // Blog articles (v2): published only.
   const blogPosts = await sql`
-    SELECT b.id, b.slug, b.title, b.excerpt, b.content_pillar,
-           b.published_at, b.og_image_url,
-           ma.storage_url AS source_asset_url
-    FROM blog_posts b
-    LEFT JOIN media_assets ma ON ma.id = b.source_asset_id
+    SELECT b.id, b.slug, b.title, b.excerpt, b.content_pillars,
+           b.published_at, ma.storage_url AS hero_url
+    FROM blog_posts_v2 b
+    LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
     WHERE b.site_id = ${siteId}
       AND b.status = 'published'
     ORDER BY b.published_at DESC NULLS LAST
   `;
 
-  // Projects: active or complete.
+  // Projects (v2): active only (archived hidden from picker).
   const projects = await sql`
     SELECT p.id, p.slug, p.name AS title, p.description AS excerpt,
-           p.status, p.start_date, p.end_date,
+           p.content_pillars, p.start_date, p.end_date,
            ma.storage_url AS hero_url
-    FROM projects p
+    FROM projects_v2 p
     LEFT JOIN media_assets ma ON ma.id = p.hero_asset_id
     WHERE p.site_id = ${siteId}
-      AND p.status IN ('active', 'complete')
+      AND p.status = 'active'
     ORDER BY COALESCE(p.end_date, p.start_date, p.created_at) DESC NULLS LAST
   `;
 
-  // Usage count per slug — inferred from past social_posts.link_url.
-  // Works without any schema change; not perfect (different anchors with
-  // similar slugs could collide) but a useful first signal. Once
-  // social_posts.metadata.anchor_id is populated by future Compose
-  // sessions, switch to that for precision.
+  // Services (v2): active only.
+  const services = await sql`
+    SELECT s.id, s.slug, s.name AS title, s.excerpt, s.content_pillars,
+           s.display_order, s.created_at,
+           ma.storage_url AS hero_url
+    FROM services_v2 s
+    LEFT JOIN media_assets ma ON ma.id = s.hero_asset_id
+    WHERE s.site_id = ${siteId}
+      AND s.status = 'active'
+    ORDER BY s.display_order ASC, s.created_at DESC
+  `;
+
+  // Usage count — inferred from past social_posts.link_url containing
+  // the anchor's slug. Once social_posts.metadata.anchor_id is widely
+  // populated (post-Compose-v2-swap), switch to that for precision.
   const allSlugs = [
     ...blogPosts.map((b) => b.slug as string),
     ...projects.map((p) => p.slug as string),
+    ...services.map((s) => s.slug as string),
   ];
   const usageCounts = new Map<string, number>();
   if (allSlugs.length > 0) {
@@ -79,14 +88,19 @@ export async function GET(_req: NextRequest) {
     }
   }
 
+  const firstPillar = (arr: unknown): string | null => {
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    return (arr[0] as string) || null;
+  };
+
   const anchors = [
     ...blogPosts.map((b) => ({
       id: b.id as string,
       type: "blog_post" as const,
       title: b.title as string,
       slug: b.slug as string,
-      contentPillar: (b.content_pillar as string | null) || null,
-      heroUrl: (b.og_image_url as string | null) || (b.source_asset_url as string | null) || null,
+      contentPillar: firstPillar(b.content_pillars),
+      heroUrl: (b.hero_url as string | null) || null,
       excerpt: (b.excerpt as string | null) || null,
       publishedAt: b.published_at as string | null,
       usedCount: usageCounts.get(b.slug as string) || 0,
@@ -97,12 +111,24 @@ export async function GET(_req: NextRequest) {
       type: "project" as const,
       title: p.title as string,
       slug: p.slug as string,
-      contentPillar: null,
+      contentPillar: firstPillar(p.content_pillars),
       heroUrl: (p.hero_url as string | null) || null,
       excerpt: (p.excerpt as string | null) || null,
       publishedAt: (p.end_date as string | null) || (p.start_date as string | null) || null,
       usedCount: usageCounts.get(p.slug as string) || 0,
       url: siteUrl ? `${siteUrl}/projects/${p.slug}` : `/projects/${p.slug}`,
+    })),
+    ...services.map((s) => ({
+      id: s.id as string,
+      type: "service" as const,
+      title: s.title as string,
+      slug: s.slug as string,
+      contentPillar: firstPillar(s.content_pillars),
+      heroUrl: (s.hero_url as string | null) || null,
+      excerpt: (s.excerpt as string | null) || null,
+      publishedAt: null,
+      usedCount: usageCounts.get(s.slug as string) || 0,
+      url: siteUrl ? `${siteUrl}/services/${s.slug}` : `/services/${s.slug}`,
     })),
   ];
 
