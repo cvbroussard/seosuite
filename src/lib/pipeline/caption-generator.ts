@@ -403,6 +403,193 @@ function parseResponse(
   }
 }
 
+// ─── Compose path: anchor-aware, non-persisting caption generation ───
+//
+// The autopilot path (`generateCaption`) is post-centric: it reads a
+// social_posts row, infers everything from its source asset, and writes
+// the result back to the row. Compose has different shape: the
+// subscriber picked an anchor (Topic) before any post row exists, and
+// the resulting caption seeds the form for review/edit. It MUST NOT
+// persist anything — publish path handles that.
+//
+// This shares `PLATFORM_RULES`, `parseResponse`, and the same Anthropic
+// client. The prompt is tailored to the anchor-first paradigm: the
+// caption's job is to tease the linked anchor URL.
+
+export type ComposeAnchorInput = {
+  type: "blog_post" | "project";
+  title: string | null;
+  excerpt: string | null;
+  contentPillar: string | null;
+  articleTags: string[];
+};
+
+export type ComposeHeroInput = {
+  mediaType: string | null;
+  contextNote: string | null;
+  aiAnalysis: Record<string, unknown> | null;
+} | null;
+
+/**
+ * Map a Compose template's (platform, format) tuple onto the
+ * PLATFORM_RULES key the caption generator already knows about.
+ */
+export function templateToPlatformFormat(
+  platform: string,
+  format: string,
+): PlatformFormat {
+  const key = `${platform}_${format}`;
+  const map: Record<string, PlatformFormat> = {
+    facebook_single_image: "fb_feed",
+    facebook_carousel: "fb_feed",
+    facebook_video: "fb_feed",
+    facebook_reel: "fb_reel",
+    instagram_single_image: "ig_feed",
+    instagram_carousel: "ig_feed",
+    instagram_reel: "ig_reel",
+    instagram_story: "ig_story",
+    pinterest_tall_pin: "pinterest",
+    blog_article: "ig_feed", // unused in practice; safe fallback
+  };
+  return map[key] || "ig_feed";
+}
+
+/**
+ * Generate a Compose caption + hashtag set in the site's brand voice,
+ * tailored to the anchor (Topic) the subscriber picked.
+ *
+ * Returns {caption, hashtags}. Does not persist. Failures throw so the
+ * caller can fall back to the static stub.
+ */
+export async function composeAnchorCaption(opts: {
+  siteId: string;
+  platformFormat: PlatformFormat;
+  anchor: ComposeAnchorInput;
+  hero: ComposeHeroInput;
+  link: string | null;
+}): Promise<{ caption: string; hashtags: string[] }> {
+  const { siteId, platformFormat, anchor, hero, link } = opts;
+
+  const [site] = await sql`
+    SELECT name, url, brand_voice, brand_playbook
+    FROM sites
+    WHERE id = ${siteId}
+  `;
+  if (!site) throw new Error(`Site ${siteId} not found`);
+
+  const rules = PLATFORM_RULES[platformFormat] || PLATFORM_RULES.ig_feed;
+  const playbook = site.brand_playbook as BrandPlaybook | null;
+  const brandVoice = (site.brand_voice || {}) as Record<string, unknown>;
+
+  const prompt = buildAnchorPrompt({
+    siteName: String(site.name || ""),
+    siteUrl: String(site.url || ""),
+    platform: platformFormat,
+    rules,
+    playbook,
+    brandVoice,
+    anchor,
+    hero,
+    link,
+  });
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  return parseResponse(text, rules);
+}
+
+function buildAnchorPrompt(args: {
+  siteName: string;
+  siteUrl: string;
+  platform: PlatformFormat;
+  rules: (typeof PLATFORM_RULES)[string];
+  playbook: BrandPlaybook | null;
+  brandVoice: Record<string, unknown>;
+  anchor: ComposeAnchorInput;
+  hero: ComposeHeroInput;
+  link: string | null;
+}): string {
+  const { siteName, siteUrl, platform, rules, playbook, brandVoice, anchor, hero, link } = args;
+  const parts: string[] = [];
+
+  parts.push("You write social captions whose single job is to make people click the linked URL. The post is a vehicle; the linked page is the destination.");
+  parts.push("");
+  parts.push("## Brand");
+  parts.push(`Site: ${siteName} (${siteUrl})`);
+  if (playbook) {
+    const angle = playbook.brandPositioning?.selectedAngles?.[0];
+    const lang = playbook.audienceResearch?.languageMap;
+    if (angle) {
+      parts.push(`Brand angle: "${angle.name}" — ${angle.tagline || ""}`);
+      parts.push(`Tone: ${angle.tone || "engaging"}`);
+    }
+    if (playbook.offerCore?.offerStatement?.emotionalCore) {
+      parts.push(`Emotional core: ${playbook.offerCore.offerStatement.emotionalCore}`);
+    }
+    if (lang) {
+      parts.push("");
+      parts.push("## Audience language (use these phrases, not marketing speak)");
+      if (lang.painPhrases?.length) parts.push(`Pain phrases: ${lang.painPhrases.join(", ")}`);
+      if (lang.desirePhrases?.length) parts.push(`Desire phrases: ${lang.desirePhrases.join(", ")}`);
+      if (lang.emotionalTriggers?.length) parts.push(`Emotional triggers: ${lang.emotionalTriggers.join(", ")}`);
+    }
+  } else {
+    if (brandVoice.tone) parts.push(`Tone: ${brandVoice.tone}`);
+    if (Array.isArray(brandVoice.keywords)) parts.push(`Keywords: ${(brandVoice.keywords as string[]).join(", ")}`);
+    if (Array.isArray(brandVoice.avoid)) parts.push(`Avoid: ${(brandVoice.avoid as string[]).join(", ")}`);
+  }
+
+  parts.push("");
+  parts.push("## Topic the post points at");
+  parts.push(`Type: ${anchor.type === "blog_post" ? "article" : "project page"}`);
+  if (anchor.title) parts.push(`Title: "${anchor.title}"`);
+  if (anchor.excerpt) parts.push(`Excerpt: "${anchor.excerpt}"`);
+  if (anchor.contentPillar) parts.push(`Content pillar: ${anchor.contentPillar}`);
+  if (anchor.articleTags.length > 0) {
+    parts.push(`Article tags (use as concept inspiration, NOT as caption keywords): ${anchor.articleTags.join(", ")}`);
+  }
+  if (link) parts.push(`Link: ${link}`);
+
+  if (hero) {
+    parts.push("");
+    parts.push("## Visual being shown");
+    parts.push(`Media type: ${hero.mediaType || "image"}`);
+    if (hero.contextNote) parts.push(`Context: "${hero.contextNote}"`);
+    if (hero.aiAnalysis?.description) parts.push(`Visual: ${String(hero.aiAnalysis.description)}`);
+  }
+
+  parts.push("");
+  parts.push("## Platform rules");
+  parts.push(`Platform: ${platform}`);
+  parts.push(`Max length: ${rules.maxLength} chars`);
+  parts.push(`Hashtags: ${rules.hashtagRange[0]}–${rules.hashtagRange[1]}`);
+  parts.push(`Style: ${rules.style}`);
+
+  parts.push("");
+  parts.push("## Response format");
+  parts.push("Respond with ONLY a JSON object, no markdown fencing:");
+  parts.push('{ "caption": "...", "hashtags": ["#PascalCaseTag", "..."] }');
+  parts.push("");
+  parts.push("Rules:");
+  parts.push("- First line stops the scroll — hook tied to the topic, not generic");
+  parts.push("- Tease the linked page; don't summarize it");
+  const isFeedLike = platform === "fb_feed" || platform === "linkedin" || platform === "twitter" || platform === "gbp";
+  if (isFeedLike && link) {
+    parts.push("- Include the link in the caption text (Feed/LinkedIn/Twitter/GBP render inline links)");
+  } else if (link) {
+    parts.push("- Do NOT include the link in the caption text — Reel/Story/IG-feed surfaces don't render inline links well; the link goes in the post's link field separately");
+  }
+  parts.push("- Hashtags PascalCase (#KitchenDesign not #kitchendesign), in the hashtags array NOT in the caption text");
+  parts.push("- Use the audience's actual language, not marketing speak");
+
+  return parts.join("\n");
+}
+
 /**
  * Generate captions for all scheduled posts that don't have one yet.
  */

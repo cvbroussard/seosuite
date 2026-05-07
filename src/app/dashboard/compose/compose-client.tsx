@@ -32,6 +32,9 @@ interface RecommendResponse {
   link: string;
   cta: { type: string; label: string; url: string };
   hashtags: string[];
+  // When the topic's hero asset type doesn't match the template's
+  // allowed types — e.g., video hero on Single Image template.
+  heroTypeMismatch: { heroType: string; allowedTypes: string[] } | null;
 }
 
 interface PublishResponse {
@@ -236,7 +239,12 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
     setRecommendLoading(true);
     setError("");
     try {
-      const res = await fetch(`/api/compose/recommend?template_id=${templateId}`);
+      const params = new URLSearchParams({ template_id: templateId });
+      if (selectedAnchor) {
+        params.set("anchor_id", selectedAnchor.id);
+        params.set("anchor_type", selectedAnchor.type);
+      }
+      const res = await fetch(`/api/compose/recommend?${params.toString()}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Failed to load recommendation");
@@ -422,11 +430,10 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
         onNavigate={setStep}
       />
 
-      {/* Selected-topic chip — persists on the styling steps (Template +
-          Distribution). Hidden from Recommend onward because the topic
-          has been absorbed into editable content (link/caption/assets) —
-          showing it there would be redundant. Click jumps back to Topic. */}
-      {selectedAnchor && (step === "select" || step === "reach") && (
+      {/* Selected-topic chip — persists across every step after Topic so
+          the subscriber always knows what this post is surfacing.
+          Click jumps back to Topic to swap. */}
+      {selectedAnchor && step !== "topic" && step !== "published" && (
         <button
           type="button"
           onClick={backToTopic}
@@ -769,7 +776,21 @@ function RecommendReviewView(props: RecommendReviewProps) {
   const unused = recommendation.alternatives.filter((a) => !chosenAssetIds.includes(a.id));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="space-y-4">
+      {recommendation.heroTypeMismatch && !isReview && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-xs">
+          <div className="font-semibold text-foreground mb-0.5">
+            Topic hero is {recommendation.heroTypeMismatch.heroType}, template wants{" "}
+            {recommendation.heroTypeMismatch.allowedTypes.join("/")}
+          </div>
+          <div className="text-muted leading-relaxed">
+            Reels usually outperform single images on Meta — go back to Template
+            and pick a video format to use the topic's hero directly. Otherwise
+            swap in an image asset below.
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Left: editable package */}
       <div className="space-y-4">
         <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
@@ -967,6 +988,7 @@ function RecommendReviewView(props: RecommendReviewProps) {
             </p>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
