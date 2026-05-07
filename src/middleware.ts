@@ -94,9 +94,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 
-  // In development, only enforce admin auth — skip subdomain logic
+  // In development, only enforce admin auth — skip subdomain logic.
+  // gateAdmin returns null when it has nothing to do (api routes,
+  // non-admin paths, valid cookie). Next 16 treats a null middleware
+  // return as "no response" → 404, so coerce to NextResponse.next().
   if (isLocal) {
-    return await gateAdmin(req, pathname);
+    const gate = await gateAdmin(req, pathname);
+    return gate ?? NextResponse.next();
   }
 
   // API routes — shared across all subdomains, pass through
