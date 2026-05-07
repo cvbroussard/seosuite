@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ManagePage } from "@/components/manage/manage-page";
 import type { AssembledBlogPrompt } from "@/lib/v2-generator/blog";
-import type { TraceEntry } from "@/lib/v2-generator/blog";
+import type { TraceEntry, SkippedBlock } from "@/lib/v2-generator/blog";
 
 type ArticleType = "blog" | "project_chapter" | "service";
 
@@ -18,6 +18,7 @@ const BLOG_CONTENT_TYPES = [
 interface InspectorResponse {
   assembled: AssembledBlogPrompt;
   traces: TraceEntry[][];
+  skipped: SkippedBlock[];
   heroAssetId: string;
   pillar: string | null;
   bodyAssetCount: number;
@@ -229,8 +230,53 @@ function PromptInspectorContent({ siteId }: { siteId: string }) {
               ))}
             </div>
           </div>
+          {result.skipped.length > 0 && <SkippedPanel skipped={result.skipped} />}
         </>
       )}
+    </div>
+  );
+}
+
+function SkippedPanel({ skipped }: { skipped: SkippedBlock[] }) {
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+      <div className="flex items-start gap-2 mb-3">
+        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+          SKIPPED
+        </span>
+        <div>
+          <h3 className="text-sm font-medium">
+            Blocks omitted from this prompt ({skipped.length})
+          </h3>
+          <p className="text-[10px] text-muted leading-snug mt-0.5">
+            These conditional blocks were skipped because their upstream inputs
+            were empty or missing. Each is a richness signal worth reviewing —
+            the absence is the diagnostic.
+          </p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {skipped.map((s, i) => (
+          <div
+            key={i}
+            className="rounded border border-amber-500/20 bg-background p-3"
+          >
+            <div className="text-xs font-medium">{s.name}</div>
+            <div className="text-[10px] text-muted leading-snug mt-1">
+              <span className="text-amber-400 font-mono mr-1">reason:</span>
+              {s.reason}
+            </div>
+            <div className="text-[10px] leading-snug mt-1">
+              <span className="text-muted font-mono mr-1">diagnostic:</span>
+              {s.diagnostic}
+            </div>
+            <div className="text-[10px] font-mono text-muted mt-1.5 break-all">
+              {s.file}
+              {s.lines ? `:${s.lines}` : ""}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { verifyCookie } from "@/lib/cookie-sign";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { assembleBlogPrompt, buildBlockTraces } from "@/lib/v2-generator/blog";
+import { assembleBlogPrompt, buildBlockTraces, buildSkippedBlocks } from "@/lib/v2-generator/blog";
 
 /**
  * POST /api/manage/prompt-inspector/blog
@@ -107,10 +107,12 @@ export async function POST(req: NextRequest) {
     });
 
     const traces = buildBlockTraces(assembled);
+    const skipped = buildSkippedBlocks(assembled);
 
     return NextResponse.json({
       assembled,
       traces,
+      skipped,
       heroAssetId: heroId,
       pillar,
       bodyAssetCount: bodyAssetIds.length,
