@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
 import {
   pullHook,
+  getHookBankDepth,
   getExistingTitles,
   getVendorLinks,
   getProjectLinks,
@@ -41,8 +42,11 @@ export interface AssembledBlogPrompt {
     brandTone: string | null;
     voiceTone: string | null;
     voiceLengthPattern: string | null;
+    voiceCasing: string | null;
     voiceEmojiPolicy: string | null;
+    voiceDistinctiveTraitCount: number;
     hookText: string | null;
+    hookBankDepth: number;
     researchChars: number;
     vendorLinks: string[];
     projectLinks: string[];
@@ -92,8 +96,9 @@ export async function assembleBlogPrompt(spec: BlogGenerateSpec): Promise<Assemb
   const heroAsset = assets.find((a) => a.isHero) || assets[0];
 
   // 3. Parallel context gathering
-  const [hookText, existingTitles, vendorData, research, projectLinks] = await Promise.all([
-    pullHook(spec.siteId),
+  const [hookText, hookBankDepth, existingTitles, vendorData, research, projectLinks] = await Promise.all([
+    pullHook(spec.siteId, { dryRun: spec.dryRun }),
+    getHookBankDepth(spec.siteId),
     getExistingTitles(spec.siteId, "blog"),
     getVendorLinks(spec.heroAssetId),
     researchAssetContext(heroAsset.contextNote || ""),
@@ -139,8 +144,13 @@ export async function assembleBlogPrompt(spec: BlogGenerateSpec): Promise<Assemb
       brandTone: (playbook?.brandPositioning?.selectedAngles?.[0]?.tone as string) || null,
       voiceTone: (brandVoice.tone as string) || null,
       voiceLengthPattern: (brandVoice.length_pattern as string) || null,
+      voiceCasing: (brandVoice.casing as string) || null,
       voiceEmojiPolicy: (brandVoice.emoji_use as string) || null,
+      voiceDistinctiveTraitCount: Array.isArray(brandVoice.distinctive_traits)
+        ? (brandVoice.distinctive_traits as string[]).length
+        : 0,
       hookText,
+      hookBankDepth,
       researchChars: research.length,
       vendorLinks: vendorData.formatted,
       projectLinks,

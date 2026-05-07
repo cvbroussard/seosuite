@@ -1,7 +1,12 @@
 import { verifyCookie } from "@/lib/cookie-sign";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { assembleBlogPrompt, buildBlockTraces, buildSkippedBlocks } from "@/lib/v2-generator/blog";
+import {
+  assembleBlogPrompt,
+  buildBlockTraces,
+  buildSkippedBlocks,
+  assessReadiness,
+} from "@/lib/v2-generator/blog";
 
 /**
  * POST /api/manage/prompt-inspector/blog
@@ -104,15 +109,20 @@ export async function POST(req: NextRequest) {
       intent: intent || undefined,
       contentTypeOverride: contentTypeOverride || undefined,
       status: "draft",
+      // Inspector previews must not consume hooks; pullHook would
+      // otherwise increment used_count for unpublished previews.
+      dryRun: true,
     });
 
     const traces = buildBlockTraces(assembled);
     const skipped = buildSkippedBlocks(assembled);
+    const readiness = assessReadiness(assembled);
 
     return NextResponse.json({
       assembled,
       traces,
       skipped,
+      readiness,
       heroAssetId: heroId,
       pillar,
       bodyAssetCount: bodyAssetIds.length,

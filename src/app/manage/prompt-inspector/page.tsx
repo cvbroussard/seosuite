@@ -228,10 +228,141 @@ function PromptInspectorContent({ siteId }: { siteId: string }) {
                   onToggle={() => toggleBlock(i)}
                 />
               ))}
+              <JsonPayloadCard
+                index={result.assembled.promptStats.blocks.length}
+                model={result.assembled.effectiveModel}
+                maxTokens={result.assembled.effectiveMaxTokens}
+                prompt={result.assembled.prompt}
+                promptStats={result.assembled.promptStats}
+                useSonnet={result.assembled.useSonnet}
+                open={openBlocks.has(result.assembled.promptStats.blocks.length)}
+                onToggle={() => toggleBlock(result.assembled.promptStats.blocks.length)}
+              />
             </div>
           </div>
           {result.skipped.length > 0 && <SkippedPanel skipped={result.skipped} />}
         </>
+      )}
+    </div>
+  );
+}
+
+function JsonPayloadCard({
+  index,
+  model,
+  maxTokens,
+  prompt,
+  promptStats,
+  useSonnet,
+  open,
+  onToggle,
+}: {
+  index: number;
+  model: string;
+  maxTokens: number;
+  prompt: string;
+  promptStats: { chars: number; estimatedTokens: number; lines: number };
+  useSonnet: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  // The exact shape sent to anthropic.messages.create. Compact view shows
+  // a placeholder for content; expanded view embeds the actual prompt
+  // string properly JSON-escaped so an operator can copy-paste verbatim.
+  const compact = {
+    model,
+    max_tokens: maxTokens,
+    messages: [
+      {
+        role: "user",
+        content: `<full prompt — ${promptStats.chars.toLocaleString()} chars / ~${promptStats.estimatedTokens.toLocaleString()} tokens>`,
+      },
+    ],
+  };
+  const full = {
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  };
+
+  return (
+    <div className="rounded border border-violet-500/30 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2 bg-violet-500/10 hover:bg-violet-500/15 text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] text-violet-400 font-mono w-6 shrink-0">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-violet-500/20 text-violet-400 shrink-0">
+            API PAYLOAD
+          </span>
+          <span className="text-xs font-medium truncate">
+            anthropic.messages.create — what ships to the model
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 text-[10px] text-muted font-mono">
+          <span>{model}</span>
+          <span>·</span>
+          <span>{maxTokens.toLocaleString()} max</span>
+          <span className="text-foreground ml-1">{open ? "▾" : "▸"}</span>
+        </div>
+      </button>
+      {open && (
+        <div className="border-t border-violet-500/20 bg-surface p-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-[10px]">
+            <div>
+              <div className="text-muted">model</div>
+              <div className="font-mono">{model}</div>
+              <div className="text-muted mt-0.5">
+                {useSonnet ? "Sonnet (playbook present)" : "Haiku fallback (no playbook)"}
+              </div>
+            </div>
+            <div>
+              <div className="text-muted">max_tokens</div>
+              <div className="font-mono">{maxTokens.toLocaleString()}</div>
+              <div className="text-muted mt-0.5">
+                input ~{promptStats.estimatedTokens.toLocaleString()} tokens
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
+              Compact view
+            </div>
+            <pre className="text-[10px] font-mono whitespace-pre-wrap leading-relaxed bg-background border border-border rounded p-2">
+              {JSON.stringify(compact, null, 2)}
+            </pre>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] text-muted uppercase tracking-wide">
+                Full payload (copy-pasteable)
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(JSON.stringify(full, null, 2));
+                }}
+                className="text-[10px] text-violet-400 hover:text-violet-300 underline"
+              >
+                Copy
+              </button>
+            </div>
+            <pre className="text-[10px] font-mono whitespace-pre-wrap leading-relaxed bg-background border border-border rounded p-2 max-h-96 overflow-y-auto">
+              {JSON.stringify(full, null, 2)}
+            </pre>
+          </div>
+          <div className="text-[10px] text-muted leading-snug">
+            Notes: no <code className="font-mono">system</code> field — every
+            instruction is in the user message.{" "}
+            <code className="font-mono">temperature</code>,{" "}
+            <code className="font-mono">tools</code>, and{" "}
+            <code className="font-mono">stream</code> are unset (API defaults).
+            JSON output contract is enforced by the Response format block in the
+            prompt + parsing on our side, not by tool use.
+          </div>
+        </div>
       )}
     </div>
   );

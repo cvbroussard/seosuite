@@ -8,7 +8,7 @@
 export { MODEL_CONFIG, FALLBACK_MODEL, FALLBACK_MAX_TOKENS, getModelConfig } from "./model-config";
 export type { ContentTypeKey, ModelConfig } from "./model-config";
 
-export { pullHook } from "./hook-bank";
+export { pullHook, getHookBankDepth } from "./hook-bank";
 
 export { getExistingTitles } from "./existing-titles";
 export type { Pool } from "./existing-titles";

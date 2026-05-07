@@ -46,6 +46,13 @@ export interface BlogGenerateSpec {
 
   /** Status to persist with. Defaults to 'draft'. */
   status?: "draft" | "published" | "flagged" | "archived";
+
+  /**
+   * When true, side-effects in the assembly path are suppressed.
+   * Used by the prompt inspector so repeated dry-runs don't burn through
+   * the hook bank (pullHook normally increments used_count).
+   */
+  dryRun?: boolean;
 }
 
 export interface BlogGeneratedBody {
