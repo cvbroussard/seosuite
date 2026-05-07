@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PlatformIcon } from "@/components/platform-icons";
 
-type StatusFilter = "recent" | "live" | "quarantined" | "all";
+type StatusFilter = "recent" | "live" | "draft" | "quarantined" | "all";
 
 const ALL_PLATFORMS = [
   "instagram", "tiktok", "facebook", "youtube",
@@ -14,6 +14,7 @@ const ALL_PLATFORMS = [
 const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
   { key: "recent", label: "Recent" },
   { key: "live", label: "Live" },
+  { key: "draft", label: "Draft" },
   { key: "quarantined", label: "Quarantined" },
   { key: "all", label: "All" },
 ];
@@ -105,7 +106,15 @@ function isRecent(publishedAt: string | null): boolean {
 }
 
 export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGroups }: Props) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("recent");
+  // Smart default: when nothing is recently published but drafts exist
+  // (e.g., fresh v2 backfill), surface drafts so the page isn't empty.
+  const initialFilter: StatusFilter = (() => {
+    const recent = recentPosts.filter((p) => p.status === "published" && isRecent(p.publishedAt)).length;
+    const drafts = recentPosts.filter((p) => p.status === "draft").length;
+    if (recent === 0 && drafts > 0) return "draft";
+    return "recent";
+  })();
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilter);
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [posts, setPosts] = useState(recentPosts);
   const [actioning, setActioning] = useState<string | null>(null);
@@ -159,6 +168,7 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
     : posts.filter((p) => {
         if (statusFilter === "recent") return p.status === "published" && isRecent(p.publishedAt);
         if (statusFilter === "live") return p.status === "published";
+        if (statusFilter === "draft") return p.status === "draft";
         if (statusFilter === "quarantined") return p.status === "held" || p.status === "failed";
         return true;
       });
@@ -171,11 +181,13 @@ export function UnipostDashboard({ metrics, recentPosts, platforms, campaignGrou
   // Counts per status tab
   const recentCount = posts.filter((p) => p.status === "published" && isRecent(p.publishedAt)).length;
   const liveCount = posts.filter((p) => p.status === "published").length;
+  const draftCount = posts.filter((p) => p.status === "draft").length;
   const quarantinedCount = posts.filter((p) => p.status === "held" || p.status === "failed").length;
 
   const tabCounts: Record<StatusFilter, number> = {
     recent: recentCount,
     live: liveCount,
+    draft: draftCount,
     quarantined: quarantinedCount,
     all: posts.length,
   };

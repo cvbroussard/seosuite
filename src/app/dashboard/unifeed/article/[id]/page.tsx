@@ -2,6 +2,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { ArticleActions } from "./article-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +15,9 @@ interface BlogArticle {
   excerpt: string | null;
   meta_title: string | null;
   meta_description: string | null;
-  og_image_url: string | null;
-  tags: string[];
-  content_pillar: string | null;
+  hero_url: string | null;        // resolved via JOIN to media_assets
+  content_tags: string[];         // v2 array (replaces singular `tags`)
+  content_pillars: string[];      // v2 array (replaces singular `content_pillar`)
   status: string;
   published_at: string | null;
   created_at: string;
@@ -55,13 +56,15 @@ export default async function ArticleReviewPage({
   const { id } = await params;
 
   const [article] = (await sql`
-    SELECT id, site_id, slug, title, body, excerpt,
-           meta_title, meta_description, og_image_url,
-           tags, content_pillar, status,
-           published_at, created_at, updated_at
-    FROM blog_posts
-    WHERE id = ${id}
-      AND site_id = ${session.activeSiteId}
+    SELECT bp.id, bp.site_id, bp.slug, bp.title, bp.body, bp.excerpt,
+           bp.meta_title, bp.meta_description,
+           ma.storage_url AS hero_url,
+           bp.content_tags, bp.content_pillars, bp.status,
+           bp.published_at, bp.created_at, bp.updated_at
+    FROM blog_posts_v2 bp
+    LEFT JOIN media_assets ma ON ma.id = bp.hero_asset_id
+    WHERE bp.id = ${id}
+      AND bp.site_id = ${session.activeSiteId}
     LIMIT 1
   `) as BlogArticle[];
 
@@ -104,20 +107,15 @@ export default async function ArticleReviewPage({
               View live ↗
             </a>
           )}
-          <Link
-            href="/dashboard/blog"
-            className="rounded border border-border px-3 py-1 text-xs text-muted hover:text-foreground hover:bg-surface-hover"
-          >
-            Manage in Blog →
-          </Link>
+          <ArticleActions articleId={article.id} status={article.status} />
         </div>
       </header>
 
       <article className="rounded-xl border border-border bg-surface shadow-card">
-        {article.og_image_url && (
+        {article.hero_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={article.og_image_url}
+            src={article.hero_url}
             alt={article.title}
             className="w-full aspect-[16/9] object-cover rounded-t-xl"
           />
@@ -140,20 +138,20 @@ export default async function ArticleReviewPage({
                 {new Date(article.published_at).toLocaleString()}
               </span>
             )}
-            {article.content_pillar && (
+            {article.content_pillars && article.content_pillars.length > 0 && (
               <span>
-                <span className="font-medium text-foreground">Pillar:</span>{" "}
-                {article.content_pillar}
+                <span className="font-medium text-foreground">Pillars:</span>{" "}
+                {article.content_pillars.join(", ")}
               </span>
             )}
             <span>
               <span className="font-medium text-foreground">Slug:</span>{" "}
               <span className="font-mono">{article.slug}</span>
             </span>
-            {article.tags && article.tags.length > 0 && (
+            {article.content_tags && article.content_tags.length > 0 && (
               <span>
                 <span className="font-medium text-foreground">Tags:</span>{" "}
-                {article.tags.join(", ")}
+                {article.content_tags.join(", ")}
               </span>
             )}
           </div>

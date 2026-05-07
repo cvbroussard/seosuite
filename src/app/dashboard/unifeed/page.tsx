@@ -40,8 +40,9 @@ export default async function UnifeedPage() {
 
   const siteId = session.activeSiteId;
 
-  // Aggregated metrics (social posts only — followers count is a social
-  // concept; articles don't have followers in the same sense)
+  // Aggregated metrics — articles read from blog_posts_v2 only (v2
+  // cutover: no fallback to legacy). Social posts continue from
+  // social_posts since publishing-side hasn't migrated yet.
   const [metrics] = await sql`
     SELECT
       (SELECT COALESCE(SUM(
@@ -57,14 +58,14 @@ export default async function UnifeedPage() {
           WHERE site_id = ${siteId} AND status = 'published'
           AND published_at > NOW() - INTERVAL '7 days')
        +
-         (SELECT COUNT(*)::int FROM blog_posts
+         (SELECT COUNT(*)::int FROM blog_posts_v2
           WHERE site_id = ${siteId} AND status = 'published'
           AND published_at > NOW() - INTERVAL '7 days')
       ) AS posts_this_week,
       (SELECT
          (SELECT COUNT(*)::int FROM social_posts WHERE site_id = ${siteId} AND status = 'published')
        +
-         (SELECT COUNT(*)::int FROM blog_posts WHERE site_id = ${siteId} AND status = 'published')
+         (SELECT COUNT(*)::int FROM blog_posts_v2 WHERE site_id = ${siteId} AND status = 'published')
       ) AS total_posts
   `;
 
@@ -93,14 +94,13 @@ export default async function UnifeedPage() {
 
       UNION ALL
 
-      -- Blog articles. platform_post_url points at the internal review
-      -- surface (/dashboard/unifeed/article/[id]) so clicking a card
-      -- opens the long-form proofing view rather than the live URL.
-      -- The review surface itself surfaces a "View live ↗" button when
-      -- the article is published.
+      -- Blog articles (v2). Hero image now comes via the FK to
+      -- media_assets (no more og_image_url string). platform_post_url
+      -- points at the internal review surface so clicking a card opens
+      -- the long-form proofing view rather than the live URL.
       SELECT bp.id::text AS id,
              COALESCE(bp.title, bp.excerpt) AS caption,
-             bp.og_image_url AS media_url,
+             ma.storage_url AS media_url,
              'blog'::text AS platform,
              COALESCE(bs.blog_title, '') AS account_name,
              bp.status AS status,
@@ -109,7 +109,8 @@ export default async function UnifeedPage() {
              bp.created_at AS created_at,
              ('/dashboard/unifeed/article/' || bp.id::text) AS platform_post_url,
              NULL::text AS error_message
-      FROM blog_posts bp
+      FROM blog_posts_v2 bp
+      LEFT JOIN media_assets ma ON ma.id = bp.hero_asset_id
       LEFT JOIN blog_settings bs ON bs.site_id = bp.site_id
       WHERE bp.site_id = ${siteId}
         AND bp.status IN ('published', 'draft')
@@ -142,9 +143,9 @@ export default async function UnifeedPage() {
     ...legacyPlatforms.filter(p => !platformSet.has(p.platform)),
   ];
 
-  // Add a synthetic "blog" platform tile if any blog content exists
+  // Add a synthetic "blog" platform tile if any v2 blog content exists
   const [blogPresence] = await sql`
-    SELECT COUNT(*)::int AS n FROM blog_posts WHERE site_id = ${siteId}
+    SELECT COUNT(*)::int AS n FROM blog_posts_v2 WHERE site_id = ${siteId}
   `;
   if ((blogPresence?.n as number) > 0) {
     const [bs] = await sql`SELECT blog_title FROM blog_settings WHERE site_id = ${siteId}`;
