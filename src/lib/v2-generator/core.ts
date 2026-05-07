@@ -29,9 +29,17 @@ const MODEL = "claude-haiku-4-5-20251001";
  * Returns the v2 row id, slug, title, and asset count.
  */
 export async function generateV2Content(spec: ContentSpec): Promise<GenerateResult> {
-  // 1. Load site context (brand voice + playbook + name + url)
+  // 1. Load site context (brand DNA + name + url).
+  //
+  // Per 2026-05-06 decision: brand_dna is the single source of truth.
+  // brand_playbook is being retired (column drop queued as task #132).
+  // brand_dna contains:
+  //   - signals.voice / signals.customer_voice / signals.exemplars (observed)
+  //   - playbook (derived from signals — equivalent to legacy brand_playbook)
+  // We pull both: the embedded playbook for positioning + audience language,
+  // and the signals for voice fingerprint + concrete reference samples.
   const [site] = await sql`
-    SELECT name, url, brand_voice, brand_playbook
+    SELECT name, url, brand_dna
     FROM sites
     WHERE id = ${spec.siteId}
   `;
@@ -39,8 +47,9 @@ export async function generateV2Content(spec: ContentSpec): Promise<GenerateResu
 
   const siteName = String(site.name || "");
   const siteUrl = String(site.url || "");
-  const playbook = site.brand_playbook as BrandPlaybook | null;
-  const brandVoice = (site.brand_voice || {}) as Record<string, unknown>;
+  const dna = (site.brand_dna || {}) as Record<string, unknown>;
+  const playbook = (dna.playbook as BrandPlaybook | null) || null;
+  const brandVoice = (dna.signals as Record<string, unknown> | null)?.voice as Record<string, unknown> || {};
 
   // 2. Resolve available assets (hero + body candidates) with hints
   const assetIds = [spec.heroAssetId, ...(spec.bodyAssetIds || [])].filter(
@@ -198,12 +207,15 @@ async function persistV2(
   slug: string,
   availableAssets: Array<{ id: string; type: string }>,
 ): Promise<GenerateResult> {
-  // Find which assets the LLM actually placed in the body
+  // Find which assets the LLM actually placed in the body, filtered to
+  // the known-available set so LLM hallucinations (UUIDs that aren't in
+  // media_assets) don't break the FK insert into the manifest table.
   const placeholderRegex = /\{\{asset:([0-9a-f-]{36})\}\}/g;
+  const knownIds = new Set(availableAssets.map((a) => a.id));
   const placedIds = new Set<string>();
   let match;
   while ((match = placeholderRegex.exec(body.body)) !== null) {
-    placedIds.add(match[1]);
+    if (knownIds.has(match[1])) placedIds.add(match[1]);
   }
   // Hero is always slot 0; placed body assets follow; gallery is unused for now.
   placedIds.delete(spec.heroAssetId); // hero handled separately

@@ -152,12 +152,14 @@ function brandPreamble(
   const parts: string[] = [];
   parts.push("## Brand context");
   parts.push(`Site: ${siteName} (${siteUrl})`);
+
+  // ── Strategic positioning + audience language (from dna.playbook) ──
   if (playbook) {
     const angle = playbook.brandPositioning?.selectedAngles?.[0];
     const lang = playbook.audienceResearch?.languageMap;
     if (angle) {
       parts.push(`Brand angle: "${angle.name}" — ${angle.tagline || ""}`);
-      parts.push(`Tone: ${angle.tone || "engaging"}`);
+      parts.push(`Tone (positioning): ${angle.tone || "engaging"}`);
     }
     if (playbook.offerCore?.offerStatement?.emotionalCore) {
       parts.push(`Emotional core: ${playbook.offerCore.offerStatement.emotionalCore}`);
@@ -167,10 +169,25 @@ function brandPreamble(
       if (lang.desirePhrases?.length) parts.push(`Desire phrases: ${lang.desirePhrases.join(", ")}`);
       if (lang.emotionalTriggers?.length) parts.push(`Emotional triggers: ${lang.emotionalTriggers.join(", ")}`);
     }
-  } else {
-    if (brandVoice.tone) parts.push(`Tone: ${brandVoice.tone}`);
-    if (Array.isArray(brandVoice.keywords)) parts.push(`Keywords: ${(brandVoice.keywords as string[]).join(", ")}`);
-    if (Array.isArray(brandVoice.avoid)) parts.push(`Avoid: ${(brandVoice.avoid as string[]).join(", ")}`);
   }
+
+  // ── Voice fingerprint observed from real published content ──
+  // (dna.signals.voice — additive value over the playbook alone)
+  if (brandVoice && Object.keys(brandVoice).length > 0) {
+    parts.push("");
+    parts.push("## Voice fingerprint (observed from real published posts)");
+    if (brandVoice.tone) parts.push(`Observed tone: ${brandVoice.tone}`);
+    if (brandVoice.length_pattern) parts.push(`Length pattern: ${brandVoice.length_pattern}`);
+    if (brandVoice.casing) parts.push(`Casing: ${brandVoice.casing}`);
+    if (brandVoice.emoji_use) parts.push(`Emoji use: ${brandVoice.emoji_use}`);
+    if (brandVoice.hashtag_use) parts.push(`Hashtag use: ${brandVoice.hashtag_use}`);
+    if (Array.isArray(brandVoice.sign_offs) && brandVoice.sign_offs.length) {
+      parts.push(`Sign-offs: ${(brandVoice.sign_offs as string[]).join(" | ")}`);
+    }
+    if (Array.isArray(brandVoice.distinctive_traits) && brandVoice.distinctive_traits.length) {
+      parts.push(`Distinctive traits: ${(brandVoice.distinctive_traits as string[]).join("; ")}`);
+    }
+  }
+
   return parts.join("\n");
 }

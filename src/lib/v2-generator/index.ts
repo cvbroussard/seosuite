@@ -20,6 +20,21 @@ export { generateBlogPost, generateProjectPage, generateServicePage } from "./ad
 export { generateV2Content } from "./core";
 export { slice, sliceAll } from "./slicers";
 export {
+  orchestrate,
+  orchestrateBatch,
+  previewStrategies,
+  assessSite,
+  STRATEGIES,
+  STRATEGY_LIST,
+} from "./orchestrator";
+export type {
+  OrchestrateResult,
+  SiteAssessment,
+  StrategyKind,
+} from "./orchestrator";
+export { generateRewardPrompts } from "./reward-prompts/generate";
+export type { RewardPrompt } from "./reward-prompts/generate";
+export {
   PLATFORM_REGISTRY,
   PLATFORM_FORMATS,
   getPlatformDef,
