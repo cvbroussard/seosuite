@@ -78,8 +78,8 @@ function traceBlock(name: string, a: AssembledBlogPrompt): TraceEntry[] {
           ? "spec.contentTypeOverride"
           : "classifyBlogContentType()",
         detail: a.spec.contentTypeOverride
-          ? `Content type forced by caller (no LLM classification).`
-          : `LLM-classified content type from hero asset context + research.`,
+          ? `Content type forced by caller (no classification ran).`
+          : `Pure rules-based classifier (no LLM): authority_overview if site lacks one, vendor_spotlight if Wikipedia research >200 chars, project_story if context_note has project keywords (before/after/reveal/installed/client/etc.), else deep_dive.`,
         inputName: a.spec.contentTypeOverride ? "spec.contentTypeOverride" : undefined,
         file: a.spec.contentTypeOverride ? undefined : CLASSIFY_FILE,
         sample: [a.contentType],
@@ -218,8 +218,16 @@ function traceBlock(name: string, a: AssembledBlogPrompt): TraceEntry[] {
       return [
         {
           kind: "external",
-          label: "Wikipedia API",
-          detail: "Term extraction from hero asset's context_note → Wikipedia summary fetch. Cached per term.",
+          label: "Claude Haiku — term extraction",
+          detail: "The ONLY LLM call during prompt assembly. Haiku scans the hero asset's context_note and pulls out entity names worth researching (vendors, materials, techniques).",
+          service: "Anthropic API (claude-haiku-4-5-20251001)",
+          file: "src/lib/research/wikipedia.ts",
+          lines: "50",
+        },
+        {
+          kind: "external",
+          label: "Wikipedia REST API",
+          detail: "For each extracted term, fetch the Wikipedia summary (title + extract). Cached per term across calls.",
           service: "Wikipedia REST API",
           file: RESEARCH_FILE,
           sample: [`${a.inputs.researchChars} chars returned`],
@@ -227,7 +235,7 @@ function traceBlock(name: string, a: AssembledBlogPrompt): TraceEntry[] {
         {
           kind: "db",
           label: "media_assets.context_note (hero asset)",
-          detail: "Source text used for term extraction.",
+          detail: "Source text fed into Haiku for term extraction.",
           table: "media_assets",
           columns: ["context_note"],
           filter: `id = '${a.spec.heroAssetId}'`,
