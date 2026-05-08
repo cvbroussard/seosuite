@@ -2,6 +2,7 @@ import type {
   PlatformAdapter, PublishInput, PublishResult, TokenResult,
   FetchCommentsInput, CommentData, ReplyInput,
 } from "./types";
+import { INSTAGRAM_DEFAULTS } from "./defaults";
 
 const GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
@@ -23,15 +24,21 @@ export const instagramAdapter: PlatformAdapter = {
 
     const isVideo = mediaType?.startsWith("video") || false;
 
-    // Step 1: Create media container
+    // Step 1: Create media container.
+    // Per project_tracpost_upload_ai_detection.md guideline #1, set every
+    // parameter explicitly rather than relying on platform defaults. Defaults
+    // centralized in adapters/defaults.ts (#159).
     const containerParams: Record<string, string> = {
       access_token: accessToken,
       caption,
     };
 
     if (isVideo) {
-      containerParams.media_type = "REELS";
+      containerParams.media_type = INSTAGRAM_DEFAULTS.REELS.media_type;
       containerParams.video_url = imageUrl;
+      // Explicit cross-post-to-Feed flag for Reels. Default platform behavior
+      // matches but pinning here protects against silent platform changes.
+      containerParams.share_to_feed = String(INSTAGRAM_DEFAULTS.REELS.share_to_feed);
     } else {
       containerParams.image_url = imageUrl;
     }
