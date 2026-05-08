@@ -7,7 +7,7 @@ import { MediaFilters } from "./media-filters";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ source?: string; type?: string; scene?: string; quality?: string; sort?: string; project?: string }>;
+  searchParams: Promise<{ source?: string; type?: string; scene?: string; quality?: string; sort?: string; project?: string; briefing?: string }>;
 }
 
 export default async function MediaPage({ searchParams }: Props) {
@@ -30,6 +30,7 @@ export default async function MediaPage({ searchParams }: Props) {
   const qualityFilter = params.quality || "all";
   const sortOrder = params.sort || "newest";
   const projectFilter = params.project || "all";
+  const briefingFilter = params.briefing || "all";
 
   // Sort must happen in SQL so that the LIMIT picks from the correct
   // end of the dataset. The project filter must ALSO happen in SQL,
@@ -129,6 +130,9 @@ export default async function MediaPage({ searchParams }: Props) {
   } else if (qualityFilter === "low") {
     filtered = filtered.filter(a => (a.quality_score as number) < 0.5);
   }
+  if (briefingFilter === "pending") {
+    filtered = filtered.filter(a => a.triage_status === "pending_briefing");
+  }
 
   let filteredAssets = filtered.slice(0, 200);
 
@@ -140,7 +144,8 @@ export default async function MediaPage({ searchParams }: Props) {
       COUNT(*) FILTER (WHERE source = 'ai_generated')::int AS ai_generated,
       COUNT(*) FILTER (WHERE quality_score >= 0.8)::int AS high_quality,
       COUNT(*) FILTER (WHERE quality_score >= 0.5 AND quality_score < 0.8)::int AS medium_quality,
-      COUNT(*) FILTER (WHERE quality_score < 0.5)::int AS low_quality
+      COUNT(*) FILTER (WHERE quality_score < 0.5)::int AS low_quality,
+      COUNT(*) FILTER (WHERE triage_status = 'pending_briefing')::int AS pending_briefing
     FROM media_assets WHERE site_id = ${siteId}
   `;
 
@@ -221,7 +226,8 @@ export default async function MediaPage({ searchParams }: Props) {
         qualityFilter={qualityFilter}
         sortOrder={sortOrder}
         projectFilter={projectFilter}
-        counts={counts[0] as { total: number; uploads: number; ai_generated: number; high_quality: number; medium_quality: number; low_quality: number }}
+        briefingFilter={briefingFilter}
+        counts={counts[0] as { total: number; uploads: number; ai_generated: number; high_quality: number; medium_quality: number; low_quality: number; pending_briefing: number }}
         projects={allProjects.map((p) => ({ id: p.id as string, name: p.name as string }))}
       />
 

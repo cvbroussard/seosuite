@@ -24,14 +24,20 @@ interface Asset {
 }
 
 const statusColors: Record<string, string> = {
-  received: "bg-muted/70 text-white",
+  pending_briefing: "bg-amber-500/80 text-white",
+  received: "bg-muted/70 text-white", // legacy, should not appear post-migrate-099
   ready: "bg-success/70 text-white",
   triaged: "bg-accent/70 text-white",
   scheduled: "bg-success/70 text-white",
   consumed: "bg-success/70 text-white",
   shelved: "bg-warning/70 text-white",
   flagged: "bg-danger/70 text-white",
+  quarantined: "bg-danger/70 text-white",
   rejected: "bg-danger/70 text-white",
+};
+
+const statusLabels: Record<string, string> = {
+  pending_briefing: "needs briefing",
 };
 
 interface Brand {
@@ -166,7 +172,7 @@ export function MediaGrid({
                   statusColors[a.triage_status] || "bg-muted/20 text-muted"
                 }`}
               >
-                {a.triage_status}
+                {statusLabels[a.triage_status] || a.triage_status}
               </span>
               {a.media_type === "video" && (
                 <span className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">

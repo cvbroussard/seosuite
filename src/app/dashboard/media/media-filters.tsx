@@ -9,6 +9,7 @@ interface Counts {
   high_quality: number;
   medium_quality: number;
   low_quality: number;
+  pending_briefing: number;
 }
 
 interface ProjectOption {
@@ -23,6 +24,7 @@ export function MediaFilters({
   qualityFilter,
   sortOrder,
   projectFilter,
+  briefingFilter,
   counts,
   projects = [],
 }: {
@@ -32,6 +34,7 @@ export function MediaFilters({
   qualityFilter: string;
   sortOrder: string;
   projectFilter: string;
+  briefingFilter: string;
   counts: Counts;
   projects?: ProjectOption[];
 }) {
@@ -77,6 +80,7 @@ export function MediaFilters({
       quality: qualityFilter,
       sort: sortOrder,
       project: projectFilter,
+      briefing: briefingFilter,
       ...updates,
     };
     for (const [k, v] of Object.entries(merged)) {
@@ -91,6 +95,24 @@ export function MediaFilters({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* Briefing-required filter — high-priority chip per migrate-099.
+          Only renders when there's something to brief; surfaces the gap. */}
+      {counts.pending_briefing > 0 && (
+        <button
+          onClick={() => updateParams({ briefing: briefingFilter === "pending" ? "all" : "pending" })}
+          className={`rounded px-2.5 py-1 text-[10px] font-medium transition-colors border ${
+            briefingFilter === "pending"
+              ? "bg-amber-500 text-white border-amber-600"
+              : "bg-amber-500/15 text-amber-400 border-amber-500/40 hover:bg-amber-500/25"
+          }`}
+        >
+          Needs briefing
+          <span className={`ml-1 ${briefingFilter === "pending" ? "text-white/80" : "text-amber-400/80"}`}>
+            {counts.pending_briefing}
+          </span>
+        </button>
+      )}
+
       {/* Source filter */}
       <div className="flex gap-1">
         {([
