@@ -73,7 +73,7 @@ const TOOL_GROUPS: Array<{ heading: string; tools: ToolDef[] }> = [
       {
         id: "animate",
         label: "Animate as video",
-        hint: "Generate a 5-10s motion clip from this still via Kling.",
+        hint: "Generate a 5-10s motion clip from this still.",
         inputLabel: "Motion description (optional)",
         inputPlaceholder: "Subtle natural motion. Gentle camera drift.",
         imageOnly: true,

@@ -69,7 +69,7 @@ const FAMILIES: ToolFamily[] = [
       {
         id: "animate",
         label: "Animate as video",
-        description: "Generate a 5–10s motion clip from a still via Kling.",
+        description: "Generate a 5–10s motion clip from a still.",
         status: "from-asset",
       },
       {
