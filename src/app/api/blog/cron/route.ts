@@ -5,17 +5,24 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * GET /api/blog/cron — Daily blog article generation for all sites.
+ * GET /api/blog/cron — Daily article generation via v2 autopilot.
  *
- * For each site with autopilot + blog enabled + blog_cadence > 0:
- * 1. Check if an article is due based on cadence and last generation date
- * 2. Decide editorial vs project based on article_mix ratio
- * 3. Generate article and save as draft
+ * REWIRED 2026-05-08 (#155): retired v1 blog-generator path. This cron now
+ * dispatches to v2's runAutopilot, which handles weighted-random pool
+ * selection (blog / project_chapter / service) and self-persists to
+ * blog_posts_v2 / projects_v2 / services_v2.
  *
- * Runs daily. Processes sites until time limit (~4 min safety margin).
+ * Auth via CRON_SECRET (Vercel cron sends Authorization: Bearer).
+ *
+ * For each site with autopilot enabled + cadence > 0 + cadence-due:
+ *   1. Call runAutopilot(siteId)
+ *   2. Log result (which pool ran, what was generated, any errors)
+ *
+ * Cadence check: 7/cadence days since last v2 article (any pool counts).
+ *
+ * Time-bounded: ~4 minute safety budget; remaining sites pushed to next run.
  */
 export async function GET(req: NextRequest) {
-  // Auth: cron secret or skip if not configured
   if (process.env.CRON_SECRET) {
     const authHeader = req.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -24,13 +31,10 @@ export async function GET(req: NextRequest) {
   }
 
   const startTime = Date.now();
-  const MAX_RUNTIME_MS = 240_000; // 4 minutes, leave 1 min buffer
+  const MAX_RUNTIME_MS = 240_000;
 
-  // Fetch all eligible sites
   const sites = await sql`
-    SELECT s.id, s.name, s.blog_cadence, s.article_mix,
-           s.brand_playbook IS NOT NULL AS has_playbook,
-           s.metadata
+    SELECT s.id, s.name, s.blog_cadence
     FROM sites s
     WHERE s.is_active = true
       AND s.autopilot_enabled = true
@@ -41,73 +45,58 @@ export async function GET(req: NextRequest) {
   const results: Array<{ siteId: string; siteName: string; action: string }> = [];
 
   for (const site of sites) {
-    // Time check
     if (Date.now() - startTime > MAX_RUNTIME_MS) {
-      results.push({ siteId: site.id as string, siteName: site.name as string, action: "skipped — time limit" });
+      results.push({
+        siteId: site.id as string,
+        siteName: site.name as string,
+        action: "skipped — time limit",
+      });
       break;
     }
 
     const siteId = site.id as string;
     const cadence = (site.blog_cadence as number) || 0;
-    const mix = (site.article_mix as string) || "3:1";
-    const hasPlaybook = site.has_playbook as boolean;
-
     if (cadence === 0) continue;
 
     try {
-      // Check last generated article date
-      const [lastArticle] = await sql`
-        SELECT created_at FROM blog_posts
-        WHERE site_id = ${siteId}
+      // Cadence: count any v2 article (blog / project_chapter / service) as
+      // a publish event for cadence purposes. Subscribers expect "X per week"
+      // total cadence, not per-pool cadence.
+      const [lastV2] = await sql`
+        SELECT created_at FROM (
+          SELECT created_at FROM blog_posts_v2 WHERE site_id = ${siteId}
+          UNION ALL
+          SELECT created_at FROM projects_v2 WHERE site_id = ${siteId}
+          UNION ALL
+          SELECT created_at FROM services_v2 WHERE site_id = ${siteId}
+        ) t
         ORDER BY created_at DESC LIMIT 1
       `;
 
-      // Calculate if article is due
-      // cadence = articles per week → interval = 7 / cadence days
       const intervalDays = 7 / cadence;
-      const lastDate = lastArticle?.created_at ? new Date(lastArticle.created_at as string) : new Date(0);
+      const lastDate = lastV2?.created_at ? new Date(lastV2.created_at as string) : new Date(0);
       const daysSinceLast = (Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
 
       if (daysSinceLast < intervalDays) {
-        results.push({ siteId, siteName: site.name as string, action: `not due (${daysSinceLast.toFixed(1)}d since last, interval ${intervalDays.toFixed(1)}d)` });
+        results.push({
+          siteId,
+          siteName: site.name as string,
+          action: `not due (${daysSinceLast.toFixed(1)}d since last, interval ${intervalDays.toFixed(1)}d)`,
+        });
         continue;
       }
 
-      // Decide: editorial or project?
-      const articleType = pickArticleType(siteId, mix);
-
-      if (articleType === "project") {
-        // Find a project with prompts
-        const [project] = await sql`
-          SELECT id FROM projects
-          WHERE site_id = ${siteId}
-            AND metadata->'article_prompts' IS NOT NULL
-            AND jsonb_array_length(metadata->'article_prompts') > 0
-          ORDER BY RANDOM() LIMIT 1
-        `;
-
-        if (project) {
-          const res = await generateProjectArticle(project.id as string, siteId);
-          results.push({ siteId, siteName: site.name as string, action: res ? `project article: "${res}"` : "project article failed" });
-          continue;
-        }
-        // Fall through to editorial if no qualifying project
-      }
-
-      // Editorial article
-      if (hasPlaybook) {
-        const metadata = (site.metadata || {}) as Record<string, unknown>;
-        const rewardPrompts = (metadata.reward_prompts as unknown[]) || [];
-        if (rewardPrompts.length > 0) {
-          const res = await generateEditorialArticle(siteId);
-          results.push({ siteId, siteName: site.name as string, action: res ? `editorial article: "${res}"` : "editorial article failed" });
-          continue;
-        }
-      }
-
-      results.push({ siteId, siteName: site.name as string, action: "skipped — no playbook or prompts" });
+      // Dispatch to v2 autopilot
+      const { runAutopilot } = await import("@/lib/v2-generator/orchestrator/autopilot");
+      const result = await runAutopilot(siteId);
+      results.push({
+        siteId,
+        siteName: site.name as string,
+        action: `${result.pool}: ${result.reason}`,
+      });
     } catch (err) {
-      results.push({ siteId, siteName: site.name as string, action: `error: ${err instanceof Error ? err.message : err}` });
+      const msg = err instanceof Error ? err.message : String(err);
+      results.push({ siteId, siteName: site.name as string, action: `error: ${msg}` });
     }
   }
 
@@ -116,92 +105,4 @@ export async function GET(req: NextRequest) {
     runtime_ms: Date.now() - startTime,
     results,
   });
-}
-
-/**
- * Decide editorial vs project based on mix ratio and recent history.
- */
-function pickArticleType(siteId: string, mix: string): "editorial" | "project" {
-  const [editorialPart, projectPart] = mix.split(":").map(Number);
-  if (!projectPart || projectPart === 0) return "editorial";
-  if (!editorialPart || editorialPart === 0) return "project";
-
-  // Simple ratio: random weighted by the mix
-  const total = editorialPart + projectPart;
-  const roll = Math.random() * total;
-  return roll < editorialPart ? "editorial" : "project";
-}
-
-/**
- * Generate a project article using the angle rotation system.
- */
-async function generateProjectArticle(projectId: string, siteId: string): Promise<string | null> {
-  try {
-    const [project] = await sql`SELECT metadata FROM projects WHERE id = ${projectId}`;
-    const meta = (project?.metadata || {}) as Record<string, unknown>;
-    const prompts = (meta.article_prompts as Array<{ title: string; angle: string; assetHint: string }>) || [];
-    const usedIndices = (meta.used_prompt_indices as number[]) || [];
-
-    const unusedIndices = prompts.map((_, i) => i).filter((i) => !usedIndices.includes(i));
-    if (unusedIndices.length === 0) return null;
-
-    const selectedIndex = unusedIndices[Math.floor(Math.random() * unusedIndices.length)];
-    const articlePrompt = prompts[selectedIndex];
-
-    const { generateProjectArticleFromPrompt } = await import("@/lib/pipeline/project-blog-generator");
-    const article = await generateProjectArticleFromPrompt(projectId, siteId, articlePrompt);
-    if (!article) return null;
-
-    // Save as draft — resolve featured asset URL for og_image
-    const slug = article.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
-    let ogImageUrl: string | null = null;
-    if (article.featuredAssetId) {
-      const [asset] = await sql`SELECT storage_url FROM media_assets WHERE id = ${article.featuredAssetId}`;
-      ogImageUrl = (asset?.storage_url as string) || null;
-    }
-    await sql`
-      INSERT INTO blog_posts (site_id, title, slug, body, excerpt, status, source_asset_id, og_image_url, metadata)
-      VALUES (${siteId}, ${article.title}, ${slug}, ${article.body}, ${article.excerpt}, 'draft',
-              ${article.featuredAssetId || null},
-              ${ogImageUrl},
-              ${JSON.stringify({ type: "project", project_id: projectId, prompt_index: selectedIndex })}
-      )
-    `;
-
-    // Mark prompt as used
-    const updatedUsed = [...usedIndices, selectedIndex];
-    await sql`
-      UPDATE projects SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ used_prompt_indices: updatedUsed })}::jsonb
-      WHERE id = ${projectId}
-    `;
-
-    return article.title;
-  } catch (err) {
-    console.error("Blog cron project article error:", err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-
-/**
- * Generate an editorial article using the reward prompt system.
- */
-async function generateEditorialArticle(siteId: string): Promise<string | null> {
-  try {
-    // Use the existing blog generation pipeline
-    const { generateFromPairing } = await import("@/lib/pipeline/blog-generator");
-    const { pickNextContent } = await import("@/lib/pipeline/content-matcher");
-
-    const pairing = await pickNextContent(siteId);
-    if (!pairing) return null;
-
-    const postId = await generateFromPairing(pairing);
-    if (!postId) return null;
-
-    // Fetch the title for logging
-    const [post] = await sql`SELECT title FROM blog_posts WHERE id = ${postId}`;
-    return (post?.title as string) || "New article";
-  } catch (err) {
-    console.error("Blog cron editorial article error:", err instanceof Error ? err.message : err);
-    return null;
-  }
 }

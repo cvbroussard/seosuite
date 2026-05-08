@@ -104,51 +104,17 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
   const isSharpened = !!(siteVoice?.brand_voice as Record<string, unknown>)?._subscriberAngle;
   const hasRewardPrompts = !!((siteVoice?.metadata as Record<string, unknown>)?.reward_prompts as unknown[])?.length;
 
-  if (isSharpened && hasRewardPrompts) {
-    // New autopilot path: reward prompt drives content generation
-    try {
-      const { pickNextContent } = await import("./content-matcher");
-      const { generateFromPairing } = await import("./blog-generator");
-      const { enhanceAssetPhoto } = await import("@/lib/image-gen/enhance");
-
-      // Check cadence — max 1 blog post per 2 days
-      const [recentPost] = await sql`
-        SELECT id FROM blog_posts
-        WHERE site_id = ${siteId} AND created_at > NOW() - INTERVAL '2 days'
-        ORDER BY created_at DESC LIMIT 1
-      `;
-
-      if (!recentPost) {
-        const pairing = await pickNextContent(siteId);
-        if (pairing) {
-          // Just-in-time enhancement
-          const enhancedUrl = await enhanceAssetPhoto(pairing.asset.id);
-          if (enhancedUrl) {
-            pairing.asset.storageUrl = enhancedUrl;
-            await sql`UPDATE media_assets SET storage_url = ${enhancedUrl} WHERE id = ${pairing.asset.id}`;
-          }
-
-          // Generate ONE blog post from the reward prompt + asset pairing
-          const postId = await generateFromPairing(pairing);
-          if (postId) {
-            result.autopilotContentGenerated = 1;
-            result.blogPostsGenerated = 1;
-          }
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      result.errors.push(`autopilot-content: ${msg}`);
-    }
-  } else if (isSharpened) {
-    // Fallback: legacy path — generate from assets without reward prompts
-    try {
-      result.blogPostsGenerated = await generateMissingBlogPosts(siteId);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      result.errors.push(`blog-gen: ${msg}`);
-    }
-  }
+  // RETIRED 2026-05-08 (#155): v1 blog generation paths neutralized.
+  // Daily blog generation now happens exclusively via /api/blog/cron, which
+  // dispatches to v2's runAutopilot. The 15-min pipeline cron no longer
+  // generates blog content — the v1 reward-prompt + just-in-time-enhance
+  // path is no longer called.
+  //
+  // The isSharpened + hasRewardPrompts checks above are no longer used here
+  // but kept in scope for any other downstream consumers; safe to remove
+  // when v1 reward-prompt schema is fully retired.
+  void isSharpened;
+  void hasRewardPrompts;
 
   // Step 5.5: Promote recently published blog posts that haven't been promoted
   try {
