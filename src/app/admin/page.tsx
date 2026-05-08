@@ -17,7 +17,7 @@ export default async function AdminOverview() {
     `,
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE triage_status = 'received')::int AS received,
+        COUNT(*) FILTER (WHERE triage_status = 'pending_briefing')::int AS received,
         COUNT(*) FILTER (WHERE triage_status = 'triaged')::int AS triaged,
         COUNT(*) FILTER (WHERE triage_status = 'scheduled')::int AS scheduled,
         COUNT(*) FILTER (WHERE triage_status = 'flagged')::int AS flagged

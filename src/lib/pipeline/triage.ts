@@ -16,11 +16,11 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
   const [asset] = await sql`
     SELECT id, site_id, storage_url, media_type, context_note, transcription, metadata
     FROM media_assets
-    WHERE id = ${assetId} AND triage_status = 'received'
+    WHERE id = ${assetId} AND triage_status = 'pending_briefing'
   `;
 
   if (!asset) {
-    throw new Error(`Asset ${assetId} not found or already triaged`);
+    throw new Error(`Asset ${assetId} not found or not in pending_briefing state`);
   }
 
   // Fetch site config for thresholds
@@ -308,8 +308,12 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
   const quality = Math.min(1, Math.max(0, parsed.quality_score || 0.5));
   const platformFit = (parsed.platform_fit || ["ig_feed", "ig_story", "gbp", "fb_feed", "twitter", "linkedin", "pinterest"]) as PlatformFormat[];
 
-  // Determine triage outcome
-  let triageStatus: TriageResult["triage_status"] = "triaged";
+  // Determine triage outcome.
+  // Per the briefing-required principle (migrate-099): default is
+  // 'pending_briefing' — AI triage enriches metadata but never auto-
+  // promotes state to 'triaged'. Only human briefing flips to 'triaged'.
+  // 'shelved' / 'flagged' remain automatic since they don't need briefing.
+  let triageStatus: TriageResult["triage_status"] = "pending_briefing";
   let flagReason: string | undefined;
   let shelveReason: string | undefined;
 
@@ -407,8 +411,10 @@ function heuristicTriage(
     pillar = "training_action";
   }
 
-  // Determine triage outcome
-  let triageStatus: TriageResult["triage_status"] = "triaged";
+  // Determine triage outcome — default 'pending_briefing' per
+  // briefing-required principle (migrate-099). Heuristic mirrors the
+  // vision-triage logic above.
+  let triageStatus: TriageResult["triage_status"] = "pending_briefing";
   let flagReason: string | undefined;
   let shelveReason: string | undefined;
 

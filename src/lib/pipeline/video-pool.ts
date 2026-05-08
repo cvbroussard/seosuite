@@ -208,7 +208,7 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
         ) VALUES (
           ${siteId}, ${video.url}, 'video',
           ${(analysis.description as string) || (candidate.context_note as string) || ''},
-          'ai_generated', 'triaged', 0.85,
+          'ai_generated', 'pending_briefing', 0.85,
           ${candidate.id},
           ${candidate.content_pillar},
           ${candidate.content_tags || []},

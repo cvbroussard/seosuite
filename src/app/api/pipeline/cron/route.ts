@@ -205,10 +205,15 @@ export async function GET(req: NextRequest) {
     // Process up to 50 per run with 5-at-a-time concurrency.
     // With merged triage+text gen (one vision call), each asset
     // takes ~15s. 10 groups of 5 × 15s = ~150s (under 300s limit).
+    // Pick pending_briefing assets that haven't been enriched yet
+    // (ai_analysis IS NULL means triage hasn't run on this asset). Per
+    // migrate-099, triage enriches metadata but does NOT promote state —
+    // assets stay in pending_briefing until human briefs.
     const pending = await sql`
       SELECT id, site_id, storage_url, media_type, metadata
       FROM media_assets
-      WHERE triage_status = 'received'
+      WHERE triage_status = 'pending_briefing'
+        AND ai_analysis IS NULL
         AND created_at < NOW() - INTERVAL '30 seconds'
       ORDER BY created_at ASC
       LIMIT 50

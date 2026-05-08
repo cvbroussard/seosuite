@@ -46,7 +46,7 @@ export default async function DashboardOverview() {
     `,
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE triage_status = 'received')::int AS received,
+        COUNT(*) FILTER (WHERE triage_status = 'pending_briefing')::int AS received,
         COUNT(*) FILTER (WHERE triage_status = 'triaged')::int AS ready,
         COUNT(*) FILTER (WHERE triage_status = 'shelved')::int AS shelved,
         COUNT(*) FILTER (WHERE triage_status = 'flagged')::int AS flagged

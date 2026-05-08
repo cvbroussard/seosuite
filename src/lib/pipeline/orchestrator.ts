@@ -70,10 +70,14 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
     result.errors.push(`rss-sync: ${msg}`);
   }
 
-  // Step 1: Triage all received assets for this site
+  // Step 1: Enrich any pending_briefing assets that haven't been triaged yet
+  // (ai_analysis IS NULL). Per migrate-099, this enriches metadata but does
+  // NOT change state — only human briefing flips to 'triaged'.
   const receivedAssets = await sql`
     SELECT id FROM media_assets
-    WHERE site_id = ${siteId} AND triage_status = 'received'
+    WHERE site_id = ${siteId}
+      AND triage_status = 'pending_briefing'
+      AND ai_analysis IS NULL
     ORDER BY created_at ASC
     LIMIT 50
   `;

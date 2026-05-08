@@ -67,7 +67,7 @@ export async function syncRssFeeds(siteId: string): Promise<number> {
             ${siteId},
             'rss',
             'link',
-            'received',
+            'pending_briefing',
             ${`[RSS] ${item.title}`},
             ${metadata}::jsonb,
             NOW()

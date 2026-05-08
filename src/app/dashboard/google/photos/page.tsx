@@ -21,7 +21,7 @@ export default async function GooglePhotosPage() {
     LEFT JOIN gbp_photo_sync gps ON gps.media_asset_id = ma.id AND gps.site_id = ${siteId}
     WHERE ma.site_id = ${siteId}
       AND (ma.media_type LIKE 'image/%' OR ma.media_type = 'image')
-      AND ma.triage_status IN ('triaged', 'consumed', 'scheduled', 'received')
+      AND ma.triage_status IN ('triaged', 'consumed', 'scheduled', 'pending_briefing')
       AND COALESCE(ma.metadata->>'gbp_upload_failed', 'false') != 'true'
     ORDER BY ma.quality_score DESC NULLS LAST
   `;

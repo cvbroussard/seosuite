@@ -116,7 +116,7 @@ export async function processPdf(
       )
       VALUES (
         ${siteId}, ${thumbnailUrl}, 'image',
-        ${pageNote}, 'pdf', 'received',
+        ${pageNote}, 'pdf', 'pending_briefing',
         ${JSON.stringify(thumbMetadata)},
         ${pageSortOrder}
       )

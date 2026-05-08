@@ -110,6 +110,30 @@ export async function PATCH(
       })})
     `;
 
+    // Briefing flip: if asset is in 'pending_briefing' and now has a
+    // substantive context_note (>= 40 chars per the readiness primitive
+    // floor), promote to 'triaged'. This is the human-briefing action
+    // that gates orchestrator pool entry per migrate-099. A subscriber
+    // saving a thin or empty caption keeps the asset in pending_briefing.
+    const [latest] = await sql`
+      SELECT triage_status, context_note FROM media_assets WHERE id = ${id}
+    `;
+    if (latest?.triage_status === "pending_briefing") {
+      const note = (latest.context_note as string) || "";
+      if (note.trim().length >= 40) {
+        await sql`
+          UPDATE media_assets
+          SET triage_status = 'triaged',
+              triaged_at = COALESCE(triaged_at, NOW()),
+              metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                'briefed_at', NOW()::text,
+                'briefed_by_subscription_id', ${auth.subscriptionId}
+              )
+          WHERE id = ${id} AND triage_status = 'pending_briefing'
+        `;
+      }
+    }
+
     // Update caption source and project snapshot if this is a project asset
     if (context_note !== undefined && typeof context_note === "string" && context_note.trim()) {
       try {

@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       )
       VALUES (
         ${site_id}, ${finalUrl}, ${media_type},
-        ${context_note || null}, 'upload', 'received',
+        ${context_note || null}, 'upload', 'pending_briefing',
         ${JSON.stringify(assetMeta)}, EXTRACT(EPOCH FROM NOW())
       )
       RETURNING id, site_id, storage_url, media_type, context_note, triage_status, created_at

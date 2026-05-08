@@ -1,12 +1,14 @@
 /** Triage statuses for media assets */
 export type TriageStatus =
-  | "received"   // just uploaded, not yet evaluated
-  | "triaged"    // AI evaluated, scored, assigned pillar
-  | "scheduled"  // promoted into a publishing slot
-  | "shelved"    // usable but not selected (inventory for slow weeks)
-  | "flagged"    // AI uncertain, needs subscriber input (< 5%)
-  | "consumed"   // used in a published post
-  | "rejected";  // subscriber vetoed or quality too low
+  | "pending_briefing" // arrived (uploaded OR AI-generated), awaiting human briefing — replaces legacy 'received'. AI triage may run for metadata enrichment but does NOT change state. Only human briefing flips to 'triaged'.
+  | "received"         // DEPRECATED — kept for backward compat in old queries during cutover; rows migrated to pending_briefing
+  | "triaged"          // human-briefed and ready for orchestrator pool. ONLY reached via briefing action.
+  | "scheduled"        // promoted into a publishing slot
+  | "shelved"          // usable but not selected (inventory for slow weeks); auto-set when quality below threshold
+  | "flagged"          // AI uncertain, needs subscriber input (< 5%) — face/consent review
+  | "quarantined"      // content guard violation (set by quality-gates)
+  | "consumed"         // used in a published post
+  | "rejected";        // subscriber vetoed or quality too low
 
 /** Content pillars — rotated through the publishing calendar */
 export type ContentPillar =

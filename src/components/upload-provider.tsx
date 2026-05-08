@@ -54,7 +54,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const processing = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Poll for server-side processing status (assets at 'received')
+  // Poll for server-side processing status (assets at 'pending_briefing')
   useEffect(() => {
     const siteId = localStorage.getItem(POLL_KEY);
     if (siteId) {

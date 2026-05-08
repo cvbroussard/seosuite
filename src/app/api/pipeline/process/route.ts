@@ -53,7 +53,9 @@ export async function POST(req: NextRequest) {
   const pending = await sql`
     SELECT id, site_id, storage_url, media_type, metadata
     FROM media_assets
-    WHERE site_id = ${siteId} AND triage_status = 'received'
+    WHERE site_id = ${siteId}
+      AND triage_status = 'pending_briefing'
+      AND ai_analysis IS NULL
     ORDER BY created_at ASC
     LIMIT 50
   `;
