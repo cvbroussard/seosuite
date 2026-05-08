@@ -7,6 +7,14 @@ export interface UploadItem {
   file?: File;
   sourceUrl?: string;
   contextNote: string;
+  /**
+   * Subscriber-declared: was this asset generated or modified by AI?
+   * Defaults to false. Per #161 (upload-side AI detection), we'll add C2PA
+   * auto-detection in Phase 2 — for now this is the explicit subscriber
+   * toggle from the upload form. Propagates to media_assets.metadata.ai_generated
+   * which #160 reads at publish time for platform compliance flags.
+   */
+  aiGenerated: boolean;
   siteId: string;
   projectId?: string | null;
   fileName: string;
@@ -133,6 +141,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               media_type: guessMediaType(next.sourceUrl),
               context_note: next.contextNote || null,
               project_id: next.projectId || null,
+              ai_generated: next.aiGenerated,
               source: "url",
             }),
           });
@@ -176,6 +185,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               media_type,
               context_note: next.contextNote || null,
               project_id: next.projectId || null,
+              ai_generated: next.aiGenerated,
             }),
           });
           const assetData = await assetRes.json();

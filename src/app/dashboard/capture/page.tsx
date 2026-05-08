@@ -12,6 +12,7 @@ interface StagedItem {
   sourceUrl?: string;
   preview: string;
   contextNote: string;
+  aiGenerated: boolean;
 }
 
 export default function CapturePage() {
@@ -59,6 +60,7 @@ function CaptureForm() {
       file,
       preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
       contextNote: "",
+      aiGenerated: false,
     }));
     setItems((prev) => [...prev, ...newItems]);
   }
@@ -98,6 +100,7 @@ function CaptureForm() {
       sourceUrl: url,
       preview: url,
       contextNote: "",
+      aiGenerated: false,
     }]);
     setUrlInput("");
     setShowUrlInput(false);
@@ -120,6 +123,7 @@ function CaptureForm() {
         file: item.file,
         sourceUrl: item.sourceUrl,
         contextNote: item.contextNote,
+        aiGenerated: item.aiGenerated,
         siteId,
         projectId: projectId || null,
         fileName: item.file?.name || item.sourceUrl || "Unknown",
@@ -282,6 +286,22 @@ function CaptureForm() {
                   ✕
                 </button>
               </div>
+              {/* AI-generated toggle (per #161 Phase 1).
+                  Default false; subscriber declares if AI-generated or AI-modified.
+                  Wired to media_assets.metadata.ai_generated and propagates to
+                  platform AI-disclosure flag at publish time (#160). */}
+              <label className="flex cursor-pointer items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={item.aiGenerated}
+                  onChange={(e) => setItems((prev) => prev.map((i) =>
+                    i.id === item.id ? { ...i, aiGenerated: e.target.checked } : i,
+                  ))}
+                  className="h-3.5 w-3.5 cursor-pointer"
+                />
+                <span>AI-generated or AI-modified</span>
+                <span className="text-muted">— required for platform compliance</span>
+              </label>
             </div>
           ))}
 

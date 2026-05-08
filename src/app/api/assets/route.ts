@@ -20,6 +20,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { site_id, media_type, context_note, project_id } = body;
     const storage_url = body.storage_url || body.url;
+    // Subscriber-declared AI-generated flag (per #161 Phase 1).
+    // Defaults to false. Used downstream by #160 disclosure pipeline.
+    // Phase 2 (C2PA reader) will override this to true if a manifest
+    // declares AI provenance, regardless of subscriber's toggle state.
+    const aiGeneratedDeclared = body.ai_generated === true;
 
     if (!site_id || !storage_url || !media_type) {
       return NextResponse.json(
@@ -90,6 +95,11 @@ export async function POST(req: NextRequest) {
       ...(isHeic && { needs_conversion: true }),
       ...(project_id && { pending_project_id: project_id }),
       original_filename: storage_url.split("/").pop()?.split("?")[0] || null,
+      // AI-generated flag (#161): subscriber declared at upload.
+      // Phase 2 will add C2PA-driven auto-detection that may override this.
+      ai_generated: aiGeneratedDeclared,
+      ai_flag_source: aiGeneratedDeclared ? "subscriber_declared" : "default_false",
+      ai_flag_set_at: new Date().toISOString(),
     };
 
     const [asset] = await sql`
