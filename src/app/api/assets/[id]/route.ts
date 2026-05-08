@@ -131,6 +131,21 @@ export async function PATCH(
               )
           WHERE id = ${id} AND triage_status = 'pending_briefing'
         `;
+
+        // Trigger default template variant render (#163). Per the
+        // source-template-variants architecture, briefing flips state to
+        // 'triaged' AND the default template variant becomes available so
+        // the orchestrator (#168) can pick this asset for autopilot.
+        // Fire-and-forget: render failure shouldn't block the briefing save.
+        try {
+          const { renderDefaultVariant } = await import("@/lib/pipeline/variant-render");
+          await renderDefaultVariant(id);
+        } catch (err) {
+          console.warn(
+            "Variant render failed (non-fatal — asset still briefed):",
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
     }
 
