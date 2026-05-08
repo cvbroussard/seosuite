@@ -2,6 +2,8 @@ import { sql } from "@/lib/db";
 import sharp from "sharp";
 import { createKenBurnsVideo, reformatVideo } from "@/lib/render/video";
 import { uploadBufferToR2 } from "@/lib/r2";
+import { isSmartRotateEnabled, callSmartRotate, smartRotateDimsForTemplate } from "./smart-rotate-client";
+import { isEnterpriseTier } from "./site-tier";
 
 /**
  * Variant render worker (#163, #172).
@@ -316,12 +318,20 @@ async function renderImageVariant(
 }
 
 /**
- * Video source → video target. Center-crop reframing today via
- * reformatVideo; subject-aware smart-crop is queued via Mux Smart Crop
- * (project_tracpost_video_reframing_mux.md, Layer-1 only).
+ * Video source → video target. Tier-gated render engine selection per
+ * project_tracpost_smart_rotate_self_host.md:
  *
- * If the source aspect already matches the template aspect, the source
- * URL passes through — no re-encoding needed and no quality loss.
+ * - Enterprise tier + Smart Rotate service available → subject-aware
+ *   reframing via the self-hosted YOLOv8 + FFmpeg service.
+ * - Mid-tier OR service unavailable → ffmpeg center-crop via reformatVideo
+ *   (Phase 1 quality, fast, deterministic, free per Vercel CPU).
+ *
+ * Either path writes the result to R2. Layer-1 discipline holds: only
+ * smart-rotate-client touches the service URL; everything stored in
+ * asset_variants.storage_url is an R2 URL.
+ *
+ * Smart Rotate service errors fall back to ffmpeg silently — render
+ * pipeline integrity > smart-crop quality.
  */
 async function renderVideoVariant(
   sourceUrl: string,
@@ -342,6 +352,45 @@ async function renderVideoVariant(
     };
   }
 
+  // Tier-check + service-availability check. Both must be true for
+  // Smart Rotate; fall through to ffmpeg fallback on either miss or
+  // on service error.
+  if (isSmartRotateEnabled() && (await isEnterpriseTier(siteId))) {
+    const dims = smartRotateDimsForTemplate(templateId);
+    if (dims) {
+      try {
+        const date = new Date().toISOString().slice(0, 10);
+        const destinationKey =
+          `sites/${siteId}/variants/${date}/${templateId}-${Date.now()}.mp4`;
+        const result = await callSmartRotate({
+          sourceUrl,
+          targetAspect: dims.targetAspect,
+          targetWidth: dims.width,
+          targetHeight: dims.height,
+          destinationKey,
+        });
+        return {
+          outputUrl: result.destinationUrl,
+          renderNotes: {
+            method: "smart_rotate_yolov8",
+            target_aspect: targetAspect,
+            from: "video",
+            service_duration_seconds: result.durationSeconds,
+            ...result.renderSettings,
+          },
+        };
+      } catch (err) {
+        console.warn(
+          `Smart Rotate failed for asset (assetId siteId=${siteId} template=${templateId}); falling back to ffmpeg center-crop:`,
+          err instanceof Error ? err.message : err,
+        );
+        // Fall through to ffmpeg
+      }
+    }
+  }
+
+  // Fallback: ffmpeg center-crop. Used by mid-tier subscribers and as
+  // the safety net when Smart Rotate is unavailable or errored.
   const url = await reformatVideo({
     videoUrl: sourceUrl,
     targetAspect,
@@ -354,9 +403,9 @@ async function renderVideoVariant(
       method: "ffmpeg_center_crop",
       target_aspect: targetAspect,
       from: "video",
-      // Mux Smart Crop upgrade tracked separately per
-      // project_tracpost_video_reframing_mux.md
-      smart_crop_pending_upgrade: true,
+      // Smart Rotate upgrade available for Enterprise tier per
+      // project_tracpost_smart_rotate_self_host.md
+      smart_rotate_eligible: false,
     },
   };
 }
