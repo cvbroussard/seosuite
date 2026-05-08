@@ -11,7 +11,7 @@ import { seoFilename } from "@/lib/seo-filename";
 
 const QUALITY_CUTOFF = 0.7;
 
-const POST_PRODUCTION_PROMPT = `Apply ONLY technical photo corrections to this image. This is post-production, NOT creative editing.
+export const POST_PRODUCTION_PROMPT = `Apply ONLY technical photo corrections to this image. This is post-production, NOT creative editing.
 
 EXPOSURE & TONE:
 - Balanced dynamic range — recover blown highlights, lift crushed shadows
