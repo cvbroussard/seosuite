@@ -55,13 +55,17 @@ export async function assessBlogSite(siteId: string): Promise<BlogSiteAssessment
   `;
   const usedIds = new Set(usedRows.map((r) => r.id as string));
 
-  // Include both image and video; prefer video first (per render-format-default)
+  // Include both image and video; prefer video first (per render-format-default).
+  // Per #168: gate on triage_status='triaged' (briefed) — only human-briefed
+  // assets reach the orchestrator pool. Variant existence gate happens at
+  // publisher time (per source-template-variants architecture). Briefed assets
+  // always have the default variant rendered (per #163), so they're publishable.
   const candidateRows = await sql`
     SELECT id
     FROM media_assets
     WHERE site_id = ${siteId}
       AND (media_type ILIKE 'image%' OR media_type = 'video')
-      AND triage_status NOT IN ('quarantined', 'shelved')
+      AND triage_status = 'triaged'
       AND status NOT IN ('deleted', 'failed')
       AND context_note IS NOT NULL
     ORDER BY

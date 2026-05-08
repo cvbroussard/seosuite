@@ -52,7 +52,7 @@ export const pillarFillStrategy: BlogStrategy = {
       SELECT id FROM media_assets
       WHERE site_id = ${assessment.siteId}
         AND (media_type ILIKE 'image%' OR media_type = 'video')
-        AND triage_status NOT IN ('quarantined','shelved')
+        AND triage_status = 'triaged'
         AND status NOT IN ('deleted','failed')
         AND (content_pillar = ${gap} OR ${gap} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
         AND id <> ALL(${usedIds}::uuid[])
@@ -68,7 +68,7 @@ export const pillarFillStrategy: BlogStrategy = {
       SELECT id FROM media_assets
       WHERE site_id = ${assessment.siteId}
         AND id <> ${seed.id}
-        AND triage_status NOT IN ('quarantined','shelved')
+        AND triage_status = 'triaged'
         AND status NOT IN ('deleted','failed')
         AND (media_type ILIKE 'image%' OR media_type = 'video')
         AND (content_pillar = ${gap} OR ${gap} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
