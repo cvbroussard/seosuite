@@ -66,11 +66,20 @@ const MODULES: Module[] = [
     label: "Publish",
     icon: ICONS.publish,
     subs: [
+      { label: "Brand", path: "/brand" },
+      {
+        label: "Asset Studio",
+        path: "/media",
+        children: [
+          { label: "Media", path: "/media" },
+          { label: "Tools", path: "/tools" },
+          { label: "Documents", path: "/documents" },
+        ],
+      },
       { label: "Capture", path: "/capture" },
-      { label: "Media", path: "/media" },
       { label: "Entities", path: "/entities" },
       { label: "Compose", path: "/compose" },
-      { label: "On Deck", path: "/on-deck" },
+      { label: "Calendar", path: "/on-deck" },
       { label: "Unifeed", path: "/unifeed" },
       { label: "GBP Photos", path: "/google/photos" },
     ],
