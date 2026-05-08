@@ -21,7 +21,7 @@ interface Counts {
   uploads: number;
   ai: number;
   triaged: number;
-  pending: number;
+  pending_briefing: number;
   with_context: number;
   without_context: number;
   avg_quality: number;
@@ -31,10 +31,8 @@ function MediaContent({ siteId }: { siteId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [counts, setCounts] = useState<Counts | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "upload" | "ai" | "untagged">("all");
+  const [filter, setFilter] = useState<"all" | "upload" | "ai" | "pending_briefing" | "untagged">("all");
   const [selected, setSelected] = useState<Asset | null>(null);
-  const [editNote, setEditNote] = useState("");
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -47,19 +45,8 @@ function MediaContent({ siteId }: { siteId: string }) {
   const filtered = filter === "all" ? assets
     : filter === "upload" ? assets.filter(a => a.source === "upload")
     : filter === "ai" ? assets.filter(a => a.source === "ai_generated")
+    : filter === "pending_briefing" ? assets.filter(a => a.status === "pending_briefing")
     : assets.filter(a => !a.context);
-
-  async function saveContext(assetId: string) {
-    setSaving(true);
-    await fetch(`/api/assets/${assetId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context_note: editNote }),
-    });
-    setAssets(prev => prev.map(a => a.id === assetId ? { ...a, context: editNote } : a));
-    setSelected(null);
-    setSaving(false);
-  }
 
   if (loading) {
     return (
@@ -79,7 +66,7 @@ function MediaContent({ siteId }: { siteId: string }) {
   return (
     <div className="p-4 space-y-4">
       {counts && (
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-6 gap-2">
           <div className="rounded-lg border border-border bg-surface-hover p-3 text-center">
             <p className="text-lg font-semibold">{counts.total}</p>
             <p className="text-[10px] text-muted">Total</p>
@@ -94,7 +81,17 @@ function MediaContent({ siteId }: { siteId: string }) {
           </div>
           <div className="rounded-lg border border-border bg-surface-hover p-3 text-center">
             <p className="text-lg font-semibold text-success">{counts.triaged}</p>
-            <p className="text-[10px] text-muted">Triaged</p>
+            <p className="text-[10px] text-muted">Briefed</p>
+          </div>
+          <div className={`rounded-lg border p-3 text-center ${
+            counts.pending_briefing > 0
+              ? "border-amber-500/40 bg-amber-500/10"
+              : "border-border bg-surface-hover"
+          }`}>
+            <p className={`text-lg font-semibold ${counts.pending_briefing > 0 ? "text-amber-400" : "text-muted"}`}>
+              {counts.pending_briefing}
+            </p>
+            <p className="text-[10px] text-muted">Needs briefing</p>
           </div>
           <div className="rounded-lg border border-border bg-surface-hover p-3 text-center">
             <p className={`text-lg font-semibold ${counts.avg_quality >= 0.7 ? "text-success" : "text-warning"}`}>
@@ -106,27 +103,33 @@ function MediaContent({ siteId }: { siteId: string }) {
       )}
 
       <div className="flex items-center gap-2">
-        {(["all", "upload", "ai", "untagged"] as const).map(f => (
+        {(["all", "upload", "ai", "pending_briefing", "untagged"] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             className={`rounded px-3 py-1 text-[10px] font-medium ${
               filter === f ? "bg-accent text-white" : "bg-surface-hover text-muted hover:text-foreground"
-            }`}
+            } ${f === "pending_briefing" && filter !== f && counts && counts.pending_briefing > 0 ? "ring-1 ring-amber-500/40" : ""}`}
           >
             {f === "all" ? `All (${assets.length})`
               : f === "upload" ? `Uploads (${assets.filter(a => a.source === "upload").length})`
               : f === "ai" ? `AI (${assets.filter(a => a.source === "ai_generated").length})`
+              : f === "pending_briefing" ? `Needs briefing (${assets.filter(a => a.status === "pending_briefing").length})`
               : `Untagged (${assets.filter(a => !a.context).length})`}
           </button>
         ))}
       </div>
 
+      {/* Operator note: this view is monitor-only. Briefing happens in the
+          subscriber's media library at /dashboard/media (see briefing-required
+          principle). When a subscriber's pending_briefing count is high,
+          coach them via the customer-success channel — don't brief for them. */}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "6px" }}>
         {filtered.map(asset => (
           <div
             key={asset.id}
-            onClick={() => { setSelected(asset); setEditNote(asset.context || ""); }}
+            onClick={() => setSelected(asset)}
             className={`relative aspect-square rounded-lg overflow-hidden border cursor-pointer transition-colors ${
               selected?.id === asset.id ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-accent/50"
             }`}
@@ -155,7 +158,11 @@ function MediaContent({ siteId }: { siteId: string }) {
               {asset.quality ? Math.round(asset.quality * 100) : "—"}
             </span>
             <span className={`absolute top-1 left-1 h-1.5 w-1.5 rounded-full ${
-              asset.status === "triaged" ? "bg-success" : "bg-warning"
+              asset.status === "triaged" ? "bg-success"
+                : asset.status === "pending_briefing" ? "bg-amber-500"
+                : asset.status === "shelved" ? "bg-muted"
+                : asset.status === "flagged" || asset.status === "quarantined" ? "bg-danger"
+                : "bg-warning"
             }`} />
             {!asset.context && (
               <span className="absolute bottom-1 left-1 rounded bg-danger/80 px-1 py-0.5 text-[7px] text-white">
@@ -174,11 +181,17 @@ function MediaContent({ siteId }: { siteId: string }) {
         const hasNext = idx < filtered.length - 1;
         function nav(dir: -1 | 1) {
           const next = filtered[idx + dir];
-          if (next) { setSelected(next); setEditNote(next.context || ""); }
+          if (next) { setSelected(next); }
         }
 
         return (
           <div className="rounded-xl border border-accent/30 bg-surface p-4 shadow-card">
+            <div className="mb-3 flex items-center gap-2 rounded border border-muted/30 bg-muted/5 px-2.5 py-1.5">
+              <span className="text-[9px] font-mono uppercase tracking-wide text-muted">monitor only</span>
+              <span className="text-[10px] text-muted leading-snug">
+                Operator view — coach the subscriber to brief their own assets. Edits happen in /dashboard/media.
+              </span>
+            </div>
             <div className="flex gap-4">
               <div className="shrink-0 space-y-2" style={{ width: 280 }}>
                 {selected.type === "video" ? (
@@ -210,42 +223,31 @@ function MediaContent({ siteId }: { siteId: string }) {
               </div>
               <div className="flex-1 space-y-3">
                 {/* Meta */}
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs flex-wrap">
                   <span className={`font-medium ${qualityColor(selected.quality)}`}>
                     Quality: {selected.quality ? Math.round(selected.quality * 100) + "%" : "—"}
                   </span>
                   <span className="text-muted">·</span>
                   <span className="text-muted capitalize">{selected.source}</span>
                   <span className="text-muted">·</span>
-                  <span className={selected.status === "triaged" ? "text-success" : "text-warning"}>{selected.status}</span>
+                  <span className={
+                    selected.status === "triaged" ? "text-success"
+                      : selected.status === "pending_briefing" ? "text-amber-400"
+                      : "text-warning"
+                  }>{selected.status === "pending_briefing" ? "needs briefing" : selected.status}</span>
                   {selected.autoContext && <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning">Auto-generated</span>}
                 </div>
 
-                {/* Context note */}
+                {/* Context note (read-only) */}
                 <div>
-                  <label className="block text-[10px] text-muted mb-1">Context Note</label>
-                  <textarea
-                    value={editNote}
-                    onChange={e => {
-                      setEditNote(e.target.value);
-                      e.target.style.height = "auto";
-                      e.target.style.height = e.target.scrollHeight + "px";
-                    }}
-                    ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
-                    className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs focus:border-accent focus:outline-none resize-none overflow-hidden"
-                    placeholder="Describe what's in this photo..."
-                  />
+                  <label className="block text-[10px] text-muted mb-1">Context Note (read-only)</label>
+                  <div className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs min-h-[3em] whitespace-pre-wrap">
+                    {selected.context || <span className="text-muted italic">No briefing yet</span>}
+                  </div>
                 </div>
 
-                {/* Actions + pagination */}
-                <div className="flex items-center justify-between">
-                  <button
-                    onClick={() => saveContext(selected.id)}
-                    disabled={saving}
-                    className="bg-accent px-3 py-1 text-[10px] font-medium text-white rounded hover:bg-accent-hover disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save Context"}
-                  </button>
+                {/* Pagination only — no save/edit per operator-monitor-only policy */}
+                <div className="flex items-center justify-end">
                   <div className="flex items-center gap-1">
                     <span className="text-[10px] text-muted mr-1">{idx + 1} of {filtered.length}</span>
                     <button onClick={() => nav(-1)} disabled={!hasPrev} className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:text-foreground disabled:opacity-30">←</button>
