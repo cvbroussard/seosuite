@@ -7,6 +7,7 @@ import type {
   PlatformAdapter, PublishInput, PublishResult, TokenResult,
   FetchCommentsInput, CommentData, ReplyInput,
 } from "./types";
+import { applyDisclosurePrefix } from "./ai-disclosure";
 
 const API_V2 = "https://api.x.com/2";
 const UPLOAD_API = "https://upload.twitter.com/1.1";
@@ -15,7 +16,12 @@ class TwitterAdapter implements PlatformAdapter {
   readonly platform = "twitter";
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { accessToken, caption, mediaUrls, mediaType } = input;
+    const { accessToken, caption, mediaUrls, mediaType, aiGenerated } = input;
+
+    // AI disclosure (#160 / #170): X/Twitter has no AI flag, so caption-prepend.
+    // Tweet limit is 280 chars — disclosure consumes ~40, leaving ~240 for the
+    // actual tweet. Slicing happens AFTER disclosure to preserve it.
+    const disclosedCaption = applyDisclosurePrefix(caption, aiGenerated === true);
 
     // Upload media if present
     const mediaIds: string[] = [];
@@ -26,7 +32,7 @@ class TwitterAdapter implements PlatformAdapter {
 
     // Create tweet
     const tweetBody: Record<string, unknown> = {
-      text: caption.slice(0, 280),
+      text: disclosedCaption.slice(0, 280),
     };
 
     if (mediaIds.length > 0) {

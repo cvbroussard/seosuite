@@ -5,6 +5,7 @@
  * Only supports video content (no static images for feed).
  */
 import type { PlatformAdapter, PublishInput, PublishResult, TokenResult } from "./types";
+import { applyDisclosurePrefix } from "./ai-disclosure";
 
 const API_BASE = "https://open.tiktokapis.com/v2";
 
@@ -12,11 +13,18 @@ class TikTokAdapter implements PlatformAdapter {
   readonly platform = "tiktok";
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { accessToken, caption, mediaUrls, mediaType } = input;
+    const { accessToken, caption, mediaUrls, mediaType, aiGenerated } = input;
 
     if (mediaType !== "video" || mediaUrls.length === 0) {
       throw new Error("TikTok only supports video posts");
     }
+
+    // AI disclosure (#160 / #170): TikTok supports BOTH an explicit API flag
+    // (is_ai_generated on post_info) AND caption-prepend per DISCLOSURE_STRATEGY.
+    // We set both — the API flag is the structural compliance signal,
+    // caption-prepend is the visible viewer signal.
+    const isAi = aiGenerated === true;
+    const disclosedCaption = applyDisclosurePrefix(caption, isAi);
 
     // Step 1: Initialize video upload via URL pull
     const initRes = await fetch(`${API_BASE}/post/publish/video/init/`, {
@@ -27,12 +35,13 @@ class TikTokAdapter implements PlatformAdapter {
       },
       body: JSON.stringify({
         post_info: {
-          title: caption.slice(0, 150),
-          description: caption,
+          title: disclosedCaption.slice(0, 150),
+          description: disclosedCaption,
           privacy_level: "PUBLIC_TO_EVERYONE",
           disable_duet: false,
           disable_comment: false,
           disable_stitch: false,
+          ...(isAi && { is_ai_generated: true }),
         },
         source_info: {
           source: "PULL_FROM_URL",

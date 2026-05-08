@@ -5,6 +5,7 @@
  * Supports image and video pins with link attribution.
  */
 import type { PlatformAdapter, PublishInput, PublishResult, TokenResult } from "./types";
+import { applyDisclosurePrefix } from "./ai-disclosure";
 
 const API_BASE = "https://api.pinterest.com/v5";
 
@@ -12,7 +13,13 @@ class PinterestAdapter implements PlatformAdapter {
   readonly platform = "pinterest";
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { accessToken, caption, mediaUrls, linkUrl, accountMetadata } = input;
+    const { accessToken, caption, mediaUrls, linkUrl, accountMetadata, aiGenerated } = input;
+
+    // AI disclosure (#160 / #170): Pinterest API has no AI flag, so
+    // caption-prepend is the compliance mechanism. Pinterest descriptions
+    // cap at 500 chars — disclosure prefix consumes ~40, leaving ~460 for
+    // the actual caption. Slicing happens AFTER disclosure to preserve it.
+    const disclosedCaption = applyDisclosurePrefix(caption, aiGenerated === true);
 
     // Auto-create board if none exists (curtained — zero tenant friction)
     let boardId = accountMetadata?.board_id as string;
@@ -23,8 +30,8 @@ class PinterestAdapter implements PlatformAdapter {
     // Build pin
     const pinBody: Record<string, unknown> = {
       board_id: boardId,
-      description: caption.slice(0, 500),
-      title: caption.split("\n")[0].slice(0, 100) || "New Pin",
+      description: disclosedCaption.slice(0, 500),
+      title: disclosedCaption.split("\n")[0].slice(0, 100) || "New Pin",
     };
 
     if (linkUrl) {

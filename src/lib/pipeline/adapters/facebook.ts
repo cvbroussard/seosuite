@@ -2,6 +2,7 @@ import type {
   PlatformAdapter, PublishInput, PublishResult, TokenResult,
   FetchCommentsInput, CommentData, FetchReviewsInput, ReviewData, ReplyInput,
 } from "./types";
+import { applyDisclosurePrefix } from "./ai-disclosure";
 
 const GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
@@ -20,7 +21,7 @@ export const facebookAdapter: PlatformAdapter = {
   platform: "facebook",
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { accessToken, caption, mediaUrls, mediaType, linkUrl, accountMetadata } = input;
+    const { accessToken, caption, mediaUrls, mediaType, linkUrl, accountMetadata, aiGenerated } = input;
 
     // Facebook publishes to the Page, not the IG user
     const pageId = (accountMetadata?.page_id as string) || input.platformAccountId;
@@ -28,6 +29,12 @@ export const facebookAdapter: PlatformAdapter = {
 
     const isVideo = mediaType?.startsWith("video") || false;
     const imageUrl = mediaUrls[0];
+
+    // AI disclosure (#160 / #170): prepend disclosure when source asset is
+    // AI-generated. Meta's Graph API doesn't expose a stable explicit AI
+    // flag at publish layer; visible caption prefix is the compliance
+    // mechanism. Idempotent — won't double-prefix.
+    const disclosedCaption = applyDisclosurePrefix(caption, aiGenerated === true);
 
     // For photo/video posts that ALSO carry a linkUrl, Meta's /photos
     // and /videos endpoints don't accept a `link` field — the URL would
@@ -38,8 +45,8 @@ export const facebookAdapter: PlatformAdapter = {
     // preview card. CTA buttons are an ads-only feature — boosted via
     // the boost-after-publish chain, not addressable on organic posts.
     const captionWithLink = linkUrl && (imageUrl || isVideo)
-      ? `${caption}\n\n${linkUrl}`
-      : caption;
+      ? `${disclosedCaption}\n\n${linkUrl}`
+      : disclosedCaption;
 
     let postId: string;
 
@@ -49,7 +56,7 @@ export const facebookAdapter: PlatformAdapter = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: caption,
+          message: disclosedCaption,
           link: linkUrl,
           access_token: accessToken,
         }),
@@ -97,7 +104,7 @@ export const facebookAdapter: PlatformAdapter = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: caption,
+          message: disclosedCaption,
           access_token: accessToken,
         }),
       });

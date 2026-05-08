@@ -9,6 +9,7 @@ import type {
   FetchReviewsInput, ReviewData, ReplyInput,
 } from "./types";
 import { refreshGoogleToken } from "@/lib/google";
+import { applyDisclosurePrefix } from "./ai-disclosure";
 
 class GbpAdapter implements PlatformAdapter {
   readonly platform = "gbp";
@@ -27,7 +28,11 @@ class GbpAdapter implements PlatformAdapter {
    * refresh before calling publish if needed.
    */
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { platformAccountId, accessToken, caption, mediaUrls, accountMetadata } = input;
+    const { platformAccountId, accessToken, caption, mediaUrls, accountMetadata, aiGenerated } = input;
+
+    // AI disclosure (#160 / #170): GBP Local Posts API has no AI flag,
+    // so caption-prepend is the compliance mechanism.
+    const disclosedCaption = applyDisclosurePrefix(caption, aiGenerated === true);
 
     // Construct the full v4 resource path: accounts/{id}/locations/{id}
     // platformAccountId stores the v1 format (locations/{id})
@@ -46,7 +51,7 @@ class GbpAdapter implements PlatformAdapter {
     // Build the Local Post payload
     const postBody: Record<string, unknown> = {
       languageCode: "en",
-      summary: caption,
+      summary: disclosedCaption,
       topicType: "STANDARD",
     };
 

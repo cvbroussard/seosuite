@@ -17,7 +17,7 @@ class YouTubeAdapter implements PlatformAdapter {
   readonly platform = "youtube";
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { accessToken, caption, mediaUrls, mediaType } = input;
+    const { accessToken, caption, mediaUrls, mediaType, aiGenerated } = input;
 
     if (mediaType !== "video" || mediaUrls.length === 0) {
       throw new Error("YouTube Shorts requires video content");
@@ -33,7 +33,14 @@ class YouTubeAdapter implements PlatformAdapter {
     // Adding #Shorts tells YouTube to treat as a Short
     const description = caption.includes("#Shorts") ? caption : `${caption}\n\n#Shorts`;
 
-    const metadata = {
+    // AI disclosure (#160 / #170): YouTube's "altered or synthetic content"
+    // disclosure is set via the API flag rather than caption-prepend
+    // (per DISCLOSURE_STRATEGY: apiFlag=true, captionPrepend=false).
+    // The field name follows the Data API spec; if YouTube renames the
+    // field in a future API version, this single line is the change site.
+    const isAi = aiGenerated === true;
+
+    const metadata: Record<string, unknown> = {
       snippet: {
         title,
         description,
@@ -42,6 +49,7 @@ class YouTubeAdapter implements PlatformAdapter {
       status: {
         privacyStatus: "public",
         selfDeclaredMadeForKids: false,
+        ...(isAi && { containsSyntheticMedia: true }),
       },
     };
 

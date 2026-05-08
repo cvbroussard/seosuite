@@ -8,6 +8,7 @@ import type {
   PlatformAdapter, PublishInput, PublishResult, TokenResult,
   FetchCommentsInput, CommentData, ReplyInput,
 } from "./types";
+import { applyDisclosurePrefix } from "./ai-disclosure";
 
 const API_BASE = "https://api.linkedin.com/v2";
 
@@ -15,7 +16,11 @@ class LinkedInAdapter implements PlatformAdapter {
   readonly platform = "linkedin";
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { platformAccountId, accessToken, caption, mediaUrls, mediaType, accountMetadata } = input;
+    const { platformAccountId, accessToken, caption, mediaUrls, mediaType, accountMetadata, aiGenerated } = input;
+
+    // AI disclosure (#160 / #170): LinkedIn has no API flag for AI content,
+    // so caption-prepend is the compliance mechanism.
+    const disclosedCaption = applyDisclosurePrefix(caption, aiGenerated === true);
 
     // Build author URN — prefer org URN for Company Pages, fall back to person URN
     const selectedOrg = accountMetadata?.selected_org as Record<string, string> | null;
@@ -35,7 +40,7 @@ class LinkedInAdapter implements PlatformAdapter {
       lifecycleState: "PUBLISHED",
       specificContent: {
         "com.linkedin.ugc.ShareContent": {
-          shareCommentary: { text: caption },
+          shareCommentary: { text: disclosedCaption },
           shareMediaCategory: mediaAsset ? (mediaType === "video" ? "VIDEO" : "IMAGE") : "NONE",
           ...(mediaAsset && {
             media: [
