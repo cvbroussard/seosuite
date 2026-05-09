@@ -25,7 +25,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
  *   error   → onError callback fires; status returns to idle
  */
 
-export type BriefingState = "idle" | "recording" | "uploading" | "transcribing" | "error";
+export type BriefingState = "idle" | "recording" | "paused" | "uploading" | "transcribing" | "error";
 
 interface UseAudioBriefingOpts {
   siteId: string;
@@ -46,6 +46,7 @@ interface UseAudioBriefingReturn {
   /** Elapsed milliseconds while recording (live). */
   elapsedMs: number;
   start: () => Promise<void>;
+  pauseResume: () => void;
   stop: () => Promise<void>;
   cancel: () => void;
 }
@@ -151,7 +152,7 @@ export function useAudioBriefing(opts: UseAudioBriefingOpts): UseAudioBriefingRe
   }, [state]);
 
   const stop = useCallback(async () => {
-    if (state !== "recording") return;
+    if (state !== "recording" && state !== "paused") return;
     const recorder = recorderRef.current;
     if (!recorder) return;
 
@@ -277,9 +278,35 @@ export function useAudioBriefing(opts: UseAudioBriefingOpts): UseAudioBriefingRe
     }
   }, [state, siteId, sourceAssetId, source, appendTranscriptToContext]);
 
+  const pauseResume = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    if (state === "recording") {
+      try {
+        recorder.pause();
+        if (tickerRef.current) {
+          clearInterval(tickerRef.current);
+          tickerRef.current = null;
+        }
+        setState("paused");
+      } catch { /* noop */ }
+    } else if (state === "paused") {
+      try {
+        recorder.resume();
+        // Resume timer from accumulated elapsed; advance start anchor.
+        const accumulated = elapsedMs;
+        startedAtRef.current = Date.now() - accumulated;
+        tickerRef.current = setInterval(() => {
+          setElapsedMs(Date.now() - startedAtRef.current);
+        }, 250);
+        setState("recording");
+      } catch { /* noop */ }
+    }
+  }, [state, elapsedMs]);
+
   const cancel = useCallback(() => {
     cancelledRef.current = true;
-    if (recorderRef.current && state === "recording") {
+    if (recorderRef.current && (state === "recording" || state === "paused")) {
       try { recorderRef.current.stop(); } catch { /* noop */ }
     }
     teardownStream();
@@ -294,5 +321,5 @@ export function useAudioBriefing(opts: UseAudioBriefingOpts): UseAudioBriefingRe
     };
   }, []);
 
-  return { supported, state, elapsedMs, start, stop, cancel };
+  return { supported, state, elapsedMs, start, pauseResume, stop, cancel };
 }

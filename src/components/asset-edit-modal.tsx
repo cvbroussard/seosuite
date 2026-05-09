@@ -250,6 +250,77 @@ export function AssetEditModal({
     }, []),
   });
 
+  // Keyboard navigation for the briefing pass.
+  // Suppressed when an editable element is focused so the subscriber can
+  // still type in the textarea / inputs without triggering hotkeys.
+  // Hotkeys:
+  //   Space    → Start (idle/error) | Stop (recording/paused)
+  //   P        → Pause / Resume toggle
+  //   →        → Save + Next asset
+  //   ←        → Save + Prev asset (if hasPrev)
+  //   Esc      → Cancel recording (if recording/paused) else close modal
+  useEffect(() => {
+    function isEditableFocused(): boolean {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if ((el as HTMLElement).isContentEditable) return true;
+      return false;
+    }
+
+    function onKey(e: KeyboardEvent) {
+      // Allow Esc through even from editable elements (close intent is global)
+      if (e.key === "Escape") {
+        if (audio.state === "recording" || audio.state === "paused") {
+          e.preventDefault();
+          audio.cancel();
+        } else if (!isEditableFocused()) {
+          e.preventDefault();
+          onClose();
+        }
+        return;
+      }
+
+      // All other shortcuts only fire when no editable element is focused
+      if (isEditableFocused()) return;
+
+      // Don't hijack if a modifier key is held (subscribers using
+      // browser shortcuts shouldn't be surprised).
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        if (audio.state === "idle" || audio.state === "error") audio.start();
+        else if (audio.state === "recording" || audio.state === "paused") audio.stop();
+      } else if (e.key === "p" || e.key === "P") {
+        if (audio.state === "recording" || audio.state === "paused") {
+          e.preventDefault();
+          audio.pauseResume();
+        }
+      } else if (e.key === "ArrowRight") {
+        if (hasNext && onNext && !saving) {
+          e.preventDefault();
+          handleSaveAndNext();
+        }
+      } else if (e.key === "ArrowLeft") {
+        if (hasPrev && onPrev && !saving) {
+          e.preventDefault();
+          (async () => {
+            try {
+              await doSave();
+              onPrev();
+            } catch { /* surfaced via toast inside doSave */ }
+          })();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audio.state, hasNext, hasPrev, saving, onClose]);
+
   // Vendor hashtag autocomplete state
   const [hashQuery, setHashQuery] = useState<string | null>(null);
   const [hashIndex, setHashIndex] = useState(0);
@@ -584,39 +655,80 @@ export function AssetEditModal({
                     <span className="text-[10px] text-danger">⚠ Audio error</span>
                   )}
                 </label>
-                <div className="flex items-center gap-3">
-                  {audio.supported && audio.state === "idle" && (
-                    <button
-                      onClick={() => audio.start()}
-                      type="button"
-                      className="text-[10px] text-muted hover:text-foreground"
-                      title="Start dictation — captures audio + transcribes"
-                    >
-                      🎤 Dictate
-                    </button>
+                {/* Three-button primary action row for keyboard-driven
+                    briefing pass. Hotkeys: Space (Start/Stop), P (Pause/
+                    Resume), Right Arrow (Next), Left Arrow (Prev), Esc
+                    (Cancel recording or Close modal). Suppressed when an
+                    input/textarea is focused so the subscriber can still
+                    type. Buttons are clickable for mouse users. */}
+                <div className="flex items-center gap-1">
+                  {/* START / STOP — toggles based on state */}
+                  {audio.supported && (
+                    audio.state === "idle" || audio.state === "error" ? (
+                      <button
+                        onClick={() => audio.start()}
+                        type="button"
+                        className="rounded border border-border bg-surface-hover px-2 py-1 text-[10px] font-medium text-foreground hover:border-accent/40"
+                        title="Start dictation (Space)"
+                      >
+                        🎤 Start
+                      </button>
+                    ) : (audio.state === "recording" || audio.state === "paused") ? (
+                      <button
+                        onClick={() => audio.stop()}
+                        type="button"
+                        className="rounded border border-danger/40 bg-danger/10 px-2 py-1 text-[10px] font-medium text-danger hover:bg-danger/20"
+                        title="Stop and transcribe (Space)"
+                      >
+                        ■ Stop
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => audio.cancel()}
+                        type="button"
+                        className="rounded border border-border px-2 py-1 text-[10px] text-muted hover:text-foreground"
+                        title="Cancel (Esc)"
+                      >
+                        ✕ Cancel
+                      </button>
+                    )
                   )}
-                  {audio.state === "recording" && (
+                  {/* PAUSE / RESUME — only enabled mid-recording */}
+                  <button
+                    onClick={() => audio.pauseResume()}
+                    type="button"
+                    disabled={audio.state !== "recording" && audio.state !== "paused"}
+                    className={`rounded border px-2 py-1 text-[10px] font-medium ${
+                      audio.state === "paused"
+                        ? "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20"
+                        : audio.state === "recording"
+                        ? "border-border text-foreground hover:border-accent/40"
+                        : "cursor-not-allowed border-border text-muted/40"
+                    }`}
+                    title={
+                      audio.state === "recording"
+                        ? "Pause (P)"
+                        : audio.state === "paused"
+                        ? "Resume (P)"
+                        : "Pause (only while recording)"
+                    }
+                  >
+                    {audio.state === "paused" ? "▶ Resume" : "⏸ Pause"}
+                  </button>
+                  {/* NEXT — saves and advances */}
+                  {hasNext && onNext && (
                     <button
-                      onClick={() => audio.stop()}
+                      onClick={() => handleSaveAndNext()}
                       type="button"
-                      className="text-[10px] font-medium text-danger"
-                      title="Stop and transcribe"
+                      disabled={saving}
+                      className="rounded border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
+                      title="Save and go to next asset (→)"
                     >
-                      ■ Stop
-                    </button>
-                  )}
-                  {(audio.state === "uploading" || audio.state === "transcribing") && (
-                    <button
-                      onClick={() => audio.cancel()}
-                      type="button"
-                      className="text-[10px] text-muted hover:text-foreground"
-                      title="Cancel"
-                    >
-                      ✕
+                      Next →
                     </button>
                   )}
                   {_hasGeneratedText && (
-                    <span className="text-[10px] text-success" title="Auto-generated by TracPost pipeline">
+                    <span className="ml-2 text-[10px] text-success" title="Auto-generated by TracPost pipeline">
                       ✓ Auto-captioned
                     </span>
                   )}
