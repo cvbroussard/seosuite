@@ -4,6 +4,7 @@ import { createKenBurnsVideo, reformatVideo } from "@/lib/render/video";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { isSmartRotateEnabled, callSmartRotate, smartRotateDimsForTemplate } from "./smart-rotate-client";
 import { isEnterpriseTier } from "./site-tier";
+import { extractSlugFromSourceUrl, deriveVariantKey } from "./asset-keys";
 
 /**
  * Variant render worker (#163, #172).
@@ -211,9 +212,9 @@ export async function renderTemplateVariant(
     let renderNotes: Record<string, unknown>;
 
     if (isVideo) {
-      ({ outputUrl, renderNotes } = await renderVideoVariant(sourceUrl, templateId, siteId));
+      ({ outputUrl, renderNotes } = await renderVideoVariant(sourceUrl, templateId, siteId, assetId));
     } else {
-      ({ outputUrl, renderNotes } = await renderImageVariant(sourceUrl, templateId, siteId));
+      ({ outputUrl, renderNotes } = await renderImageVariant(sourceUrl, templateId, siteId, assetId));
     }
 
     await sql`
@@ -253,10 +254,32 @@ export async function renderTemplateVariant(
  * motion treatment for video templates (reel_9x16, story_9x16) and a
  * sharp-based crop for image templates (feed_square, pin_2x3, etc.).
  */
+/**
+ * Build a slug-derived variant key from the source asset's URL.
+ * Falls back to a date-based key when source URL doesn't follow the
+ * slug pattern yet (e.g. legacy asset that hasn't been backfilled).
+ */
+function buildVariantKey(
+  siteId: string,
+  sourceUrl: string,
+  sourceAssetId: string,
+  templateId: string,
+  ext: string,
+): string {
+  const slug = extractSlugFromSourceUrl(sourceUrl);
+  if (slug) {
+    return deriveVariantKey(siteId, slug, sourceAssetId, templateId, ext);
+  }
+  // Legacy fallback — same date-based pattern as before
+  const date = new Date().toISOString().slice(0, 10);
+  return `sites/${siteId}/variants/${date}/${templateId}-${Date.now()}.${ext}`;
+}
+
 async function renderImageVariant(
   sourceUrl: string,
   templateId: string,
   siteId: string,
+  sourceAssetId: string,
 ): Promise<{ outputUrl: string; renderNotes: Record<string, unknown> }> {
   // Video-output templates: Ken Burns motion from the still. The duration
   // is template-tuned — Reels lean longer, Stories shorter.
@@ -302,8 +325,7 @@ async function renderImageVariant(
     .jpeg({ quality: 88, mozjpeg: true })
     .toBuffer();
 
-  const date = new Date().toISOString().slice(0, 10);
-  const key = `sites/${siteId}/variants/${date}/${templateId}-${Date.now()}.jpg`;
+  const key = buildVariantKey(siteId, sourceUrl, sourceAssetId, templateId, "jpg");
   const url = await uploadBufferToR2(key, outputBuffer, "image/jpeg");
 
   return {
@@ -337,6 +359,7 @@ async function renderVideoVariant(
   sourceUrl: string,
   templateId: string,
   siteId: string,
+  sourceAssetId: string,
 ): Promise<{ outputUrl: string; renderNotes: Record<string, unknown> }> {
   const targetAspect = templateAspect(templateId);
   if (!targetAspect) {
@@ -359,9 +382,7 @@ async function renderVideoVariant(
     const dims = smartRotateDimsForTemplate(templateId);
     if (dims) {
       try {
-        const date = new Date().toISOString().slice(0, 10);
-        const destinationKey =
-          `sites/${siteId}/variants/${date}/${templateId}-${Date.now()}.mp4`;
+        const destinationKey = buildVariantKey(siteId, sourceUrl, sourceAssetId, templateId, "mp4");
         const result = await callSmartRotate({
           sourceUrl,
           targetAspect: dims.targetAspect,

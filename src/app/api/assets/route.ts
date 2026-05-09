@@ -156,13 +156,32 @@ export async function POST(req: NextRequest) {
       RETURNING id, site_id, storage_url, media_type, context_note, triage_status, created_at
     `;
 
-    // Generate poster image for video assets eagerly. Per design lock
-    // 2026-05-08: every video gets a representative frame extracted at
-    // upload time so AI vision triage, Unifeed cards, asset library,
-    // platform publish covers, and v2 article hero rendering all have
-    // a real poster to use instead of relying on first-frame fallbacks.
-    // Idempotent inside generatePosterForAsset; non-fatal on failure.
-    if (media_type.toLowerCase().startsWith("video")) {
+    // Two-track post-upload work:
+    //
+    // (a) Briefed-on-upload (substantive caption ≥40 chars): route through
+    //     processBriefedAsset which orchestrates the briefing-flip pipeline
+    //     atomically — vision triage with full context, AI url_slug, source
+    //     rename, poster gen w/ slug key, variant render.
+    //
+    // (b) Unbriefed video upload: generate poster eagerly so library cards
+    //     have a real thumbnail BEFORE the subscriber gets around to
+    //     briefing. Poster will be re-keyed at briefing flip via
+    //     processBriefedAsset (R2 server-side copy, byte-perfect).
+    if (briefedOnUpload) {
+      waitUntil(
+        (async () => {
+          try {
+            const { processBriefedAsset } = await import("@/lib/pipeline/process-briefed-asset");
+            await processBriefedAsset(asset.id as string);
+          } catch (err) {
+            console.warn(
+              "processBriefedAsset failed (non-fatal — asset still saved):",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        })(),
+      );
+    } else if (media_type.toLowerCase().startsWith("video")) {
       waitUntil(
         (async () => {
           try {
@@ -171,26 +190,6 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             console.warn(
               "Poster generation failed (non-fatal — asset has no poster):",
-              err instanceof Error ? err.message : err,
-            );
-          }
-        })(),
-      );
-    }
-
-    // Render ALL applicable templates eagerly when briefed-on-upload.
-    // Per the eager-cheap policy, every connected platform should have a
-    // ready variant by the time orchestrator or Compose looks. waitUntil
-    // ensures the upload response returns immediately.
-    if (briefedOnUpload) {
-      waitUntil(
-        (async () => {
-          try {
-            const { renderAllVariantsForAsset } = await import("@/lib/pipeline/variant-render");
-            await renderAllVariantsForAsset(asset.id as string);
-          } catch (err) {
-            console.warn(
-              "Variant render failed (non-fatal — asset still briefed):",
               err instanceof Error ? err.message : err,
             );
           }

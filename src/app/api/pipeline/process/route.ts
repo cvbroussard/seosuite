@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { triageAsset } from "@/lib/pipeline/triage";
 import { extractExif, fetchAndConvert } from "@/lib/image-utils";
 import { matchAssetToEntities } from "@/lib/geo-match";
 import { uploadBufferToR2, deleteObjectFromR2, keyFromStorageUrl } from "@/lib/r2";
@@ -149,35 +148,13 @@ export async function POST(req: NextRequest) {
         `;
       }
 
-      // Triage
-      await triageAsset(assetId);
-
-      // Face detection — only if triage detected faces (30s timeout)
-      if (mediaType?.startsWith("image") && !meta.faces) {
-        const [triaged] = await sql`SELECT ai_analysis FROM media_assets WHERE id = ${assetId}`;
-        const analysis = (triaged?.ai_analysis || {}) as Record<string, unknown>;
-        if (analysis.has_faces) {
-          try {
-            const { processFaces } = await import("@/lib/face-detect");
-            await Promise.race([
-              processFaces(assetId, siteId, currentUrl),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Face detection timed out (30s)")), 30000)),
-            ]);
-          } catch (err) {
-            console.error(`Face detection failed for ${assetId}:`, err instanceof Error ? err.message : err);
-          }
-        }
-      }
-
-      // Render variants — per-platform crops, grades, overlays
-      if (mediaType?.startsWith("image")) {
-        try {
-          const { renderAssetVariants } = await import("@/lib/pipeline/render-step");
-          await renderAssetVariants(assetId);
-        } catch (err) {
-          console.error(`Render failed for ${assetId}:`, err instanceof Error ? err.message : err);
-        }
-      }
+      // NOTE: Vision triage, face detection, and variant render previously ran
+      // here — moved to briefing-flip via processBriefedAsset (LOCKED 2026-05-08).
+      // Triage now runs WITH subscriber context (caption + pillar + brands +
+      // project), so AI returns a context-aware url_slug rather than guessing
+      // from pixels alone. Until the subscriber briefs the asset it stays in
+      // pending_briefing with deterministic prep (HEIC / EXIF / project tag)
+      // already done above, ready for the briefing-flip pipeline to take over.
 
       processed++;
     } catch (err) {

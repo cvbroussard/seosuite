@@ -1,8 +1,10 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const BUCKET = process.env.R2_BUCKET_NAME!;
 const PUBLIC_DOMAIN = "https://assets.tracpost.com";
+
+export { PUBLIC_DOMAIN as R2_PUBLIC_DOMAIN };
 
 /**
  * Parse the R2 object key out of a public storage URL.
@@ -80,6 +82,42 @@ export async function deleteObjectFromR2(key: string): Promise<void> {
       Key: key,
     }),
   );
+}
+
+/**
+ * Server-side rename of an R2 object. R2 doesn't support native rename,
+ * so this is implemented as CopyObject + DeleteObject. Bytes never leave
+ * R2's network — EXIF, color profiles, all metadata preserved byte-perfect.
+ *
+ * Per the URL-naming architecture (LOCKED 2026-05-08): used by
+ * processBriefedAsset to rename source assets from throwaway upload-time
+ * keys to AI-generated SEO-shaped keys at briefing flip.
+ *
+ * Returns the new public URL. Throws if either the copy or delete fails;
+ * caller decides whether to retry or mark the rename failed.
+ */
+export async function renameR2Object(oldKey: string, newKey: string): Promise<string> {
+  if (oldKey === newKey) {
+    return `${PUBLIC_DOMAIN}/${newKey}`;
+  }
+  // Copy first; if this fails the original object is still intact.
+  await r2.send(
+    new CopyObjectCommand({
+      Bucket: BUCKET,
+      Key: newKey,
+      CopySource: `${BUCKET}/${oldKey}`,
+      MetadataDirective: "COPY",
+      CacheControl: "public, max-age=31536000, immutable",
+    }),
+  );
+  // Only delete the old key after copy succeeds.
+  await r2.send(
+    new DeleteObjectCommand({
+      Bucket: BUCKET,
+      Key: oldKey,
+    }),
+  );
+  return `${PUBLIC_DOMAIN}/${newKey}`;
 }
 
 /**

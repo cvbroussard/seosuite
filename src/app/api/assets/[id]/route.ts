@@ -208,8 +208,12 @@ export async function PATCH(
         waitUntil(
           (async () => {
             try {
-              const { renderAllVariantsForAsset } = await import("@/lib/pipeline/variant-render");
-              await renderAllVariantsForAsset(id);
+              // processBriefedAsset orchestrates the full briefing-flip pipeline:
+              // vision triage with full context → AI returns url_slug → source rename
+              // → poster gen with derived key (videos) → cascade-delete old variants →
+              // render all variants with slug-derived keys.
+              const { processBriefedAsset } = await import("@/lib/pipeline/process-briefed-asset");
+              await processBriefedAsset(id);
             } catch (err) {
               console.warn(
                 "Variant render failed (non-fatal — asset still briefed):",
