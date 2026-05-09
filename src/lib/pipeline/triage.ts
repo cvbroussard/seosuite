@@ -282,16 +282,21 @@ async function visionTriage(
             text: `Analyze this image for a social media content pipeline.
 
 Context note from subscriber: "${contextNote}"
-${subscriberPillar ? `Subscriber suggested pillar: ${subscriberPillar}` : ""}
 ${pillarGuidance ? `## Content Pillars & Tags\n${pillarGuidance}\n` : `Available content pillars: ${pillarList}`}
 ${brandContext}
 ${brands && brands.length > 0 ? `\n## Known Vendors/Brands\nThe subscriber works with these vendors. If you recognize any of their products, materials, or equipment in the image, include them in detected_vendors.\n${brands.map((b) => `- ${b.name} (${b.slug})`).join("\n")}` : ""}
 ${enrichedContext ? `\n## Business Context (for text generation)\n${enrichedContext}` : ""}
 ${correctionsBlock}
+## Tag selection (read carefully)
+Pillars are NOT what you're picking — they're just the grouping context shown above.
+Your job is to pick the best 2-5 TAGS that fit this asset, drawn from across the
+entire pillar menu (you can mix tags from multiple pillars; pillar membership is
+derived later from which tags you chose). Do NOT return a content_pillar field —
+the parser computes pillars from tags.
+
 Respond with ONLY valid JSON (no markdown):
 {
   "quality_score": <0.0-1.0, see scoring guide below>,
-  "content_pillar": "<the SINGLE best-matching pillar ID from the pillars above. Pick your most confident answer — the subscriber will multi-select from the full pillar menu themselves; this field is the smart default. Do not return an array.>",
   "content_tags": [<2-5 matching tag IDs from the tags above, ordered by relevance>],
   "platform_fit": [<array of: "ig_feed", "ig_story", "ig_reel", "gbp", "youtube", "youtube_short", "fb_feed", "tiktok", "twitter", "linkedin", "pinterest">],
   "has_faces": <true/false — ONLY true if a human FACE is clearly visible (eyes, nose, mouth). Hands, arms, legs, torso, or humans seen from behind or waist-down do NOT count as faces>,
@@ -315,7 +320,6 @@ Rules:
 - Only include ig_reel, youtube, or tiktok if the content is video or strongly suggests video would be better
 - Professional/business content suits linkedin and gbp
 - Visual/aesthetic content suits pinterest
-- If subscriber provided a pillar, prefer it unless clearly wrong
 - Quality scoring guide (technical publishability, NOT content value):
   0.9-1.0: Finished/completed work, good lighting, sharp, publishable as-is. Hero class.
   0.7-0.8: Decent composition but imperfect — in-progress work with good framing, minor lighting issues, some staging clutter.
@@ -338,25 +342,36 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
   if (!jsonMatch) throw new Error("No JSON in vision response");
   const parsed = JSON.parse(jsonMatch[0]);
 
-  // AI returns ONE confident pillar pick; subscriber owns the full array
-  // via the modal's two-column checkbox UI. Fallback to legacy array shape
-  // for in-flight responses, then to first available pillar if neither.
-  let contentPillars: ContentPillar[] = parsed.content_pillar
-    ? [parsed.content_pillar]
-    : Array.isArray(parsed.content_pillars)
-      ? [parsed.content_pillars[0]]
-      : [pillars[0] || "general"];
-
-  // Extract content tags (two-tier system)
+  // Extract content tags — the canonical AI signal (LOCKED 2026-05-09).
+  // Pillars are NO LONGER asked of the AI; they're derived from tag→parent
+  // lookup in pillarConfig. Defensive filter: only keep tag IDs that
+  // actually exist in pillarConfig (AI can hallucinate IDs).
+  const allValidTagIds = new Set((pillarConfig || []).flatMap((p) => p.tags.map((t) => t.id)));
   const contentTags: string[] = Array.isArray(parsed.content_tags)
-    ? parsed.content_tags
+    ? (parsed.content_tags as string[]).filter((id) => allValidTagIds.has(id))
     : [];
 
-  // Apply subscriber pillar override if valid
-  if (subscriberPillar) {
-    if (!contentPillars.includes(subscriberPillar as ContentPillar)) {
-      contentPillars.unshift(subscriberPillar as ContentPillar);
-    }
+  // Derive content_pillars from selected tags — find parent pillar for each
+  // tag, dedupe. content_pillar singular = pillars[0] (back-compat shadow).
+  // If AI returned no usable tags AND legacy content_pillar field is present,
+  // fall back to that for grace; otherwise default to first available pillar.
+  let contentPillars: ContentPillar[] = Array.from(
+    new Set(
+      contentTags
+        .map((tagId) => (pillarConfig || []).find((p) => p.tags.some((t) => t.id === tagId))?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ) as ContentPillar[];
+  if (contentPillars.length === 0) {
+    // Legacy fallback only — AI shouldn't return content_pillar anymore
+    if (parsed.content_pillar) contentPillars = [parsed.content_pillar];
+    else contentPillars = [pillars[0] || "general"];
+  }
+  // Apply subscriber pillar override if valid (legacy path — kept for
+  // backward compat; new architecture has subscriber editing tags directly,
+  // which already implies the pillar).
+  if (subscriberPillar && !contentPillars.includes(subscriberPillar as ContentPillar)) {
+    contentPillars.unshift(subscriberPillar as ContentPillar);
   }
 
   const quality = Math.min(1, Math.max(0, parsed.quality_score || 0.5));
