@@ -195,7 +195,11 @@ export function MediaGrid({
                 {statusLabels[a.triage_status] || a.triage_status}
               </span>
               {a.media_type === "video" && (
-                <span className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+                <span
+                  className={`absolute top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white ${
+                    a.source === "ai_generated" ? "right-9" : "right-1.5"
+                  }`}
+                >
                   video
                 </span>
               )}
