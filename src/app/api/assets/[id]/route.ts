@@ -119,21 +119,12 @@ export async function PATCH(
     if (context_note !== undefined) {
       await sql`UPDATE media_assets SET context_note = ${context_note} WHERE id = ${id}`;
     }
-    if (pillar !== undefined) {
-      await sql`UPDATE media_assets SET content_pillar = ${pillar}, metadata = ${JSON.stringify(newMeta)}::jsonb WHERE id = ${id}`;
-    }
-    // Subscriber-controlled multi-pillar array (Story Angle column in modal).
-    // Replaces whatever AI/legacy wrote. content_pillar singular tracks
-    // pillars[0] for backward-compat queries.
-    if (Array.isArray(pillars)) {
-      const primary = pillars[0] || null;
-      await sql`
-        UPDATE media_assets
-        SET content_pillars = ${pillars},
-            content_pillar = COALESCE(${primary}, content_pillar)
-        WHERE id = ${id}
-      `;
-    }
+    // pillar / pillars body params now NO-OPS (LOCKED 2026-05-09).
+    // Pillars are derived from content_tags + sites.pillar_config at read
+    // time; nothing is stored on the asset for pillar membership. We accept
+    // the params silently (so legacy callers don't break) but never write.
+    // Suppress unused-warnings:
+    void pillar; void pillars; void newMeta;
     // Subscriber-controlled scene composition array (Scene Composition column).
     // Validated against the platform-wide registry on the client side; we
     // accept whatever they send because a write is always more current than

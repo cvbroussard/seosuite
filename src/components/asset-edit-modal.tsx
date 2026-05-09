@@ -435,13 +435,10 @@ export function AssetEditModal({
   async function doSave(): Promise<boolean> {
     const body: Record<string, unknown> = {};
     if (note !== initialNote) body.context_note = note;
-    if (pillar !== initialPillar) body.pillar = pillar;
-    // Story Angle: pillarsArr is derived from selected tags. Send the
-    // derived array so server-side content_pillars stays in sync with
-    // content_tags. Sorted compare so reorders alone don't mark dirty.
-    if (JSON.stringify([...pillarsArr].sort()) !== JSON.stringify([...initialPillarsArr].sort())) {
-      body.pillars = pillarsArr;
-    }
+    // pillar / pillars no longer sent on save (LOCKED 2026-05-09).
+    // Pillar membership derives from content_tags at read time. Tags
+    // are the canonical signal; sending pillars would be redundant.
+    void pillar; void pillarsArr; void initialPillarsArr;
     // Scene Composition multi-select diff
     if (JSON.stringify([...sceneTypesArr].sort()) !== JSON.stringify([...initialSceneTypes].sort())) {
       body.scene_types = sceneTypesArr;

@@ -121,13 +121,17 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
     ? { generated_text: result.generated_text }
     : {};
 
+  // content_pillar / content_pillars columns intentionally NOT written
+  // here (LOCKED 2026-05-09). Pillars are NOT stored on the asset — they
+  // derive from content_tags + sites.pillar_config at read time via
+  // pillarsFromTags(). Triage's job ends at writing the canonical signals:
+  // tags, scene types, AI analysis. Downstream consumers (orchestrator,
+  // gbp, content-matcher) migrating to derive in task #181.
   await sql`
     UPDATE media_assets
     SET
       triage_status = ${result.triage_status},
       quality_score = ${result.quality_score},
-      content_pillar = ${result.content_pillar},
-      content_pillars = ${result.content_pillars},
       scene_types = COALESCE(${result.scene_types || null}, scene_types),
       content_tags = ${result.content_tags || []},
       platform_fit = ${result.platform_fit},

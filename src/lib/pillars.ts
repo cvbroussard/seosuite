@@ -261,3 +261,41 @@ export function buildPillarGuidance(config: PillarConfig): string {
     return `**${p.label}** (${p.id}): ${p.description}\n  Tags: ${tagList}`;
   }).join("\n\n");
 }
+
+/**
+ * Derive the pillar IDs an asset belongs to from its content_tags
+ * (LOCKED 2026-05-09).
+ *
+ * Per the architectural lock: pillars are NOT stored on assets. They're
+ * a join-derivation off content_tags + the site's pillar_config. Every
+ * downstream consumer that wants to ask "what pillars does this asset
+ * cover?" routes through this helper.
+ *
+ * Returns deduped, ordered pillar IDs (ordered by their appearance in
+ * pillarConfig — the framework canonical order what/how/who/proof/why).
+ */
+export function pillarsFromTags(
+  tags: string[] | null | undefined,
+  pillarConfig: PillarConfig | null | undefined,
+): string[] {
+  if (!tags || tags.length === 0 || !pillarConfig || pillarConfig.length === 0) {
+    return [];
+  }
+  const tagSet = new Set(tags);
+  return pillarConfig
+    .filter((p) => p.tags.some((t) => tagSet.has(t.id)))
+    .map((p) => p.id);
+}
+
+/**
+ * Convenience: derive the primary (first) pillar ID for an asset.
+ * Replaces the legacy content_pillar singular field for callers that
+ * just need "the asset's main pillar".
+ */
+export function primaryPillarFromTags(
+  tags: string[] | null | undefined,
+  pillarConfig: PillarConfig | null | undefined,
+): string | null {
+  const all = pillarsFromTags(tags, pillarConfig);
+  return all[0] || null;
+}
