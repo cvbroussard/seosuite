@@ -16,9 +16,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "site_id required" }, { status: 400 });
   }
 
-  // Synced photos (already on GBP)
+  // Synced photos (already on GBP). content_pillar dropped from SELECT
+  // (LOCKED 2026-05-09 — pillars not stored on assets, derive at read
+  // time when needed; this endpoint's response payload doesn't use it).
   const synced = await sql`
-    SELECT gps.*, ma.quality_score, ma.content_pillar, ma.ai_analysis
+    SELECT gps.*, ma.quality_score, ma.ai_analysis
     FROM gbp_photo_sync gps
     LEFT JOIN media_assets ma ON ma.id = gps.media_asset_id
     WHERE gps.site_id = ${siteId}
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   // Eligible but not yet synced
   const eligible = await sql`
-    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_pillar,
+    SELECT ma.id, ma.storage_url, ma.quality_score,
            ma.ai_analysis, ma.created_at
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}

@@ -1,6 +1,7 @@
 import { verifyCookie } from "@/lib/cookie-sign";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 import {
   assembleBlogPrompt,
   buildBlockTraces,
@@ -77,10 +78,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Body candidates — pillar-matched if hero has a pillar.
-  const [hero] = await sql`SELECT content_pillar FROM media_assets WHERE id = ${heroId}`;
-  const pillar = hero?.content_pillar as string | null;
-  const bodyRows = pillar
+  // Body candidates — pillar-matched if hero has tags whose parent pillar
+  // resolves. Pillar derived from tags via site pillar_config (LOCKED 2026-05-09).
+  const [hero] = await sql`SELECT content_tags FROM media_assets WHERE id = ${heroId}`;
+  const [pcRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${siteId}`;
+  const pc = (pcRow?.pillar_config || []) as PillarConfig;
+  const pillar = primaryPillarFromTags(
+    (hero?.content_tags as string[] | null) || null,
+    pc,
+  );
+  const pillarTagIds = pillar
+    ? (pc.find((p) => p.id === pillar)?.tags.map((t) => t.id) || [])
+    : [];
+
+  const bodyRows = pillarTagIds.length > 0
     ? await sql`
         SELECT id FROM media_assets
         WHERE site_id = ${siteId}
@@ -88,7 +99,7 @@ export async function POST(req: NextRequest) {
           AND triage_status NOT IN ('quarantined','shelved')
           AND status NOT IN ('deleted','failed')
           AND (media_type ILIKE 'image%' OR media_type = 'video')
-          AND (content_pillar = ${pillar} OR ${pillar} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
+          AND content_tags && ${pillarTagIds}::text[]
         ORDER BY quality_score DESC NULLS LAST, created_at DESC
         LIMIT 8
       `

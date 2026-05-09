@@ -12,9 +12,11 @@ export default async function GooglePhotosPage() {
 
   const siteId = session.activeSiteId;
 
-  // All image assets with sync status
+  // All image assets with sync status. content_pillar dropped from
+  // SELECT (LOCKED 2026-05-09 — pillars not stored on assets); the
+  // PhotosClient typed the field but never consumed it.
   const allPhotos = await sql`
-    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_pillar,
+    SELECT ma.id, ma.storage_url, ma.quality_score,
            ma.ai_analysis->>'scene_type' AS scene_type,
            gps.id AS sync_id, gps.synced_at
     FROM media_assets ma
@@ -55,7 +57,7 @@ export default async function GooglePhotosPage() {
     id: p.id as string,
     storageUrl: p.storage_url as string,
     qualityScore: Number(p.quality_score) || 0,
-    contentPillar: (p.content_pillar as string) || null,
+    contentPillar: null,
     sceneType: (p.scene_type as string) || null,
     isSynced: !!p.sync_id,
     syncedAt: (p.synced_at as string) || null,

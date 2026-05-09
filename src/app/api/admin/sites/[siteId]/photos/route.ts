@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin-session";
 import { sql } from "@/lib/db";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -61,8 +62,13 @@ export async function POST(
       ? `${gbpAccountId}/${gbpAccount.account_id}`
       : gbpAccount.account_id;
 
+    // pillar_config loaded once for derive-pillar-from-tags
+    // (LOCKED 2026-05-09 — pillars not stored on assets).
+    const [siteRowForPillars] = await sql`SELECT pillar_config FROM sites WHERE id = ${siteId}`;
+    const _pillarConfig = (siteRowForPillars?.pillar_config || []) as PillarConfig;
+
     const assets = await sql`
-      SELECT id, storage_url, content_pillar, ai_analysis
+      SELECT id, storage_url, content_tags, ai_analysis
       FROM media_assets WHERE id = ANY(${asset_ids})
     `;
 
@@ -70,7 +76,11 @@ export async function POST(
     for (const asset of assets) {
       const analysis = (asset.ai_analysis || {}) as Record<string, unknown>;
       const sceneType = (analysis.scene_type as string) || null;
-      const category = mapToGbpCategory(asset.content_pillar as string, sceneType);
+      const derivedPillar = primaryPillarFromTags(
+        (asset.content_tags as string[] | null) || null,
+        _pillarConfig,
+      );
+      const category = mapToGbpCategory(derivedPillar as string, sceneType);
       const description = (analysis.description as string) || undefined;
 
       const result = await uploadGbpPhoto(

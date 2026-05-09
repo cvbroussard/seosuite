@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import type { BlogStrategy } from "../types";
 import type { BlogGenerateSpec } from "../../../blog";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 /**
  * Asset-driven blog strategy.
@@ -27,14 +28,24 @@ export const assetDrivenStrategy: BlogStrategy = {
     if (!seedId) return null;
 
     const [seed] = await sql`
-      SELECT id, content_pillar, content_pillars
+      SELECT id, content_tags
       FROM media_assets
       WHERE id = ${seedId} AND site_id = ${assessment.siteId}
     `;
     if (!seed) return null;
 
-    const pillar = (seed.content_pillar as string | null) || null;
-    const bodyCandidates = pillar
+    // Pillar derived from seed's tags (LOCKED 2026-05-09).
+    const [pcRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${assessment.siteId}`;
+    const pc = (pcRow?.pillar_config || []) as PillarConfig;
+    const pillar = primaryPillarFromTags(
+      (seed.content_tags as string[] | null) || null,
+      pc,
+    );
+    const pillarTagIds = pillar
+      ? (pc.find((p) => p.id === pillar)?.tags.map((t) => t.id) || [])
+      : [];
+
+    const bodyCandidates = pillarTagIds.length > 0
       ? await sql`
           SELECT id FROM media_assets
           WHERE site_id = ${assessment.siteId}
@@ -42,7 +53,7 @@ export const assetDrivenStrategy: BlogStrategy = {
             AND triage_status = 'triaged' AND archived_at IS NULL
             AND status NOT IN ('deleted','failed')
             AND (media_type ILIKE 'image%' OR media_type = 'video')
-            AND (content_pillar = ${pillar} OR ${pillar} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
+            AND content_tags && ${pillarTagIds}::text[]
           ORDER BY quality_score DESC NULLS LAST, created_at DESC
           LIMIT 10
         `

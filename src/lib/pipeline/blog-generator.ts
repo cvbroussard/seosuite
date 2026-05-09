@@ -4,6 +4,7 @@ import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
 import { researchContextNote } from "@/lib/research/wikipedia";
 import { scanContent } from "@/lib/pipeline/content-guard";
 import { getThresholds, publishAbove, heroAbove } from "@/lib/pipeline/quality-thresholds";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 /**
  * Blog content types — determines structure, length, and prompt.
@@ -81,9 +82,9 @@ const anthropic = new Anthropic();
 export async function generateBlogPost(assetId: string): Promise<string | null> {
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.context_note,
-           ma.content_pillar, ma.content_tags, ma.ai_analysis, ma.media_type,
+           ma.content_tags, ma.ai_analysis, ma.media_type,
            s.name AS site_name, s.url AS site_url, s.brand_voice,
-           s.brand_playbook,
+           s.brand_playbook, s.pillar_config,
            bs.blog_enabled, bs.blog_title
     FROM media_assets ma
     JOIN sites s ON ma.site_id = s.id
@@ -93,6 +94,15 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
 
   if (!asset) return null;
   if (!asset.blog_enabled) return null;
+
+  // Derive primary pillar from content_tags (LOCKED 2026-05-09 — pillars
+  // are NOT stored on the asset). Stash on the asset object so all the
+  // downstream prompt-builder helpers can read .content_pillar uniformly.
+  const _pillarConfig = (asset.pillar_config || []) as PillarConfig;
+  asset.content_pillar = primaryPillarFromTags(
+    (asset.content_tags as string[] | null) || null,
+    _pillarConfig,
+  );
 
   const [existing] = await sql`
     SELECT id FROM blog_posts WHERE source_asset_id = ${assetId}
@@ -136,8 +146,12 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
   const recentUrls = recentPostImages.map((r) => r.og_image_url as string).filter(Boolean);
 
   const qt = await getThresholds(asset.site_id as string);
+  // Inline-image affinity: prefer images that share tags with the source.
+  // (Was a pillar-equality CASE on the dropped content_pillar column;
+  // tag overlap is a stronger signal than pillar match anyway.)
+  const sourceTags = (asset.content_tags as string[] | null) || [];
   const inlineImages = await sql`
-    SELECT storage_url, context_note, content_pillar
+    SELECT storage_url, context_note, content_tags
     FROM media_assets
     WHERE site_id = ${asset.site_id}
       AND id != ${assetId}
@@ -147,7 +161,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
       AND storage_url != ALL(${recentUrls.length > 0 ? recentUrls : ["__none__"]})
     ORDER BY
       COALESCE((metadata->>'used_count')::int, 0) ASC,
-      CASE WHEN content_pillar = ${asset.content_pillar || ''} THEN 0 ELSE 1 END,
+      CASE WHEN content_tags && ${sourceTags}::text[] THEN 0 ELSE 1 END,
       quality_score DESC
     LIMIT 3
   `;
@@ -410,8 +424,16 @@ export async function generateBlogFromTopic(topicId: string): Promise<string | n
     `;
   }
 
-  // Query images from media library for inline use
+  // Query images from media library for inline use.
+  // Pillar-affinity sort migrated to tag-overlap (LOCKED 2026-05-09):
+  // resolve topic.pillar to its tag IDs via pillar_config and prefer
+  // images whose content_tags overlap.
   const qt2 = await getThresholds(topic.site_id as string);
+  const [siteRowForPillarConfig] = await sql`SELECT pillar_config FROM sites WHERE id = ${topic.site_id}`;
+  const _topicPillarConfig = (siteRowForPillarConfig?.pillar_config || []) as PillarConfig;
+  const topicPillarTagIds = topic.pillar
+    ? (_topicPillarConfig.find((p) => p.id === topic.pillar)?.tags.map((t) => t.id) || [])
+    : [];
   const inlineImages = await sql`
     SELECT storage_url, context_note
     FROM media_assets
@@ -420,7 +442,7 @@ export async function generateBlogFromTopic(topicId: string): Promise<string | n
       AND quality_score > ${heroAbove(qt2)}
       AND storage_url IS NOT NULL
     ORDER BY
-      CASE WHEN content_pillar = ${topic.pillar || ''} THEN 0 ELSE 1 END,
+      CASE WHEN content_tags && ${topicPillarTagIds}::text[] THEN 0 ELSE 1 END,
       quality_score DESC
     LIMIT 3
   `;
@@ -1325,13 +1347,12 @@ ${blogCorrectionsBlock}
                 INSERT INTO media_assets (
                   site_id, storage_url, media_type, context_note,
                   source, triage_status, quality_score,
-                  content_pillar, content_tags,
+                  content_tags,
                   ai_analysis, metadata
                 ) VALUES (
                   ${siteData.site_id}, ${video.url}, 'video',
                   ${rewardPrompt.prompt.slice(0, 200)},
                   'ai_generated', 'triaged', 0.95,
-                  ${asset.contentPillar || null},
                   ${videoTags},
                   ${JSON.stringify({
                     scene_type: rewardPrompt.scene,

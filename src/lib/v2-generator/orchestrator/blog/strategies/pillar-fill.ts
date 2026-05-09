@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import type { BlogStrategy } from "../types";
 import type { BlogGenerateSpec } from "../../../blog";
+import { type PillarConfig } from "@/lib/pillars";
 
 const TARGET_PILLARS = ["what", "who", "how", "craft", "proof", "design"];
 
@@ -39,6 +40,12 @@ export const pillarFillStrategy: BlogStrategy = {
     const gap = counts[0]?.pillar;
     if (!gap) return null;
 
+    // Resolve gap pillar to its tag IDs (LOCKED 2026-05-09 — pillars
+    // not stored on assets, filter via tag-overlap instead).
+    const [pcRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${assessment.siteId}`;
+    const pc = (pcRow?.pillar_config || []) as PillarConfig;
+    const gapTagIds = pc.find((p) => p.id === gap)?.tags.map((t) => t.id) || [];
+
     const usedRows = await sql`
       SELECT DISTINCT id FROM (
         SELECT seed_asset_id AS id FROM blog_posts_v2 WHERE site_id = ${assessment.siteId} AND seed_asset_id IS NOT NULL
@@ -54,7 +61,7 @@ export const pillarFillStrategy: BlogStrategy = {
         AND (media_type ILIKE 'image%' OR media_type = 'video')
         AND triage_status = 'triaged' AND archived_at IS NULL
         AND status NOT IN ('deleted','failed')
-        AND (content_pillar = ${gap} OR ${gap} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
+        AND content_tags && ${gapTagIds}::text[]
         AND id <> ALL(${usedIds}::uuid[])
       ORDER BY
         CASE WHEN media_type = 'video' THEN 0 ELSE 1 END,
@@ -71,7 +78,7 @@ export const pillarFillStrategy: BlogStrategy = {
         AND triage_status = 'triaged' AND archived_at IS NULL
         AND status NOT IN ('deleted','failed')
         AND (media_type ILIKE 'image%' OR media_type = 'video')
-        AND (content_pillar = ${gap} OR ${gap} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
+        AND content_tags && ${gapTagIds}::text[]
       ORDER BY quality_score DESC NULLS LAST, created_at DESC
       LIMIT 8
     `;

@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import { generateV2Content } from "./core";
 import type { ContentSpec, GenerateResult } from "./types";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 /**
  * Pool adapters — gather pool-specific upstream inputs and hand off to
@@ -26,7 +27,7 @@ export async function generateBlogPost(opts: {
   status?: "draft" | "published";
 }): Promise<GenerateResult> {
   const [seed] = await sql`
-    SELECT id, media_type, context_note, content_pillar, content_pillars, content_tags
+    SELECT id, media_type, context_note, content_tags
     FROM media_assets
     WHERE id = ${opts.seedAssetId} AND site_id = ${opts.siteId}
   `;
@@ -34,15 +35,25 @@ export async function generateBlogPost(opts: {
 
   // Pull body-candidate assets — same site, similar pillar, recent, quality-sorted.
   // The LLM selects which ones to actually place via {{asset:UUID}} in the body.
-  const pillar = (seed.content_pillar as string | null) || null;
-  const bodyCandidates = pillar
+  // Pillar derived from seed's tags via site pillar_config (LOCKED 2026-05-09).
+  const [pcRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${opts.siteId}`;
+  const pc = (pcRow?.pillar_config || []) as PillarConfig;
+  const pillar = primaryPillarFromTags(
+    (seed.content_tags as string[] | null) || null,
+    pc,
+  );
+  const pillarTagIds = pillar
+    ? (pc.find((p) => p.id === pillar)?.tags.map((t) => t.id) || [])
+    : [];
+
+  const bodyCandidates = pillarTagIds.length > 0
     ? await sql`
         SELECT id FROM media_assets
         WHERE site_id = ${opts.siteId}
           AND id <> ${opts.seedAssetId}
           AND triage_status NOT IN ('quarantined','shelved')
           AND status NOT IN ('deleted','failed')
-          AND (content_pillar = ${pillar} OR ${pillar} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
+          AND content_tags && ${pillarTagIds}::text[]
         ORDER BY quality_score DESC NULLS LAST, created_at DESC
         LIMIT 10
       `

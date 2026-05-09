@@ -114,9 +114,12 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
   const thresholds = await getThresholds(siteId);
   const heroThreshold = heroAbove(thresholds);
 
-  // Find hero-class photo assets without a child video
+  // Find hero-class photo assets without a child video.
+  // content_pillar dropped from SELECT (LOCKED 2026-05-09 — pillars not
+  // stored on assets). Child video inherits content_tags from parent;
+  // pillar derives at read time.
   const candidates = await sql`
-    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_pillar,
+    SELECT ma.id, ma.storage_url, ma.quality_score,
            ma.content_tags, ma.ai_analysis, ma.context_note
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
@@ -198,19 +201,20 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
       // Get parent's generated_text for caption inheritance
       const parentGenText = ((candidate as Record<string, unknown>).metadata as Record<string, unknown>)?.generated_text;
 
-      // Insert video as child asset
+      // Insert video as child asset.
+      // content_pillar column dropped (LOCKED 2026-05-09 — pillars not
+      // stored on assets, derive from content_tags at read time).
       await sql`
         INSERT INTO media_assets (
           site_id, storage_url, media_type, context_note,
           source, triage_status, quality_score,
-          source_asset_id, content_pillar, content_tags,
+          source_asset_id, content_tags,
           ai_analysis, metadata
         ) VALUES (
           ${siteId}, ${video.url}, 'video',
           ${(analysis.description as string) || (candidate.context_note as string) || ''},
           'ai_generated', 'pending_briefing', 0.85,
           ${candidate.id},
-          ${candidate.content_pillar},
           ${candidate.content_tags || []},
           ${JSON.stringify({
             engine: "kling-v2-6",

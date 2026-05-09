@@ -44,10 +44,10 @@ export async function POST(
   const auth = authResult as AuthContext;
   const { id: assetId } = await params;
 
-  // Verify ownership
+  // Verify ownership. content_pillar dropped from SELECT (LOCKED 2026-05-09).
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type, ma.context_note,
-           ma.content_pillar, ma.content_tags
+           ma.content_tags
     FROM media_assets ma
     JOIN sites s ON s.id = ma.site_id
     WHERE ma.id = ${assetId} AND s.subscription_id = ${auth.subscriptionId}
@@ -142,12 +142,11 @@ export async function POST(
           INSERT INTO media_assets (
             site_id, storage_url, media_type, context_note,
             source, triage_status, source_asset_id,
-            content_pillar, content_tags, metadata
+            content_tags, metadata
           ) VALUES (
             ${asset.site_id}, ${video.url}, 'video',
             NULL,
             'ai_generated', 'pending_briefing', ${assetId},
-            ${asset.content_pillar || null},
             ${asset.content_tags || []},
             ${JSON.stringify({
               ai_generated: true,
@@ -283,12 +282,9 @@ async function persistGeneratedAsset(opts: {
     is_sibling: opts.isSibling,
   };
 
-  // Inherit content_pillar / content_tags / asset_projects from source
-  // when applicable (siblings inherit; fresh generations do not).
-  // Inherited fields are CANDIDATE context — subscriber confirms during briefing.
-  const contentPillar = opts.isSibling && opts.inheritFrom
-    ? (opts.inheritFrom.content_pillar as string | null)
-    : null;
+  // Inherit content_tags / asset_projects from source for siblings.
+  // (content_pillar inheritance dropped — pillars not stored on assets,
+  // LOCKED 2026-05-09. Pillar membership re-derives from inherited tags.)
   const contentTags = opts.isSibling && opts.inheritFrom
     ? (opts.inheritFrom.content_tags as string[]) || []
     : [];
@@ -301,11 +297,11 @@ async function persistGeneratedAsset(opts: {
     INSERT INTO media_assets (
       site_id, storage_url, media_type, context_note,
       source, triage_status, source_asset_id,
-      content_pillar, content_tags, metadata
+      content_tags, metadata
     ) VALUES (
       ${opts.siteId}, ${url}, ${opts.mediaType}, NULL,
       'ai_generated', 'pending_briefing', ${sourceAssetId},
-      ${contentPillar}, ${contentTags},
+      ${contentTags},
       ${JSON.stringify(metadata)}::jsonb
     )
     RETURNING id

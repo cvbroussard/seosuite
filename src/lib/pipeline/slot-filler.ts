@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db";
 import type { AutopilotConfig } from "./types";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 /**
  * Fill open publishing slots with the best available triaged assets.
@@ -14,9 +15,12 @@ import type { AutopilotConfig } from "./types";
  * (if backfill_from_shelf is enabled).
  */
 export async function fillSlots(siteId: string): Promise<number> {
-  // Fetch site config
+  // Fetch site config + pillar_config (LOCKED 2026-05-09 — pillar
+  // membership is derived at read time from content_tags, so we need the
+  // tag-to-pillar map for both the pillar filter and the post-write
+  // derivation).
   const [site] = await sql`
-    SELECT autopilot_config
+    SELECT autopilot_config, pillar_config
     FROM sites
     WHERE id = ${siteId} AND autopilot_enabled = true
   `;
@@ -24,6 +28,7 @@ export async function fillSlots(siteId: string): Promise<number> {
   if (!site) return 0;
 
   const config = (site.autopilot_config || {}) as AutopilotConfig;
+  const pillarConfig = (site.pillar_config || []) as PillarConfig;
 
   // Get all open slots ordered by scheduled_at (fill nearest first)
   const openSlots = await sql`
@@ -45,14 +50,21 @@ export async function fillSlots(siteId: string): Promise<number> {
 
     let asset = null;
 
+    // Pillar filter: instead of matching the legacy ma.content_pillar
+    // column (LOCKED 2026-05-09 — gone), filter by tag-overlap. Resolve
+    // the slot's required pillar to its tag IDs via pillarConfig, then
+    // require asset.content_tags to overlap with that set.
+    const slotPillarTagIds = slot.content_pillar
+      ? (pillarConfig.find((p) => p.id === slot.content_pillar)?.tags.map((t) => t.id) || [])
+      : null;
+
     for (const status of statusFilter) {
-      // Match on pillar if slot has one, otherwise any pillar
-      const pillarClause = slot.content_pillar
-        ? sql`AND content_pillar = ${slot.content_pillar}`
+      const pillarClause = slotPillarTagIds && slotPillarTagIds.length > 0
+        ? sql`AND content_tags && ${slotPillarTagIds}::text[]`
         : sql``;
 
       const candidates = await sql`
-        SELECT id, storage_url, media_type, quality_score, content_pillar, ai_analysis, variants
+        SELECT id, storage_url, media_type, quality_score, content_tags, ai_analysis, variants
         FROM media_assets
         WHERE site_id = ${siteId}
           AND triage_status = ${status}
@@ -84,7 +96,14 @@ export async function fillSlots(siteId: string): Promise<number> {
     const platformKey = String(slot.platform).toLowerCase();
     const mediaUrl = variants[platformKey]?.url || String(asset.storage_url);
 
-    // Create the social post (caption will be generated in a separate step)
+    // Create the social post. social_posts.content_pillar (different
+    // table — kept) gets the asset's derived primary pillar at the moment
+    // of slotting. Subscriber tag edits after this are reflected in fresh
+    // queries; this captured value is a snapshot.
+    const derivedPillar = primaryPillarFromTags(
+      (asset.content_tags as string[] | null) || null,
+      pillarConfig,
+    );
     const [post] = await sql`
       INSERT INTO social_posts (
         account_id, source_asset_id, status, authority,
@@ -93,7 +112,7 @@ export async function fillSlots(siteId: string): Promise<number> {
       )
       VALUES (
         ${slot.account_id}, ${asset.id}, 'scheduled', 'pipeline',
-        ${asset.content_pillar}, ARRAY[${mediaUrl}], ${asset.media_type},
+        ${derivedPillar}, ARRAY[${mediaUrl}], ${asset.media_type},
         ${slot.scheduled_at}, true, ${slot.id}
       )
       RETURNING id

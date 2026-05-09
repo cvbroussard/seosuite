@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { slice, findFormatKey, type ContentKit } from "@/lib/v2-generator";
+import { type PillarConfig } from "@/lib/pillars";
 
 /**
  * GET /api/compose/recommend?template_id=...&anchor_id=...&anchor_type=...
@@ -128,9 +129,18 @@ export async function GET(req: NextRequest) {
   let assets = compatibleManifest;
   if (assets.length < ANCHOR_PICKER_LIMIT) {
     const padNeeded = ANCHOR_PICKER_LIMIT - assets.length;
-    const padded = pillar
+    // Pillar filter migrated from ma.content_pillar lookup to tag-overlap
+    // (LOCKED 2026-05-09 — pillars not stored on assets). Resolve target
+    // pillar to its tag IDs via site pillar_config.
+    let pillarTagIds: string[] = [];
+    if (pillar) {
+      const [pcRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${siteId}`;
+      const pc = (pcRow?.pillar_config || []) as PillarConfig;
+      pillarTagIds = pc.find((p) => p.id === pillar)?.tags.map((t) => t.id) || [];
+    }
+    const padded = pillarTagIds.length > 0
       ? await sql`
-          SELECT id, storage_url, media_type, context_note, content_pillar,
+          SELECT id, storage_url, media_type, context_note,
                  content_tags, ai_analysis, quality_score, created_at
           FROM media_assets
           WHERE site_id = ${siteId}
@@ -138,15 +148,12 @@ export async function GET(req: NextRequest) {
             AND triage_status NOT IN ('quarantined', 'shelved')
             AND status NOT IN ('deleted', 'failed')
             AND id <> ALL(${Array.from(usedIds)}::uuid[])
-            AND (
-              content_pillar = ${pillar}
-              OR ${pillar} = ANY(COALESCE(content_pillars, ARRAY[]::text[]))
-            )
+            AND content_tags && ${pillarTagIds}::text[]
           ORDER BY quality_score DESC NULLS LAST, created_at DESC
           LIMIT ${padNeeded}
         `
       : await sql`
-          SELECT id, storage_url, media_type, context_note, content_pillar,
+          SELECT id, storage_url, media_type, context_note,
                  content_tags, ai_analysis, quality_score, created_at
           FROM media_assets
           WHERE site_id = ${siteId}
