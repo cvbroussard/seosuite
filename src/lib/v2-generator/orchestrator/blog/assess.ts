@@ -65,7 +65,7 @@ export async function assessBlogSite(siteId: string): Promise<BlogSiteAssessment
     FROM media_assets
     WHERE site_id = ${siteId}
       AND (media_type ILIKE 'image%' OR media_type = 'video')
-      AND triage_status = 'triaged'
+      AND triage_status = 'triaged' AND archived_at IS NULL
       AND status NOT IN ('deleted', 'failed')
       AND context_note IS NOT NULL
     ORDER BY

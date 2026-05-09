@@ -239,15 +239,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Site not found" }, { status: 404 });
   }
 
+  // Per project_tracpost_deletion_policy.md: filter archived assets out
+  // of subscriber-visible listings unless explicitly requested via the
+  // ?archived=true query param (operator/restore use case).
+  const showArchived = url.searchParams.get("archived") === "true";
+
   const assets = status
     ? await sql`
-        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at
-        FROM media_assets WHERE site_id = ${siteId} AND triage_status = ${status}
+        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at
+        FROM media_assets
+        WHERE site_id = ${siteId} AND triage_status = ${status}
+          AND (${showArchived} OR archived_at IS NULL)
         ORDER BY created_at DESC LIMIT 100
       `
     : await sql`
-        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at
-        FROM media_assets WHERE site_id = ${siteId}
+        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at
+        FROM media_assets
+        WHERE site_id = ${siteId}
+          AND (${showArchived} OR archived_at IS NULL)
         ORDER BY created_at DESC LIMIT 100
       `;
 

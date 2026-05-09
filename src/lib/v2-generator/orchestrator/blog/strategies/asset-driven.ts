@@ -39,7 +39,7 @@ export const assetDrivenStrategy: BlogStrategy = {
           SELECT id FROM media_assets
           WHERE site_id = ${assessment.siteId}
             AND id <> ${seedId}
-            AND triage_status = 'triaged'
+            AND triage_status = 'triaged' AND archived_at IS NULL
             AND status NOT IN ('deleted','failed')
             AND (media_type ILIKE 'image%' OR media_type = 'video')
             AND (content_pillar = ${pillar} OR ${pillar} = ANY(COALESCE(content_pillars, ARRAY[]::text[])))
@@ -50,7 +50,7 @@ export const assetDrivenStrategy: BlogStrategy = {
           SELECT id FROM media_assets
           WHERE site_id = ${assessment.siteId}
             AND id <> ${seedId}
-            AND triage_status = 'triaged'
+            AND triage_status = 'triaged' AND archived_at IS NULL
             AND status NOT IN ('deleted','failed')
             AND (media_type ILIKE 'image%' OR media_type = 'video')
           ORDER BY quality_score DESC NULLS LAST, created_at DESC

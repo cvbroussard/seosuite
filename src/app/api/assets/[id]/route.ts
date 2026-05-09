@@ -2,8 +2,6 @@ import { sql } from "@/lib/db";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { parseContextNote } from "@/lib/context-note-parser";
-import { deleteObjectFromR2, keyFromStorageUrl } from "@/lib/r2";
-import { purgeCdnCache } from "@/lib/cdn";
 import { waitUntil } from "@vercel/functions";
 
 /**
@@ -233,7 +231,15 @@ export async function PATCH(
 }
 
 /**
- * DELETE /api/assets/:id — Delete a media asset.
+ * DELETE /api/assets/:id — soft-archive (NOT hard-delete) a media asset.
+ *
+ * Per project_tracpost_deletion_policy.md (LOCKED 2026-05-08):
+ * subscribers cannot hard-delete. Sets archived_at = NOW(); the asset
+ * disappears from library + orchestrator pool + Compose pickers but
+ * stays in DB + R2. Restorable via PATCH (clears archived_at).
+ *
+ * Hard-delete only happens at subscription cancellation + retention
+ * expiry — separate operator-only wipe job, not exposed via this endpoint.
  */
 export async function DELETE(
   req: NextRequest,
@@ -245,7 +251,7 @@ export async function DELETE(
   const { id } = await params;
 
   const [asset] = await sql`
-    SELECT ma.id, ma.storage_url
+    SELECT ma.id
     FROM media_assets ma
     JOIN sites s ON ma.site_id = s.id
     WHERE ma.id = ${id} AND s.subscription_id = ${auth.subscriptionId}
@@ -255,41 +261,21 @@ export async function DELETE(
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
 
-  // Referenced assets cannot be deleted — the tenant must upload a
-  // replacement via /api/assets/:id/replace, which overwrites the
-  // R2 object in place so every URL reference keeps working.
-  const refs = await sql`
-    SELECT id, title, status FROM blog_posts WHERE source_asset_id = ${id}
+  await sql`
+    UPDATE media_assets
+    SET archived_at = NOW(), updated_at = NOW()
+    WHERE id = ${id}
   `;
 
-  if (refs.length > 0) {
-    return NextResponse.json({
-      error: "Asset is used in blog posts — upload a replacement instead",
-      posts: refs.map((r) => ({ id: r.id, title: r.title, status: r.status })),
-      requiresReplace: true,
-    }, { status: 409 });
-  }
+  // Log the archive action so operators can trace subscriber library
+  // state changes over time.
+  try {
+    await sql`
+      INSERT INTO subscriber_actions (site_id, action_type, target_type, target_id, payload)
+      SELECT site_id, 'archive', 'media_asset', ${id}, '{}'::jsonb
+      FROM media_assets WHERE id = ${id}
+    `;
+  } catch { /* non-fatal */ }
 
-  // Unreferenced asset — full teardown including R2 blob.
-  await sql`DELETE FROM asset_brands    WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_projects  WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_personas  WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_locations WHERE asset_id = ${id}`;
-  await sql`DELETE FROM asset_services  WHERE asset_id = ${id}`;
-  await sql`DELETE FROM media_assets    WHERE id       = ${id}`;
-
-  const storageUrl = asset.storage_url ? String(asset.storage_url) : null;
-  const key = storageUrl ? keyFromStorageUrl(storageUrl) : null;
-  if (key) {
-    try {
-      await deleteObjectFromR2(key);
-    } catch (err) {
-      console.error("R2 delete failed (DB delete succeeded):", err);
-    }
-  }
-  if (storageUrl) {
-    await purgeCdnCache([storageUrl]);
-  }
-
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, archived: true });
 }
