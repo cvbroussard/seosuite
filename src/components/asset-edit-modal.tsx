@@ -725,16 +725,18 @@ export function AssetEditModal({
 
             {/* 2-column row below Story Angle: image LEFT, Scene Composition
                 RIGHT. On narrow viewports falls back to single column. */}
-            <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* LEFT: image preview, sized to make details visible without
-                  dominating the modal. */}
-              <div className="flex items-start justify-center bg-background">
+            <div className="mb-3 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+              {/* LEFT: image preview. Container stretches to match the
+                  Scene Composition card height (CSS Grid default). Image
+                  scales down via max-h-full + object-contain rather than
+                  pushing the column taller — eliminates the dead space
+                  below SC and pulls everything else above the fold. */}
+              <div className="flex min-h-0 items-center justify-center overflow-hidden bg-background">
                 {mediaType?.startsWith("video") || mediaType === "video" ? (
                   <video
                     src={imageUrl}
                     controls
-                    className="w-full object-contain"
-                    style={{ maxHeight: "32vh" }}
+                    className="max-h-full max-w-full object-contain"
                   />
                 ) : faceData && faceData.length > 0 ? (
                   <FaceOverlay
@@ -756,8 +758,7 @@ export function AssetEditModal({
                   <img
                     src={imageUrl}
                     alt=""
-                    className="w-full object-contain"
-                    style={{ maxHeight: "32vh" }}
+                    className="max-h-full max-w-full object-contain"
                   />
                 )}
               </div>
