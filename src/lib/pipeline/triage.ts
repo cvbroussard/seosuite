@@ -14,7 +14,7 @@ const anthropic = new Anthropic();
  */
 export async function triageAsset(assetId: string): Promise<TriageResult> {
   const [asset] = await sql`
-    SELECT id, site_id, storage_url, media_type, context_note, transcription, metadata
+    SELECT id, site_id, storage_url, media_type, context_note, transcription, metadata, poster_asset_id
     FROM media_assets
     WHERE id = ${assetId} AND triage_status = 'pending_briefing'
   `;
@@ -34,7 +34,10 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
   const availablePillars = (site?.content_pillars || []) as ContentPillar[];
   const pillarConfig = (site?.pillar_config || []) as Array<{ id: string; label: string; description: string; tags: Array<{ id: string; label: string }> }>;
 
-  // Use AI vision for images, heuristic for video
+  // Use AI vision for images. For videos, use the auto-generated poster
+  // image (per design lock 2026-05-08 — every video upload gets a poster
+  // extracted at the 1s mark via generatePosterForAsset). If poster
+  // generation hasn't completed yet OR failed, fall through to heuristic.
   let result: TriageResult;
   const mediaType = asset.media_type as string;
 
@@ -47,9 +50,26 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
     WHERE site_id = ${asset.site_id}
   `;
 
+  // Resolve the URL we'll feed into vision: image source uses its own URL,
+  // video source uses its poster's URL (when available).
+  let visionUrl: string | null = null;
   if (mediaType.startsWith("image") && asset.storage_url) {
+    visionUrl = asset.storage_url as string;
+  } else if (mediaType.toLowerCase().startsWith("video") && asset.poster_asset_id) {
+    const [poster] = await sql`
+      SELECT storage_url FROM media_assets WHERE id = ${asset.poster_asset_id}
+    `;
+    if (poster?.storage_url) {
+      visionUrl = poster.storage_url as string;
+    }
+  }
+
+  if (visionUrl) {
+    // Pass the vision URL via a shallow clone of asset so visionTriage
+    // analyzes the right image without coupling to the poster lookup.
+    const visionAsset = { ...asset, storage_url: visionUrl };
     try {
-      result = await visionTriage(asset, config, availablePillars, pillarConfig, site?.brand_voice, personaPrompt, brands);
+      result = await visionTriage(visionAsset, config, availablePillars, pillarConfig, site?.brand_voice, personaPrompt, brands);
     } catch (err: unknown) {
       console.error("Vision triage failed, falling back to heuristic:", err);
       result = heuristicTriage(asset, config, availablePillars);

@@ -38,12 +38,19 @@ const FRAMEWORK_LABELS = {
  * here based on which framework slot fits the pillar's intent.
  */
 const SITE_MAPPINGS = {
-  "B Squared Construction": {
+  "B2 Construction": {
     diagnostic_craft: "what",       // Complex Project Diagnosis = the actual service
     execution_process: "how",       // Renovation Execution Standards = the methodology
     crew_materials: "who",          // In-House Crew & Materials = the people/partners
     project_outcomes: "proof",      // Completed Complex Projects = case studies
     pittsburgh_expertise: "why",    // Pittsburgh Housing Stock Knowledge = perspective
+  },
+  "TracPost": {
+    differentiation_framework: "what", // The product positioning / what TracPost does
+    content_system: "how",             // The content production methodology
+    partner_ecosystem: "who",          // Partners + integrations
+    business_impact: "proof",          // Results + ROI proof
+    philosophy_perspective: "why",     // Philosophy / market thesis
   },
   // Add other sites here as the audit reveals them
 };

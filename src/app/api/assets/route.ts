@@ -156,6 +156,28 @@ export async function POST(req: NextRequest) {
       RETURNING id, site_id, storage_url, media_type, context_note, triage_status, created_at
     `;
 
+    // Generate poster image for video assets eagerly. Per design lock
+    // 2026-05-08: every video gets a representative frame extracted at
+    // upload time so AI vision triage, Unifeed cards, asset library,
+    // platform publish covers, and v2 article hero rendering all have
+    // a real poster to use instead of relying on first-frame fallbacks.
+    // Idempotent inside generatePosterForAsset; non-fatal on failure.
+    if (media_type.toLowerCase().startsWith("video")) {
+      waitUntil(
+        (async () => {
+          try {
+            const { generatePosterForAsset } = await import("@/lib/pipeline/poster-gen");
+            await generatePosterForAsset(asset.id as string);
+          } catch (err) {
+            console.warn(
+              "Poster generation failed (non-fatal — asset has no poster):",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        })(),
+      );
+    }
+
     // Render ALL applicable templates eagerly when briefed-on-upload.
     // Per the eager-cheap policy, every connected platform should have a
     // ready variant by the time orchestrator or Compose looks. waitUntil
