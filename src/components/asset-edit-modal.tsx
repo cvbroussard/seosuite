@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "@/components/feedback";
-import { TagPicker, type PillarGroup } from "./tag-picker";
+import type { PillarGroup } from "./tag-picker";
 import { FaceOverlay } from "./face-overlay";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { SCENE_TYPES } from "@/lib/scene-types";
@@ -149,14 +149,23 @@ export function AssetEditModal({
   const [savingAi, setSavingAi] = useState(false);
   const _hasGeneratedText = !!(initialMetadata?.generated_text as Record<string, unknown>)?.generated_at;
   const [pillar, setPillar] = useState(initialPillar);
-  // Two-column checkbox state (Story Angle + Scene Composition).
-  // AI seeds the arrays at briefing-flip; subscriber multi-selects.
-  // Pillars: seed with [primary] if no array provided (back-compat).
-  const [pillarsArr, setPillarsArr] = useState<string[]>(
-    initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : [],
-  );
+  // Subscriber-controlled multi-arrays for Story Angle (via tags) and
+  // Scene Composition. Pillars are now DERIVED from tags rather than
+  // independently selected — tag click in the Story Angle card is the
+  // single source of truth. Scene types stay as their own array.
   const [sceneTypesArr, setSceneTypesArr] = useState<string[]>(initialSceneTypes);
   const [tags, setTags] = useState<string[]>(initialTags || []);
+  // pillarsArr derived from tags + pillarConfig (parents of selected tags).
+  // Computed inline at save time; no setter needed.
+  const pillarsArr = Array.from(
+    new Set(
+      tags
+        .map((tagId) => pillarConfig.find((p) => p.tags.some((t) => t.id === tagId))?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  // initialPillarsArr captures the seeded value to compute the save-time diff.
+  const initialPillarsArr = initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : [];
   const [brandIds, setBrandIds] = useState<string[]>(initialBrandIds);
   const [projectIds, setProjectIds] = useState<string[]>(initialProjectIds);
   const [personaIds, setPersonaIds] = useState<string[]>(initialPersonaIds);
@@ -166,7 +175,6 @@ export function AssetEditModal({
     setFaceData(initialFaces);
     setNote(initialNote);
     setPillar(initialPillar);
-    setPillarsArr(initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : []);
     setSceneTypesArr(initialSceneTypes);
     setTags(initialTags || []);
     setBrandIds(initialBrandIds);
@@ -210,16 +218,10 @@ export function AssetEditModal({
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const replaceFileRef = useRef<HTMLInputElement>(null);
   const [suggesting, setSuggesting] = useState(false);
-  const [showFullPicker, setShowFullPicker] = useState(false);
-
-  // Split pillarConfig into "short groups under image" + "rest below the
-  // 2-col". Picks the two pillars with the FEWEST content tags so they fit
-  // the dead space below the resized image. Generic rule — works for any
-  // site's pillar labels, not hardcoded to specific IDs.
-  const sortedPillarsByTagCount = [...pillarConfig].sort((a, b) => a.tags.length - b.tags.length);
-  const pillarsUnderImage = sortedPillarsByTagCount.slice(0, 2);
-  const pillarsUnderImageIds = new Set(pillarsUnderImage.map((p) => p.id));
-  const pillarsBelowFold = pillarConfig.filter((p) => !pillarsUnderImageIds.has(p.id));
+  // Story Angle card owns all pillar tag selection — no under-image
+  // split, no separate bottom Tags section. Pillar selection derived
+  // from tags. (Earlier `showFullPicker`, `sortedPillarsByTagCount`,
+  // `pillarsUnderImage`, `pillarsBelowFold` retired with the restructure.)
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -434,9 +436,10 @@ export function AssetEditModal({
     const body: Record<string, unknown> = {};
     if (note !== initialNote) body.context_note = note;
     if (pillar !== initialPillar) body.pillar = pillar;
-    // Story Angle multi-select diff (sorted compare for stable ordering)
-    const initPillarsSorted = [...(initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : [])].sort();
-    if (JSON.stringify([...pillarsArr].sort()) !== JSON.stringify(initPillarsSorted)) {
+    // Story Angle: pillarsArr is derived from selected tags. Send the
+    // derived array so server-side content_pillars stays in sync with
+    // content_tags. Sorted compare so reorders alone don't mark dirty.
+    if (JSON.stringify([...pillarsArr].sort()) !== JSON.stringify([...initialPillarsArr].sort())) {
       body.pillars = pillarsArr;
     }
     // Scene Composition multi-select diff
@@ -634,14 +637,93 @@ export function AssetEditModal({
               </div>
             </div>
 
-            {/* 2-column row: image LEFT (smaller, with short tag groups
-                sliding underneath), tagging panel RIGHT. On narrow viewports
-                falls back to single column. */}
+            {/* Story Angle — full-width card directly below Context Note
+                (rebuilt 2026-05-09). Replaces the prior pillar checkbox column,
+                the under-image short-pillar TagPicker, and the bottom Tags
+                section. Pillar selection is now DERIVED from tag selection —
+                no redundant pillar-level checkbox. Each pillar gets a single
+                row with name + description on one line and its tag pills on
+                the next. */}
+            {pillarConfig.length > 0 && (
+              <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] font-medium text-accent">Story Angle</span>
+                    <span className="text-[10px] text-muted">
+                      — What this asset is meant to say. Pick the tags that fit; pillar membership follows automatically.
+                    </span>
+                  </div>
+                  <a
+                    href="/help/asset-tagging"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-[10px] text-muted underline hover:text-foreground"
+                  >
+                    Learn more
+                  </a>
+                </div>
+                <div className="space-y-3">
+                  {pillarConfig.map((p) => {
+                    const pillarSelected = p.tags.some((t) => tags.includes(t.id));
+                    return (
+                      <div
+                        key={p.id}
+                        className={`rounded px-2 py-1.5 transition-colors ${
+                          pillarSelected ? "bg-accent/10" : ""
+                        }`}
+                      >
+                        {/* Line 1: pillar name + description on one row */}
+                        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-[11px] font-semibold text-foreground">
+                            {p.label}
+                          </span>
+                          {p.description && (
+                            <span className="text-[10px] text-muted">— {p.description}</span>
+                          )}
+                        </div>
+                        {/* Line 2: tag pills */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {p.tags.map((t) => {
+                            const checked = tags.includes(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                onClick={() => {
+                                  if (checked) {
+                                    setTags((prev) => prev.filter((id) => id !== t.id));
+                                  } else {
+                                    setTags((prev) => [...prev, t.id]);
+                                  }
+                                }}
+                                className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                                  checked
+                                    ? "bg-accent text-white"
+                                    : "bg-surface-hover text-muted hover:text-foreground"
+                                }`}
+                              >
+                                {t.label}
+                              </button>
+                            );
+                          })}
+                          {p.tags.length === 0 && (
+                            <span className="text-[10px] italic text-muted">
+                              No tags configured — edit in Business settings
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 2-column row below Story Angle: image LEFT, Scene Composition
+                RIGHT. On narrow viewports falls back to single column. */}
             <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* LEFT: image preview + the two shortest pillar tag groups
-                  underneath to fill the dead space. */}
-              <div className="flex flex-col gap-4">
-                <div className="flex items-start justify-center bg-background">
+              {/* LEFT: image preview, sized to make details visible without
+                  dominating the modal. */}
+              <div className="flex items-start justify-center bg-background">
                 {mediaType?.startsWith("video") || mediaType === "video" ? (
                   <video
                     src={imageUrl}
@@ -673,91 +755,23 @@ export function AssetEditModal({
                     style={{ maxHeight: "32vh" }}
                   />
                 )}
-                </div>
-                {/* Short pillar tag groups slide under the image to fill
-                    the dead space when the right column (Story Angle +
-                    Scene Composition) is taller than the image. Same
-                    state as the bottom TagPicker — toggling here reflects
-                    everywhere immediately. */}
-                {pillarsUnderImage.length > 0 && (
-                  <TagPicker
-                    pillarConfig={pillarsUnderImage}
-                    selectedPillar={pillar}
-                    selectedTags={tags}
-                    onPillarChange={setPillar}
-                    onTagsChange={setTags}
-                  />
-                )}
               </div>
 
-              {/* RIGHT: Story Angle + Scene Composition (rebuilt 2026-05-09).
-                  Inner grid collapsed from 2-col to 1-col since the panel
-                  itself now lives in a half-width slot. Story Angle stacks
-                  above Scene Composition. */}
+              {/* RIGHT: Scene Composition card (factual frame description).
+                  Multi-select checkboxes — same vocabulary as before. */}
               <div>
-            {(pillarConfig.length > 0 || SCENE_TYPES.length > 0) && (
+            {SCENE_TYPES.length > 0 && (
               <div className="rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
-                <div className="mb-2 flex items-baseline justify-between">
-                  <span className="text-[11px] font-medium text-accent">
-                    Tag this asset
-                  </span>
-                  <a
-                    href="/help/asset-tagging"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-muted underline hover:text-foreground"
-                  >
-                    Learn more
-                  </a>
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] font-medium text-accent">Scene Composition</span>
+                    <span className="text-[10px] text-muted">
+                      — What&apos;s actually shown.
+                    </span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
-                  {/* LEFT: Story Angle (intent — guides what AI says) */}
                   <div>
-                    <div className="mb-1">
-                      <div className="text-[11px] font-semibold text-foreground">Story Angle</div>
-                      <div className="text-[10px] text-muted">
-                        What this asset is meant to say. Guides how the caption is written.
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {pillarConfig.map((p) => {
-                        const checked = pillarsArr.includes(p.id);
-                        return (
-                          <label
-                            key={p.id}
-                            className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 hover:bg-accent/5"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setPillarsArr((prev) => [...prev, p.id]);
-                                } else {
-                                  setPillarsArr((prev) => prev.filter((id) => id !== p.id));
-                                }
-                              }}
-                              className="mt-0.5 shrink-0"
-                            />
-                            <span className="flex-1 text-[11px]">
-                              <span className="font-medium text-foreground">{p.label}</span>
-                              {p.description && (
-                                <span className="ml-1 text-muted">— {p.description}</span>
-                              )}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {/* RIGHT: Scene Composition (what's actually in the frame) */}
-                  <div>
-                    <div className="mb-1">
-                      <div className="text-[11px] font-semibold text-foreground">Scene Composition</div>
-                      <div className="text-[10px] text-muted">
-                        What&apos;s actually shown in the frame. Pick everything that applies.
-                      </div>
-                    </div>
                     <div className="space-y-1">
                       {SCENE_TYPES.map((s) => {
                         const checked = sceneTypesArr.includes(s.id);
@@ -794,59 +808,9 @@ export function AssetEditModal({
             </div>
         </div>
 
-        {/* Tags — bottom row renders the pillars that didn't fit in the
-            dead space under the image. The selected-tags chip strip stays
-            here regardless so subscribers always see their full selection
-            in one place even if some chips came from the under-image picker. */}
-        {pillarConfig.length > 0 && (
-          <div className="border-t border-border px-6 py-4">
-            <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs text-muted">
-                {suggesting ? "Suggesting tags..." : tags.length > 0 ? "Tags" : "Tags (write a note to get suggestions)"}
-              </label>
-              {!showFullPicker && (
-                <button
-                  onClick={() => setShowFullPicker(true)}
-                  className="text-[10px] text-accent hover:underline"
-                >
-                  Browse all tags
-                </button>
-              )}
-            </div>
-
-            {/* Selected tags as chips */}
-            {tags.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {tags.map((tagId) => {
-                  const tagLabel = pillarConfig
-                    .flatMap((p) => p.tags)
-                    .find((t) => t.id === tagId)?.label || tagId;
-                  return (
-                    <button
-                      key={tagId}
-                      onClick={() => setTags(tags.filter((t) => t !== tagId))}
-                      className="flex items-center gap-1 rounded bg-accent/20 px-2 py-0.5 text-xs text-accent"
-                    >
-                      {tagLabel}
-                      <span className="text-accent/60">✕</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Remaining pillars (those not pulled up under the image) */}
-            {pillarsBelowFold.length > 0 && (
-              <TagPicker
-                pillarConfig={pillarsBelowFold}
-                selectedPillar={pillar}
-                selectedTags={tags}
-                onPillarChange={setPillar}
-                onTagsChange={setTags}
-              />
-            )}
-          </div>
-        )}
+        {/* Bottom Tags section retired 2026-05-09 — Story Angle card above
+            owns all pillar tag selection. Selected pills are visible inline
+            on each pillar row; no need for a separate chip strip. */}
 
         {/* Row 3: Brands */}
         {brandLabel && (
