@@ -25,6 +25,7 @@ export function MediaFilters({
   sortOrder,
   projectFilter,
   briefingFilter,
+  showArchived,
   counts,
   projects = [],
 }: {
@@ -35,6 +36,7 @@ export function MediaFilters({
   sortOrder: string;
   projectFilter: string;
   briefingFilter: string;
+  showArchived: boolean;
   counts: Counts;
   projects?: ProjectOption[];
 }) {
@@ -81,6 +83,7 @@ export function MediaFilters({
       sort: sortOrder,
       project: projectFilter,
       briefing: briefingFilter,
+      archived: showArchived ? "true" : "",
       ...updates,
     };
     for (const [k, v] of Object.entries(merged)) {
@@ -95,6 +98,21 @@ export function MediaFilters({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* Archived filter chip per project_tracpost_deletion_policy.md.
+          Toggles ?archived=true to reveal soft-deleted assets so subscribers
+          can restore them. Off by default. */}
+      <button
+        onClick={() => updateParams({ archived: showArchived ? "" : "true" })}
+        className={`rounded px-2.5 py-1 text-[10px] font-medium transition-colors border ${
+          showArchived
+            ? "bg-muted text-white border-muted"
+            : "bg-transparent text-muted border-border hover:text-foreground"
+        }`}
+        title={showArchived ? "Hide archived" : "Show archived assets"}
+      >
+        {showArchived ? "✓ Archived" : "Archived"}
+      </button>
+
       {/* Briefing-required filter — high-priority chip per migrate-099.
           Only renders when there's something to brief; surfaces the gap. */}
       {counts.pending_briefing > 0 && (

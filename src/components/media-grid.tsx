@@ -21,6 +21,7 @@ interface Asset {
   render_status: string | null;
   variant_count: number;
   created_at: string;
+  archived_at: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -271,6 +272,7 @@ export function MediaGrid({
           source={editing.source}
           qualityScore={Number(editing.quality_score) || null}
           sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}
+          archivedAt={editing.archived_at}
           aiSuggestedPillar={editing.content_pillar || null}
           aiVerifications={(() => {
             const meta = (editing.metadata || {}) as Record<string, unknown>;

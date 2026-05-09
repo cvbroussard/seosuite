@@ -7,7 +7,7 @@ import { MediaFilters } from "./media-filters";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ source?: string; type?: string; scene?: string; quality?: string; sort?: string; project?: string; briefing?: string }>;
+  searchParams: Promise<{ source?: string; type?: string; scene?: string; quality?: string; sort?: string; project?: string; briefing?: string; archived?: string }>;
 }
 
 export default async function MediaPage({ searchParams }: Props) {
@@ -31,6 +31,9 @@ export default async function MediaPage({ searchParams }: Props) {
   const sortOrder = params.sort || "newest";
   const projectFilter = params.project || "all";
   const briefingFilter = params.briefing || "all";
+  // Per project_tracpost_deletion_policy.md: ?archived=true reveals archived
+  // assets (operator + restore use case). Default hides them.
+  const showArchived = params.archived === "true";
 
   // Sort must happen in SQL so that the LIMIT picks from the correct
   // end of the dataset. The project filter must ALSO happen in SQL,
@@ -46,9 +49,10 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
+          AND (${showArchived} OR ma.archived_at IS NULL)
           AND (${projectId}::uuid IS NULL OR EXISTS (
             SELECT 1 FROM asset_projects ap
             WHERE ap.asset_id = ma.id AND ap.project_id = ${projectId}::uuid
@@ -62,9 +66,10 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
+          AND (${showArchived} OR ma.archived_at IS NULL)
           AND (${projectId}::uuid IS NULL OR EXISTS (
             SELECT 1 FROM asset_projects ap
             WHERE ap.asset_id = ma.id AND ap.project_id = ${projectId}::uuid
@@ -78,9 +83,10 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
+          AND (${showArchived} OR ma.archived_at IS NULL)
           AND (${projectId}::uuid IS NULL OR EXISTS (
             SELECT 1 FROM asset_projects ap
             WHERE ap.asset_id = ma.id AND ap.project_id = ${projectId}::uuid
@@ -93,9 +99,10 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
+          AND (${showArchived} OR ma.archived_at IS NULL)
           AND (${projectId}::uuid IS NULL OR EXISTS (
             SELECT 1 FROM asset_projects ap
             WHERE ap.asset_id = ma.id AND ap.project_id = ${projectId}::uuid
@@ -227,6 +234,7 @@ export default async function MediaPage({ searchParams }: Props) {
         sortOrder={sortOrder}
         projectFilter={projectFilter}
         briefingFilter={briefingFilter}
+        showArchived={showArchived}
         counts={counts[0] as { total: number; uploads: number; ai_generated: number; high_quality: number; medium_quality: number; low_quality: number; pending_briefing: number }}
         projects={allProjects.map((p) => ({ id: p.id as string, name: p.name as string }))}
       />

@@ -41,6 +41,11 @@ interface AssetEditModalProps {
   source?: string | null;
   qualityScore?: number | null;
   sceneType?: string | null;
+  /** ISO timestamp when subscriber archived this asset, null if active. Per
+      project_tracpost_deletion_policy.md, archive is soft-delete: hidden
+      from library + orchestrator pool but data persists until subscription
+      cancellation + retention sweep. */
+  archivedAt?: string | null;
   /** AI's suggested content pillar (auto-applied; subscriber confirms via #167) */
   aiSuggestedPillar?: string | null;
   /**
@@ -99,6 +104,7 @@ export function AssetEditModal({
   source,
   qualityScore,
   sceneType,
+  archivedAt,
   aiSuggestedPillar,
   aiVerifications,
   captionSource,
@@ -938,9 +944,39 @@ export function AssetEditModal({
               </button>
               {replaceError && <span className="text-[10px] text-danger">{replaceError}</span>}
             </div>
+          ) : archivedAt ? (
+            // Asset is currently archived — offer Restore instead of Archive.
+            // Per project_tracpost_deletion_policy.md, restore clears
+            // archived_at via PATCH {restore: true}.
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted">Archived</span>
+              <button
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    const res = await fetch(`/api/assets/${assetId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ restore: true }),
+                    });
+                    if (res.ok) {
+                      onDeleted?.(); // reuse callback to trigger parent refresh
+                      onClose();
+                    }
+                  } catch { /* ignore */ }
+                  setDeleting(false);
+                }}
+                disabled={deleting}
+                className="rounded border border-accent text-accent px-3 py-1 text-xs font-medium hover:bg-accent/10 disabled:opacity-50"
+              >
+                {deleting ? "Restoring..." : "Restore"}
+              </button>
+            </div>
           ) : confirmDelete ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-danger">Delete this asset?</span>
+              <span className="text-xs text-muted">
+                Archive this asset? Hidden from your library — restore anytime.
+              </span>
               <button
                 onClick={async () => {
                   setDeleting(true);
@@ -961,9 +997,9 @@ export function AssetEditModal({
                   setDeleting(false);
                 }}
                 disabled={deleting}
-                className="rounded bg-danger px-3 py-1 text-xs font-medium text-white hover:bg-danger/90 disabled:opacity-50"
+                className="rounded border border-danger/40 text-danger px-3 py-1 text-xs font-medium hover:bg-danger/10 disabled:opacity-50"
               >
-                {deleting ? "Deleting..." : "Yes, delete"}
+                {deleting ? "Archiving..." : "Yes, archive"}
               </button>
               <button
                 onClick={() => setConfirmDelete(false)}
@@ -975,9 +1011,9 @@ export function AssetEditModal({
           ) : (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="px-4 py-2 text-xs text-danger hover:underline"
+              className="px-4 py-2 text-xs text-muted hover:text-foreground hover:underline"
             >
-              Delete
+              Archive
             </button>
           )}
           <div className="flex items-center gap-2">

@@ -20,9 +20,9 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { context_note, pillar, content_tags, vendor_ids, brand_ids, project_ids, persona_ids, location_ids, ai_verifications } = body;
+    const { context_note, pillar, content_tags, vendor_ids, brand_ids, project_ids, persona_ids, location_ids, ai_verifications, restore } = body;
 
-    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && persona_ids === undefined && location_ids === undefined && ai_verifications === undefined) {
+    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && persona_ids === undefined && location_ids === undefined && ai_verifications === undefined && restore === undefined) {
       return NextResponse.json(
         { error: "Nothing to update" },
         { status: 400 }
@@ -50,6 +50,23 @@ export async function PATCH(
         ? (asset.metadata as Record<string, unknown>)
         : {};
     const newMeta = pillar !== undefined ? { ...currentMeta, pillar } : currentMeta;
+
+    // Restore from archive (per project_tracpost_deletion_policy.md). Clears
+    // archived_at; asset reappears in library + orchestrator pool. Logged
+    // for audit alongside other state-change actions.
+    if (restore === true) {
+      await sql`
+        UPDATE media_assets
+        SET archived_at = NULL, updated_at = NOW()
+        WHERE id = ${id}
+      `;
+      try {
+        await sql`
+          INSERT INTO subscriber_actions (site_id, action_type, target_type, target_id, payload)
+          VALUES (${asset.site_id}, 'restore', 'media_asset', ${id}, '{}'::jsonb)
+        `;
+      } catch { /* non-fatal */ }
+    }
 
     // AI verification confirm/reject (#167). Subscribers explicitly accept
     // or reject AI's suggestions (scene_type, content_pillar). Confirmed
