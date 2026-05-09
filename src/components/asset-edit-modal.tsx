@@ -4,7 +4,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "@/components/feedback";
 import { TagPicker, type PillarGroup } from "./tag-picker";
 import { FaceOverlay } from "./face-overlay";
-import { AssetStudioStrip } from "./asset-studio-strip";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { SCENE_TYPES } from "@/lib/scene-types";
 
@@ -488,113 +487,190 @@ export function AssetEditModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-4xl max-h-[90vh] flex-col border border-border bg-surface overflow-y-auto"
+        className="flex w-full max-w-5xl max-h-[90vh] flex-col border border-border bg-surface overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Image — full width */}
-        <div className="relative flex items-center justify-center bg-background">
-          {mediaType?.startsWith("video") || mediaType === "video" ? (
-            <video
-              src={imageUrl}
-              controls
-              className="w-full object-contain"
-              style={{ maxHeight: "45vh" }}
-            />
-          ) : faceData && faceData.length > 0 ? (
-            <FaceOverlay
-              imageUrl={imageUrl}
-              faces={faceData}
-              detectionWidth={faceDetectionWidth}
-              detectionHeight={faceDetectionHeight}
-              personas={personaList}
-              assetId={assetId}
-              onFaceNamed={(faceIndex, personaId, personaName) => {
-                setFaceData((prev) =>
-                  prev ? prev.map((f, i) =>
-                    i === faceIndex ? { ...f, personaId, personaName } : f
-                  ) : prev
-                );
-              }}
-            />
-          ) : (
-            <img
-              src={imageUrl}
-              alt=""
-              className="w-full object-contain"
-              style={{ maxHeight: "45vh" }}
-            />
-          )}
-          <button onClick={onClose} className="absolute right-3 top-3 rounded bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70">✕</button>
+        {/* Sticky header — was a transparent overlay on the image; now its
+            own row so close button + title sit together. */}
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-surface px-6 py-3">
+          <h3 className="text-sm font-semibold">Edit Source Asset</h3>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Compact metadata strip — operator-tier signals (sceneType
+                singular, qualityScore) removed; subscriber-relevant flags
+                only. AI-generated toggle stays here as it's subscriber-
+                actionable. */}
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              source === "ai_generated" ? "bg-accent/20 text-accent" : "bg-surface-hover text-muted"
+            }`}>
+              {source === "ai_generated" ? "AI" : mediaType}
+            </span>
+            {captionSource && (
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                captionSource === "ai" ? "bg-accent/20 text-accent"
+                  : captionSource === "corrected" ? "bg-warning/20 text-warning"
+                  : "bg-success/20 text-success"
+              }`}>
+                {captionSource === "ai" ? "AI caption" : captionSource === "corrected" ? "corrected" : "manual"}
+              </span>
+            )}
+            {totalTagged > 0 && (
+              <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                {totalTagged} tagged
+              </span>
+            )}
+            <button
+              onClick={toggleAiGenerated}
+              disabled={savingAi}
+              title={aiGenerated
+                ? "Marked as AI-generated — disclosure prefix added at publish (per platform compliance)"
+                : "Mark this asset as AI-generated or AI-modified"}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                aiGenerated
+                  ? "bg-accent text-white"
+                  : "border border-border text-muted hover:text-foreground"
+              } ${savingAi ? "opacity-50" : ""}`}
+            >
+              {aiGenerated ? "🤖 AI" : "+ Mark as AI"}
+            </button>
+            <button
+              onClick={onClose}
+              className="ml-2 rounded bg-surface-hover px-2 py-1 text-xs text-muted hover:bg-surface-hover/80 hover:text-foreground"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        {/* Content */}
+        {/* Content — restructured 2026-05-09 per density/above-the-fold polish.
+            New shape: Context Note full-width at top → 2-column row with
+            smaller image LEFT + Story Angle/Scene Composition stacked RIGHT.
+            Tool selectors (brand/project/persona) flow below the fold. */}
         <div className="px-6 pt-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Edit Asset</h3>
-          </div>
 
-            {/* Asset metadata */}
-            <div className="mb-3 flex flex-wrap items-center gap-1.5">
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                source === "ai_generated" ? "bg-accent/20 text-accent" : "bg-surface-hover text-muted"
-              }`}>
-                {source === "ai_generated" ? "AI" : mediaType}
-              </span>
-              {sceneType && (
-                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted">
-                  {sceneType}
-                </span>
+            {/* Context Note — full width, at top per the layout pivot.
+                Was previously buried below the image + tagging panel. */}
+            <div className="mb-4">
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-xs text-muted">
+                  Context Note
+                  {speech.listening && (
+                    <span className="ml-2 text-[10px] text-danger animate-pulse">● listening</span>
+                  )}
+                </label>
+                <div className="flex items-center gap-3">
+                  {speech.supported && (
+                    <button
+                      onClick={speech.toggle}
+                      type="button"
+                      className={`text-[10px] ${speech.listening ? "text-danger" : "text-muted hover:text-foreground"}`}
+                      title={speech.listening ? "Stop dictation" : "Start dictation"}
+                    >
+                      {speech.listening ? "■ Stop" : "🎤 Dictate"}
+                    </button>
+                  )}
+                  {_hasGeneratedText && (
+                    <span className="text-[10px] text-success" title="Auto-generated by TracPost pipeline">
+                      ✓ Auto-captioned
+                    </span>
+                  )}
+                </div>
+              </div>
+              {speech.interim && (
+                <p className="mb-1 text-[10px] italic text-muted">{speech.interim}</p>
               )}
-              {qualityScore != null && (
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                  qualityScore >= 0.8 ? "bg-success/20 text-success"
-                    : qualityScore >= 0.5 ? "bg-warning/20 text-warning"
-                    : "bg-danger/20 text-danger"
-                }`}>
-                  {(qualityScore * 100).toFixed(0)}%
-                </span>
-              )}
-              {captionSource && (
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                  captionSource === "ai" ? "bg-accent/20 text-accent"
-                    : captionSource === "corrected" ? "bg-warning/20 text-warning"
-                    : "bg-success/20 text-success"
-                }`}>
-                  {captionSource === "ai" ? "AI caption" : captionSource === "corrected" ? "corrected" : "manual"}
-                </span>
-              )}
-              {totalTagged > 0 && (
-                <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
-                  {totalTagged} tagged
-                </span>
-              )}
-              {/* AI-generated toggle (per #161, relocated from capture
-                  page per the streamlined-upload restructure). Subscriber-
-                  controlled declaration; flips ai_flag_source to
-                  "subscriber_declared" when changed. C2PA reader (Phase 2)
-                  may pre-set this at upload from manifest detection. */}
-              <button
-                onClick={toggleAiGenerated}
-                disabled={savingAi}
-                title={aiGenerated
-                  ? "Marked as AI-generated — disclosure prefix added at publish (per platform compliance)"
-                  : "Mark this asset as AI-generated or AI-modified"}
-                className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                  aiGenerated
-                    ? "bg-accent text-white"
-                    : "border border-border text-muted hover:text-foreground"
-                } ${savingAi ? "opacity-50" : ""}`}
-              >
-                {aiGenerated ? "🤖 AI" : "+ Mark as AI"}
-              </button>
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={note}
+                  onChange={handleNoteChange}
+                  onKeyDown={handleNoteKeyDown}
+                  className="w-full text-sm"
+                  style={{ minHeight: 90 }}
+                  placeholder="List details: brass bar sink, #BrandName, walnut countertop, https://vendor.com/product..."
+                />
+                <div className="mt-1 flex items-center justify-between text-[10px]">
+                  <span className={note.trim().length >= 40 ? "text-success" : "text-muted"}>
+                    {note.trim().length >= 40
+                      ? "✓ Ready — eligible for autopilot"
+                      : `${Math.max(0, 40 - note.trim().length)} more chars to reach autopilot threshold`}
+                  </span>
+                  <span className="text-muted">{note.length} chars</span>
+                </div>
+                {hashQuery !== null && hashMatches.length > 0 && (
+                  <div className="absolute left-0 right-0 z-10 mt-1 overflow-hidden rounded border border-border bg-surface shadow-lg">
+                    {hashMatches.map((v, i) => (
+                      <button
+                        key={v.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          insertBrandTag(v);
+                        }}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                          i === hashIndex ? "bg-accent/10 text-accent" : "text-foreground hover:bg-surface-hover"
+                        }`}
+                      >
+                        <span>
+                          <span className="text-muted">#</span>
+                          {v.slug}
+                          <span className="ml-2 text-xs text-muted">{v.name}</span>
+                        </span>
+                        {v.url && (
+                          <span className="text-[10px] text-muted">↗</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Story Angle + Scene Composition multi-select (rebuilt 2026-05-09).
-                Replaces the prior yes/no verification of AI's single picks.
-                AI provides confident defaults (one pillar, N scene types);
-                subscriber multi-selects from the full menu in each column. */}
+            {/* 2-column row: image LEFT (smaller), tagging panel RIGHT.
+                On narrow viewports falls back to single column. */}
+            <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+              {/* LEFT: image preview, sized to make details visible without
+                  dominating the modal. */}
+              <div className="flex items-start justify-center bg-background">
+                {mediaType?.startsWith("video") || mediaType === "video" ? (
+                  <video
+                    src={imageUrl}
+                    controls
+                    className="w-full object-contain"
+                    style={{ maxHeight: "32vh" }}
+                  />
+                ) : faceData && faceData.length > 0 ? (
+                  <FaceOverlay
+                    imageUrl={imageUrl}
+                    faces={faceData}
+                    detectionWidth={faceDetectionWidth}
+                    detectionHeight={faceDetectionHeight}
+                    personas={personaList}
+                    assetId={assetId}
+                    onFaceNamed={(faceIndex, personaId, personaName) => {
+                      setFaceData((prev) =>
+                        prev ? prev.map((f, i) =>
+                          i === faceIndex ? { ...f, personaId, personaName } : f
+                        ) : prev
+                      );
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={imageUrl}
+                    alt=""
+                    className="w-full object-contain"
+                    style={{ maxHeight: "32vh" }}
+                  />
+                )}
+              </div>
+
+              {/* RIGHT: Story Angle + Scene Composition (rebuilt 2026-05-09).
+                  Inner grid collapsed from 2-col to 1-col since the panel
+                  itself now lives in a half-width slot. Story Angle stacks
+                  above Scene Composition. */}
+              <div>
             {(pillarConfig.length > 0 || SCENE_TYPES.length > 0) && (
-              <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
+              <div className="rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
                 <div className="mb-2 flex items-baseline justify-between">
                   <span className="text-[11px] font-medium text-accent">
                     Tag this asset
@@ -608,7 +684,7 @@ export function AssetEditModal({
                     Learn more
                   </a>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3">
                   {/* LEFT: Story Angle (intent — guides what AI says) */}
                   <div>
                     <div className="mb-1">
@@ -688,83 +764,7 @@ export function AssetEditModal({
                 </div>
               </div>
             )}
-
-            <div className="mb-1 flex items-center justify-between">
-              <label className="text-xs text-muted">
-                Context Note
-                {speech.listening && (
-                  <span className="ml-2 text-[10px] text-danger animate-pulse">● listening</span>
-                )}
-              </label>
-              <div className="flex items-center gap-3">
-                {speech.supported && (
-                  <button
-                    onClick={speech.toggle}
-                    type="button"
-                    className={`text-[10px] ${speech.listening ? "text-danger" : "text-muted hover:text-foreground"}`}
-                    title={speech.listening ? "Stop dictation" : "Start dictation"}
-                  >
-                    {speech.listening ? "■ Stop" : "🎤 Dictate"}
-                  </button>
-                )}
-                {_hasGeneratedText && (
-                  <span className="text-[10px] text-success" title="Auto-generated by TracPost pipeline">
-                    ✓ Auto-captioned
-                  </span>
-                )}
               </div>
-            </div>
-            {speech.interim && (
-              <p className="mb-1 text-[10px] italic text-muted">{speech.interim}</p>
-            )}
-            <div className="relative flex-1">
-              <textarea
-                ref={textareaRef}
-                value={note}
-                onChange={handleNoteChange}
-                onKeyDown={handleNoteKeyDown}
-                className="w-full h-full text-sm"
-                style={{ minHeight: 120 }}
-                placeholder="List details: brass bar sink, #BrandName, walnut countertop, https://vendor.com/product..."
-              />
-              {/* Char counter + readiness threshold (matches the capture
-                  staging UI from #166). Asset auto-promotes to 'triaged'
-                  when context_note ≥40 chars per /api/assets/[id] PATCH;
-                  the counter mirrors the threshold so subscribers know
-                  when their briefing is autopilot-eligible. */}
-              <div className="mt-1 flex items-center justify-between text-[10px]">
-                <span className={note.trim().length >= 40 ? "text-success" : "text-muted"}>
-                  {note.trim().length >= 40
-                    ? "✓ Ready — eligible for autopilot"
-                    : `${Math.max(0, 40 - note.trim().length)} more chars to reach autopilot threshold`}
-                </span>
-                <span className="text-muted">{note.length} chars</span>
-              </div>
-              {hashQuery !== null && hashMatches.length > 0 && (
-                <div className="absolute left-0 right-0 z-10 mt-1 overflow-hidden rounded border border-border bg-surface shadow-lg">
-                  {hashMatches.map((v, i) => (
-                    <button
-                      key={v.id}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        insertBrandTag(v);
-                      }}
-                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                        i === hashIndex ? "bg-accent/10 text-accent" : "text-foreground hover:bg-surface-hover"
-                      }`}
-                    >
-                      <span>
-                        <span className="text-muted">#</span>
-                        {v.slug}
-                        <span className="ml-2 text-xs text-muted">{v.name}</span>
-                      </span>
-                      {v.url && (
-                        <span className="text-[10px] text-muted">↗</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
         </div>
 
@@ -943,16 +943,12 @@ export function AssetEditModal({
           </div>
         )}
 
-        {/* Asset Studio — placed just above the action bar.
-            AI tools are intentionally low-prominence per the scaffolding
-            thesis: subscribers with rich captured libraries rarely need
-            them; they exist as utility for sparse-to-mature transition. */}
-        <div className="border-t border-border px-6 py-3">
-          <AssetStudioStrip
-            assetId={assetId}
-            mediaType={mediaType}
-          />
-        </div>
+        {/* Asset Studio enhancement tools removed from the source-asset modal
+            (2026-05-09). Per the apprentice→master architecture lock: tools
+            belong on the VARIANT level, not the source. The source asset is
+            briefed-once / set-and-forget; enhancement (tool application) is
+            what transforms vanilla template variants into master final
+            products. The studio surface lives at /manage/variant-studio. */}
 
         {/* Footer: actions */}
         <div className="flex items-center justify-between border-t border-border px-6 py-3">
