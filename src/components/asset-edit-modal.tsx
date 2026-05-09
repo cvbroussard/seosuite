@@ -211,6 +211,15 @@ export function AssetEditModal({
   const replaceFileRef = useRef<HTMLInputElement>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
+
+  // Split pillarConfig into "short groups under image" + "rest below the
+  // 2-col". Picks the two pillars with the FEWEST content tags so they fit
+  // the dead space below the resized image. Generic rule — works for any
+  // site's pillar labels, not hardcoded to specific IDs.
+  const sortedPillarsByTagCount = [...pillarConfig].sort((a, b) => a.tags.length - b.tags.length);
+  const pillarsUnderImage = sortedPillarsByTagCount.slice(0, 2);
+  const pillarsUnderImageIds = new Set(pillarsUnderImage.map((p) => p.id));
+  const pillarsBelowFold = pillarConfig.filter((p) => !pillarsUnderImageIds.has(p.id));
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -625,12 +634,14 @@ export function AssetEditModal({
               </div>
             </div>
 
-            {/* 2-column row: image LEFT (smaller), tagging panel RIGHT.
-                On narrow viewports falls back to single column. */}
+            {/* 2-column row: image LEFT (smaller, with short tag groups
+                sliding underneath), tagging panel RIGHT. On narrow viewports
+                falls back to single column. */}
             <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* LEFT: image preview, sized to make details visible without
-                  dominating the modal. */}
-              <div className="flex items-start justify-center bg-background">
+              {/* LEFT: image preview + the two shortest pillar tag groups
+                  underneath to fill the dead space. */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start justify-center bg-background">
                 {mediaType?.startsWith("video") || mediaType === "video" ? (
                   <video
                     src={imageUrl}
@@ -660,6 +671,21 @@ export function AssetEditModal({
                     alt=""
                     className="w-full object-contain"
                     style={{ maxHeight: "32vh" }}
+                  />
+                )}
+                </div>
+                {/* Short pillar tag groups slide under the image to fill
+                    the dead space when the right column (Story Angle +
+                    Scene Composition) is taller than the image. Same
+                    state as the bottom TagPicker — toggling here reflects
+                    everywhere immediately. */}
+                {pillarsUnderImage.length > 0 && (
+                  <TagPicker
+                    pillarConfig={pillarsUnderImage}
+                    selectedPillar={pillar}
+                    selectedTags={tags}
+                    onPillarChange={setPillar}
+                    onTagsChange={setTags}
                   />
                 )}
               </div>
@@ -768,7 +794,10 @@ export function AssetEditModal({
             </div>
         </div>
 
-        {/* Tags */}
+        {/* Tags — bottom row renders the pillars that didn't fit in the
+            dead space under the image. The selected-tags chip strip stays
+            here regardless so subscribers always see their full selection
+            in one place even if some chips came from the under-image picker. */}
         {pillarConfig.length > 0 && (
           <div className="border-t border-border px-6 py-4">
             <div className="mb-2 flex items-center justify-between">
@@ -806,14 +835,16 @@ export function AssetEditModal({
               </div>
             )}
 
-            {/* Full tag picker — always visible at full width */}
-            <TagPicker
-              pillarConfig={pillarConfig}
-              selectedPillar={pillar}
-              selectedTags={tags}
-              onPillarChange={setPillar}
-              onTagsChange={setTags}
-            />
+            {/* Remaining pillars (those not pulled up under the image) */}
+            {pillarsBelowFold.length > 0 && (
+              <TagPicker
+                pillarConfig={pillarsBelowFold}
+                selectedPillar={pillar}
+                selectedTags={tags}
+                onPillarChange={setPillar}
+                onTagsChange={setTags}
+              />
+            )}
           </div>
         )}
 
