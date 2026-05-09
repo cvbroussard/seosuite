@@ -555,7 +555,20 @@ export function AssetEditModal({
                       >
                         <span className="flex-1 truncate text-foreground">
                           {item.description}
-                          <span className="font-medium">{item.value.replace(/_/g, " ")}</span>
+                          <span className="font-medium">
+                            {(() => {
+                              // Resolve pillar IDs to subscriber-readable labels
+                              // via pillar_config. Falls back to ID-with-spaces
+                              // if no match (catches stale or fallback IDs like
+                              // the Sinek "why" — surfaces them as-is so
+                              // operators can spot the data drift).
+                              if (item.field === "content_pillar") {
+                                const match = pillarConfig.find((p) => p.id === item.value);
+                                if (match?.label) return match.label;
+                              }
+                              return item.value.replace(/_/g, " ");
+                            })()}
+                          </span>
                           ?
                         </span>
                         <div className="flex shrink-0 items-center gap-1">
