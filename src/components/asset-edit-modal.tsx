@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "@/components/feedback";
 import type { PillarGroup } from "./tag-picker";
 import { FaceOverlay } from "./face-overlay";
-import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { useAudioBriefing } from "@/hooks/use-audio-briefing";
 import { SCENE_TYPES } from "@/lib/scene-types";
 
 interface Brand {
@@ -182,7 +182,7 @@ export function AssetEditModal({
     setPersonaIds(initialPersonaIds);
     setVerifications(aiVerifications || []);
     setAiGenerated(initialAiGenerated);
-    speech.stop();
+    audio.cancel();
   }, [assetId]);
 
   async function toggleAiGenerated() {
@@ -225,41 +225,29 @@ export function AssetEditModal({
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Speech recognition — cursor-aware insertion into context note.
-  // Each spoken phrase becomes one descriptor separated by commas,
-  // matching the manual captioning format: "zellige backsplash,
-  // floating shelves, integrated refrigeration by #thermador"
-  const speech = useSpeechRecognition({
-    onFinal: useCallback((transcript: string) => {
-      const phrase = transcript.trim();
-      if (!phrase) return;
-      const ta = textareaRef.current;
-      if (!ta) {
-        setNote((prev) => {
-          if (!prev) return phrase;
-          const trimmed = prev.trimEnd().replace(/,\s*$/, "");
-          return trimmed + ", " + phrase;
-        });
-        return;
-      }
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
+  // Audio briefing — first-class capture (LOCKED 2026-05-09).
+  // Replaces the prior Web Speech API path. Captures the audio bytes
+  // to R2 (recordings table) AND transcribes via Whisper. The transcript
+  // is appended to the existing note (server-side append handled in the
+  // /api/recordings POST when source_asset_id is present).
+  const audio = useAudioBriefing({
+    siteId,
+    sourceAssetId: assetId,
+    source: "briefing",
+    appendTranscriptToContext: true,
+    onTranscript: useCallback((text: string) => {
+      // Server already appended to media_assets.context_note. Mirror that
+      // into local state so the textarea reflects the change without a
+      // full reload.
+      if (!text) return;
       setNote((prev) => {
-        const before = prev.slice(0, start);
-        const after = prev.slice(end);
-        const trimBefore = before.trimEnd().replace(/,\s*$/, "");
-        const sep = trimBefore.length > 0 ? ", " : "";
-        return trimBefore + sep + phrase + after;
+        if (!prev || !prev.trim()) return text;
+        return prev.trimEnd() + "\n\n" + text;
       });
-      requestAnimationFrame(() => {
-        const before = note.slice(0, start).trimEnd().replace(/,\s*$/, "");
-        const sep = before.length > 0 ? 2 : 0;
-        const newPos = before.length + sep + phrase.length;
-        ta.selectionStart = newPos;
-        ta.selectionEnd = newPos;
-        ta.focus();
-      });
-    }, [note]),
+    }, []),
+    onError: useCallback((err: Error) => {
+      console.warn("Audio briefing error:", err.message);
+    }, []),
   });
 
   // Vendor hashtag autocomplete state
@@ -581,19 +569,50 @@ export function AssetEditModal({
                       ({Math.max(0, 40 - note.trim().length)} to autopilot)
                     </span>
                   )}
-                  {speech.listening && (
-                    <span className="text-[10px] text-danger animate-pulse">● listening</span>
+                  {audio.state === "recording" && (
+                    <span className="text-[10px] text-danger animate-pulse">
+                      ● {Math.floor(audio.elapsedMs / 1000)}s
+                    </span>
+                  )}
+                  {audio.state === "uploading" && (
+                    <span className="text-[10px] text-muted">Uploading…</span>
+                  )}
+                  {audio.state === "transcribing" && (
+                    <span className="text-[10px] text-muted">Transcribing…</span>
+                  )}
+                  {audio.state === "error" && (
+                    <span className="text-[10px] text-danger">⚠ Audio error</span>
                   )}
                 </label>
                 <div className="flex items-center gap-3">
-                  {speech.supported && (
+                  {audio.supported && audio.state === "idle" && (
                     <button
-                      onClick={speech.toggle}
+                      onClick={() => audio.start()}
                       type="button"
-                      className={`text-[10px] ${speech.listening ? "text-danger" : "text-muted hover:text-foreground"}`}
-                      title={speech.listening ? "Stop dictation" : "Start dictation"}
+                      className="text-[10px] text-muted hover:text-foreground"
+                      title="Start dictation — captures audio + transcribes"
                     >
-                      {speech.listening ? "■ Stop" : "🎤 Dictate"}
+                      🎤 Dictate
+                    </button>
+                  )}
+                  {audio.state === "recording" && (
+                    <button
+                      onClick={() => audio.stop()}
+                      type="button"
+                      className="text-[10px] font-medium text-danger"
+                      title="Stop and transcribe"
+                    >
+                      ■ Stop
+                    </button>
+                  )}
+                  {(audio.state === "uploading" || audio.state === "transcribing") && (
+                    <button
+                      onClick={() => audio.cancel()}
+                      type="button"
+                      className="text-[10px] text-muted hover:text-foreground"
+                      title="Cancel"
+                    >
+                      ✕
                     </button>
                   )}
                   {_hasGeneratedText && (
@@ -603,9 +622,6 @@ export function AssetEditModal({
                   )}
                 </div>
               </div>
-              {speech.interim && (
-                <p className="mb-1 text-[10px] italic text-muted">{speech.interim}</p>
-              )}
               <div className="relative">
                 <textarea
                   ref={textareaRef}
