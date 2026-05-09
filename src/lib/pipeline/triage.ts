@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import type { AutopilotConfig, TriageResult, ContentPillar, PlatformFormat } from "./types";
+import { SCENE_TYPE_IDS } from "@/lib/scene-types";
 import { buildPersonaPrompt, processDetections } from "@/lib/personas";
 import type { PersonaDetection } from "@/lib/personas";
 
@@ -127,6 +128,7 @@ export async function triageAsset(assetId: string): Promise<TriageResult> {
       quality_score = ${result.quality_score},
       content_pillar = ${result.content_pillar},
       content_pillars = ${result.content_pillars},
+      scene_types = COALESCE(${result.scene_types || null}, scene_types),
       content_tags = ${result.content_tags || []},
       platform_fit = ${result.platform_fit},
       flag_reason = ${result.flag_reason || null},
@@ -289,14 +291,14 @@ ${correctionsBlock}
 Respond with ONLY valid JSON (no markdown):
 {
   "quality_score": <0.0-1.0, see scoring guide below>,
-  "content_pillars": [<1-3 matching pillar IDs from the pillars above, ordered by relevance>],
+  "content_pillar": "<the SINGLE best-matching pillar ID from the pillars above. Pick your most confident answer — the subscriber will multi-select from the full pillar menu themselves; this field is the smart default. Do not return an array.>",
   "content_tags": [<2-5 matching tag IDs from the tags above, ordered by relevance>],
   "platform_fit": [<array of: "ig_feed", "ig_story", "ig_reel", "gbp", "youtube", "youtube_short", "fb_feed", "tiktok", "twitter", "linkedin", "pinterest">],
   "has_faces": <true/false — ONLY true if a human FACE is clearly visible (eyes, nose, mouth). Hands, arms, legs, torso, or humans seen from behind or waist-down do NOT count as faces>,
   "has_text_overlay": <true/false>,
   "description": "<1-sentence description of what's in the image>",
   "context_note": "<spec-style comma-separated list of specific materials, fixtures, vendors, techniques visible. Example: custom lacquer inset cabinets by Crystal Cabinet Works, Lacanche Sully range, zellige tile backsplash, rift-sawn white oak island. Only include what you can actually identify. No adjectives, no marketing language.>",
-  "scene_type": "<one of: humans, environment, product, method, region — humans=people/animals visible, environment=space with no people, product=close-up of specific item/material, method=process/technique/craftsmanship shown, region=exterior/neighborhood/local context>",
+  "scene_types": [<array of matching IDs from this fixed vocabulary — pick all that apply (1 to many): "wide_shot" (whole space/subject in frame), "close_up" (detail of material/finish/feature), "in_progress" (active work mid-task), "people" (humans visible), "before" (pre-work/starting state), "after" (completed result), "documentation" (plans/diagrams/sketches/screenshots), "lifestyle" (finished space being lived in/used). Examples: ["wide_shot","after"] for a finished kitchen reveal; ["in_progress","people"] for a crew working; ["close_up","after"] for a finished detail shot.>],
   "quality_notes": "<brief note on quality issues if any>",
   "detected_vendors": [<array of vendor slugs from the known vendors list that appear in this image, e.g. ["lacanche", "crystal_cabinet_works"]>],
   "detected_personas": [{"persona_id": "<id>", "persona_name": "<name>", "confidence": <0.0-1.0>, "role": "subject"|"background", "reasoning": "<why>"}],
@@ -336,11 +338,13 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
   if (!jsonMatch) throw new Error("No JSON in vision response");
   const parsed = JSON.parse(jsonMatch[0]);
 
-  // Extract pillars from AI response (array) with fallback
-  let contentPillars: ContentPillar[] = Array.isArray(parsed.content_pillars)
-    ? parsed.content_pillars
-    : parsed.content_pillar
-      ? [parsed.content_pillar]
+  // AI returns ONE confident pillar pick; subscriber owns the full array
+  // via the modal's two-column checkbox UI. Fallback to legacy array shape
+  // for in-flight responses, then to first available pillar if neither.
+  let contentPillars: ContentPillar[] = parsed.content_pillar
+    ? [parsed.content_pillar]
+    : Array.isArray(parsed.content_pillars)
+      ? [parsed.content_pillars[0]]
       : [pillars[0] || "general"];
 
   // Extract content tags (two-tier system)
@@ -357,6 +361,14 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
 
   const quality = Math.min(1, Math.max(0, parsed.quality_score || 0.5));
   const platformFit = (parsed.platform_fit || ["ig_feed", "ig_story", "gbp", "fb_feed", "twitter", "linkedin", "pinterest"]) as PlatformFormat[];
+
+  // Scene composition: filter AI response to known IDs (defensive — AI can
+  // hallucinate). Fall back to legacy single-string scene_type via mapping
+  // only if AI returns nothing for the new array field.
+  const rawSceneTypes = Array.isArray(parsed.scene_types)
+    ? (parsed.scene_types as string[])
+    : [];
+  const sceneTypes = rawSceneTypes.filter((s) => SCENE_TYPE_IDS.includes(s));
 
   // Determine triage outcome.
   // Per the briefing-required principle (migrate-099): default is
@@ -381,6 +393,7 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
     quality_score: Math.round(quality * 100) / 100,
     content_pillar: contentPillars[0],
     content_pillars: contentPillars,
+    scene_types: sceneTypes,
     content_tags: contentTags,
     platform_fit: platformFit,
     triage_status: triageStatus,
@@ -487,6 +500,7 @@ function heuristicTriage(
     quality_score: Math.round(quality * 100) / 100,
     content_pillar: pillar,
     content_pillars: [pillar],
+    scene_types: [],  // heuristic can't infer composition — leave empty for subscriber to set
     content_tags: [],
     platform_fit: platformFit,
     triage_status: triageStatus,

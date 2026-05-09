@@ -23,6 +23,7 @@ interface Asset {
   created_at: string;
   archived_at: string | null;
   briefable_at: string | null;
+  scene_types: string[] | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -265,7 +266,9 @@ export function MediaGrid({
           mediaType={editing.media_type}
           initialNote={editing.context_note || ""}
           initialPillar={editing.content_pillar || ""}
-          initialTags={editing.content_tags || editing.content_pillars || []}
+          initialPillars={editing.content_pillars || []}
+          initialSceneTypes={editing.scene_types || []}
+          initialTags={editing.content_tags || []}
           pillarConfig={pillarConfig}
           brands={liveBrands}
           projects={liveProjects}

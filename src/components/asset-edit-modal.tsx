@@ -6,6 +6,7 @@ import { TagPicker, type PillarGroup } from "./tag-picker";
 import { FaceOverlay } from "./face-overlay";
 import { AssetStudioStrip } from "./asset-studio-strip";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { SCENE_TYPES } from "@/lib/scene-types";
 
 interface Brand {
   id: string;
@@ -27,6 +28,10 @@ interface AssetEditModalProps {
   mediaType: string;
   initialNote: string;
   initialPillar: string;
+  /** Multi-pillar array — Story Angle column. AI seeds with [primary], subscriber multi-selects from full menu. */
+  initialPillars?: string[];
+  /** Multi-scene-type array — Scene Composition column. AI pre-fills, subscriber edits. */
+  initialSceneTypes?: string[];
   initialTags: string[];
   pillarConfig: PillarGroup[];
   availablePillars?: string[];
@@ -96,6 +101,8 @@ export function AssetEditModal({
   mediaType,
   initialNote,
   initialPillar,
+  initialPillars = [],
+  initialSceneTypes = [],
   initialTags,
   pillarConfig,
   brands = [],
@@ -143,6 +150,13 @@ export function AssetEditModal({
   const [savingAi, setSavingAi] = useState(false);
   const _hasGeneratedText = !!(initialMetadata?.generated_text as Record<string, unknown>)?.generated_at;
   const [pillar, setPillar] = useState(initialPillar);
+  // Two-column checkbox state (Story Angle + Scene Composition).
+  // AI seeds the arrays at briefing-flip; subscriber multi-selects.
+  // Pillars: seed with [primary] if no array provided (back-compat).
+  const [pillarsArr, setPillarsArr] = useState<string[]>(
+    initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : [],
+  );
+  const [sceneTypesArr, setSceneTypesArr] = useState<string[]>(initialSceneTypes);
   const [tags, setTags] = useState<string[]>(initialTags || []);
   const [brandIds, setBrandIds] = useState<string[]>(initialBrandIds);
   const [projectIds, setProjectIds] = useState<string[]>(initialProjectIds);
@@ -153,6 +167,8 @@ export function AssetEditModal({
     setFaceData(initialFaces);
     setNote(initialNote);
     setPillar(initialPillar);
+    setPillarsArr(initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : []);
+    setSceneTypesArr(initialSceneTypes);
     setTags(initialTags || []);
     setBrandIds(initialBrandIds);
     setProjectIds(initialProjectIds);
@@ -410,6 +426,15 @@ export function AssetEditModal({
     const body: Record<string, unknown> = {};
     if (note !== initialNote) body.context_note = note;
     if (pillar !== initialPillar) body.pillar = pillar;
+    // Story Angle multi-select diff (sorted compare for stable ordering)
+    const initPillarsSorted = [...(initialPillars.length > 0 ? initialPillars : initialPillar ? [initialPillar] : [])].sort();
+    if (JSON.stringify([...pillarsArr].sort()) !== JSON.stringify(initPillarsSorted)) {
+      body.pillars = pillarsArr;
+    }
+    // Scene Composition multi-select diff
+    if (JSON.stringify([...sceneTypesArr].sort()) !== JSON.stringify([...initialSceneTypes].sort())) {
+      body.scene_types = sceneTypesArr;
+    }
     if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
     if (JSON.stringify(brandIds.sort()) !== JSON.stringify(initialBrandIds.sort())) body.brand_ids = brandIds;
     if (JSON.stringify(projectIds.sort()) !== JSON.stringify(initialProjectIds.sort())) body.project_ids = projectIds;
@@ -564,89 +589,105 @@ export function AssetEditModal({
               </button>
             </div>
 
-            {/* AI verification panel (#167). Surfaces auto-applied AI
-                suggestions for explicit subscriber confirm/reject. Only
-                shows items not yet verified. Persona verification is
-                handled separately by the face overlay above. Vendor
-                verification is intentionally absent (operator-tagged only
-                per #139). */}
-            {(() => {
-              const verifiedFields = new Set(verifications.map((v) => v.field));
-              const pendingItems: Array<{ field: string; label: string; value: string; description: string }> = [];
-              if (sceneType && !verifiedFields.has("scene_type")) {
-                pendingItems.push({
-                  field: "scene_type",
-                  label: "Scene type",
-                  value: sceneType,
-                  description: "AI thinks this shot is ",
-                });
-              }
-              const pillarToVerify = aiSuggestedPillar || pillar;
-              if (pillarToVerify && !verifiedFields.has("content_pillar")) {
-                pendingItems.push({
-                  field: "content_pillar",
-                  label: "Content pillar",
-                  value: pillarToVerify,
-                  description: "AI categorized this as ",
-                });
-              }
-              if (pendingItems.length === 0) return null;
-              return (
-                <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[11px] font-medium text-accent">
-                      Verify AI suggestions
-                    </span>
-                    <span className="text-[10px] text-muted">
-                      {pendingItems.length} pending
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {pendingItems.map((item) => (
-                      <div
-                        key={item.field}
-                        className="flex items-center justify-between gap-2 text-xs"
-                      >
-                        <span className="flex-1 truncate text-foreground">
-                          {item.description}
-                          <span className="font-medium">
-                            {(() => {
-                              // Resolve pillar IDs to subscriber-readable labels
-                              // via pillar_config. Falls back to ID-with-spaces
-                              // if no match (catches stale or fallback IDs like
-                              // the Sinek "why" — surfaces them as-is so
-                              // operators can spot the data drift).
-                              if (item.field === "content_pillar") {
-                                const match = pillarConfig.find((p) => p.id === item.value);
-                                if (match?.label) return match.label;
-                              }
-                              return item.value.replace(/_/g, " ");
-                            })()}
-                          </span>
-                          ?
-                        </span>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <button
-                            onClick={() => recordVerification(item.field, item.value, "confirmed")}
-                            className="rounded border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] text-success hover:bg-success/20"
-                            title="Confirm — looks right"
-                          >
-                            ✓ Yes
-                          </button>
-                          <button
-                            onClick={() => recordVerification(item.field, item.value, "rejected")}
-                            className="rounded border border-border px-2 py-0.5 text-[11px] text-muted hover:bg-surface-hover"
-                            title="Reject — wrong"
-                          >
-                            ✗ No
-                          </button>
-                        </div>
+            {/* Story Angle + Scene Composition multi-select (rebuilt 2026-05-09).
+                Replaces the prior yes/no verification of AI's single picks.
+                AI provides confident defaults (one pillar, N scene types);
+                subscriber multi-selects from the full menu in each column. */}
+            {(pillarConfig.length > 0 || SCENE_TYPES.length > 0) && (
+              <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <span className="text-[11px] font-medium text-accent">
+                    Tag this asset
+                  </span>
+                  <a
+                    href="/help/asset-tagging"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-muted underline hover:text-foreground"
+                  >
+                    Learn more
+                  </a>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* LEFT: Story Angle (intent — guides what AI says) */}
+                  <div>
+                    <div className="mb-1">
+                      <div className="text-[11px] font-semibold text-foreground">Story Angle</div>
+                      <div className="text-[10px] text-muted">
+                        What this asset is meant to say. Guides how the caption is written.
                       </div>
-                    ))}
+                    </div>
+                    <div className="space-y-1">
+                      {pillarConfig.map((p) => {
+                        const checked = pillarsArr.includes(p.id);
+                        return (
+                          <label
+                            key={p.id}
+                            className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 hover:bg-accent/5"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setPillarsArr((prev) => [...prev, p.id]);
+                                } else {
+                                  setPillarsArr((prev) => prev.filter((id) => id !== p.id));
+                                }
+                              }}
+                              className="mt-0.5 shrink-0"
+                            />
+                            <span className="flex-1 text-[11px]">
+                              <span className="font-medium text-foreground">{p.label}</span>
+                              {p.description && (
+                                <span className="ml-1 text-muted">— {p.description}</span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {/* RIGHT: Scene Composition (what's actually in the frame) */}
+                  <div>
+                    <div className="mb-1">
+                      <div className="text-[11px] font-semibold text-foreground">Scene Composition</div>
+                      <div className="text-[10px] text-muted">
+                        What&apos;s actually shown in the frame. Pick everything that applies.
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {SCENE_TYPES.map((s) => {
+                        const checked = sceneTypesArr.includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 hover:bg-accent/5"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSceneTypesArr((prev) => [...prev, s.id]);
+                                } else {
+                                  setSceneTypesArr((prev) => prev.filter((id) => id !== s.id));
+                                }
+                              }}
+                              className="mt-0.5 shrink-0"
+                            />
+                            <span className="flex-1 text-[11px]">
+                              <span className="font-medium text-foreground">{s.label}</span>
+                              <span className="ml-1 text-muted">— {s.description}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
             <div className="mb-1 flex items-center justify-between">
               <label className="text-xs text-muted">

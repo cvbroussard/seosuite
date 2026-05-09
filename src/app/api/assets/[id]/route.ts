@@ -20,9 +20,9 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { context_note, pillar, content_tags, vendor_ids, brand_ids, project_ids, persona_ids, location_ids, ai_verifications, restore, ai_generated } = body;
+    const { context_note, pillar, pillars, scene_types, content_tags, vendor_ids, brand_ids, project_ids, persona_ids, location_ids, ai_verifications, restore, ai_generated } = body;
 
-    if (context_note === undefined && pillar === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && persona_ids === undefined && location_ids === undefined && ai_verifications === undefined && restore === undefined && ai_generated === undefined) {
+    if (context_note === undefined && pillar === undefined && pillars === undefined && scene_types === undefined && content_tags === undefined && vendor_ids === undefined && brand_ids === undefined && project_ids === undefined && persona_ids === undefined && location_ids === undefined && ai_verifications === undefined && restore === undefined && ai_generated === undefined) {
       return NextResponse.json(
         { error: "Nothing to update" },
         { status: 400 }
@@ -121,6 +121,25 @@ export async function PATCH(
     }
     if (pillar !== undefined) {
       await sql`UPDATE media_assets SET content_pillar = ${pillar}, metadata = ${JSON.stringify(newMeta)}::jsonb WHERE id = ${id}`;
+    }
+    // Subscriber-controlled multi-pillar array (Story Angle column in modal).
+    // Replaces whatever AI/legacy wrote. content_pillar singular tracks
+    // pillars[0] for backward-compat queries.
+    if (Array.isArray(pillars)) {
+      const primary = pillars[0] || null;
+      await sql`
+        UPDATE media_assets
+        SET content_pillars = ${pillars},
+            content_pillar = COALESCE(${primary}, content_pillar)
+        WHERE id = ${id}
+      `;
+    }
+    // Subscriber-controlled scene composition array (Scene Composition column).
+    // Validated against the platform-wide registry on the client side; we
+    // accept whatever they send because a write is always more current than
+    // whatever the AI guessed.
+    if (Array.isArray(scene_types)) {
+      await sql`UPDATE media_assets SET scene_types = ${scene_types} WHERE id = ${id}`;
     }
     if (Array.isArray(content_tags)) {
       await sql`UPDATE media_assets SET content_tags = ${content_tags} WHERE id = ${id}`;
