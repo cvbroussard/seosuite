@@ -22,6 +22,7 @@ interface Asset {
   variant_count: number;
   created_at: string;
   archived_at: string | null;
+  briefable_at: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -118,9 +119,21 @@ export function MediaGrid({
         {assets.map((a) => (
           <button
             key={a.id}
-            onClick={() => { setEditing(a); setLastEdited(a.id); }}
+            onClick={() => {
+              // Block briefing while asset is still preparing (HEIC convert
+              // pending or video poster pending). Otherwise the modal would
+              // show a broken preview and a save would fail mid-pipeline.
+              if (!a.briefable_at) return;
+              setEditing(a);
+              setLastEdited(a.id);
+            }}
+            disabled={!a.briefable_at}
             className={`group relative overflow-hidden rounded-lg border bg-surface text-left transition-colors ${
-              lastEdited === a.id ? "border-accent ring-1 ring-accent" : "border-border hover:border-accent/40"
+              !a.briefable_at
+                ? "cursor-wait border-border opacity-70"
+                : lastEdited === a.id
+                ? "border-accent ring-1 ring-accent"
+                : "border-border hover:border-accent/40"
             }`}
           >
             <div className="relative aspect-square bg-background">
@@ -156,9 +169,13 @@ export function MediaGrid({
                   </span>
                   <span className="text-[10px] underline">Open</span>
                 </a>
-              ) : a.storage_url?.endsWith(".heic") || a.storage_url?.endsWith(".heif") ? (
-                <div className="flex h-full w-full items-center justify-center text-xs text-muted">
-                  HEIC — processing
+              ) : !a.briefable_at ? (
+                /* Preparing: HEIC waiting on convert, or video waiting on
+                   poster gen. Generalized via briefable_at (migration #103)
+                   so the placeholder works for any future prep step too. */
+                <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-xs text-muted">
+                  <div className="h-3 w-3 animate-spin rounded-full border border-muted border-t-transparent" />
+                  <span>Preparing…</span>
                 </div>
               ) : (
                 <img

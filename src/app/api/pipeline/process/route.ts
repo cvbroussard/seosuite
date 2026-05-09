@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { extractExif, fetchAndConvert } from "@/lib/image-utils";
+import { extractExif } from "@/lib/image-utils";
 import { matchAssetToEntities } from "@/lib/geo-match";
-import { uploadBufferToR2, deleteObjectFromR2, keyFromStorageUrl } from "@/lib/r2";
-import { seoFilename } from "@/lib/seo-filename";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -69,26 +67,11 @@ export async function POST(req: NextRequest) {
       const mediaType = asset.media_type as string;
       const storageUrl = asset.storage_url as string;
 
-      // HEIC conversion — convert to JPEG, swap URL, delete original
-      let currentUrl = storageUrl;
-      if (meta.needs_conversion && (storageUrl.endsWith(".heic") || storageUrl.endsWith(".heif"))) {
-        const { data, mimeType } = await fetchAndConvert(storageUrl);
-        const date = new Date().toISOString().slice(0, 10);
-        const fname = seoFilename("upload", "jpg");
-        const key = `sites/${siteId}/${date}/${fname}`;
-        currentUrl = await uploadBufferToR2(key, data, mimeType);
-        await sql`
-          UPDATE media_assets
-          SET storage_url = ${currentUrl},
-              metadata = (COALESCE(metadata, '{}'::jsonb) - 'needs_conversion') || '{"converted": true}'::jsonb
-          WHERE id = ${assetId}
-        `;
-        const heicKey = keyFromStorageUrl(storageUrl);
-        if (heicKey) {
-          try { await deleteObjectFromR2(heicKey); }
-          catch (err) { console.error("HEIC cleanup failed (non-fatal):", err); }
-        }
-      }
+      // NOTE: HEIC conversion previously ran here. Moved inline to upload
+      // POST waitUntil (2026-05-09) — browsers can't render HEIC, so the
+      // asset is unbriefable until conversion finishes; deferring it to the
+      // batch-after-upload tick was a pointless hop. See heic-convert.ts.
+      const currentUrl = storageUrl;
 
       // Filename date fallback for non-image assets (video, etc.)
       if (!mediaType?.startsWith("image") && !meta.date_taken) {

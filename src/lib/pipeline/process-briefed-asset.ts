@@ -171,13 +171,17 @@ export async function processBriefedAsset(assetId: string): Promise<{
     console.error(`Variant render failed in processBriefedAsset for ${assetId}:`, err instanceof Error ? err.message : err);
   }
 
-  // ── 6. Mark asset migrated ───────────────────────────────────────
+  // ── 6. Mark asset migrated + briefable ───────────────────────────
+  // briefable_at coalesce — a briefed-on-upload asset that came in via
+  // this orchestrator skipped the convert/poster waitUntils that normally
+  // stamp it; this is the safety net.
   await sql`
     UPDATE media_assets
     SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
       url_slug_applied_at: new Date().toISOString(),
       url_slug: slug,
     })}::jsonb,
+    briefable_at = COALESCE(briefable_at, NOW()),
     updated_at = NOW()
     WHERE id = ${assetId}
   `;

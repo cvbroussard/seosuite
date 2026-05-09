@@ -79,10 +79,16 @@ export async function generatePosterForAsset(
 
   const posterAssetId = posterAsset.id as string;
 
-  // Wire the poster to its source video.
+  // Wire the poster to its source video and stamp the source as briefable.
+  // Per migration #103: a video without a poster has no preview frame for
+  // the subscriber to brief against, so briefable_at gates the modal until
+  // the poster lands. Coalesce — if briefed-on-upload already set it via
+  // processBriefedAsset, don't clobber.
   await sql`
     UPDATE media_assets
-    SET poster_asset_id = ${posterAssetId}, updated_at = NOW()
+    SET poster_asset_id = ${posterAssetId},
+        briefable_at = COALESCE(briefable_at, NOW()),
+        updated_at = NOW()
     WHERE id = ${sourceAssetId}
   `;
 

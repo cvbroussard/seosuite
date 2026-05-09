@@ -50,7 +50,8 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, ma.briefable_at,
+               (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
           AND (${showArchived} OR ma.archived_at IS NULL)
@@ -67,7 +68,8 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, ma.briefable_at,
+               (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
           AND (${showArchived} OR ma.archived_at IS NULL)
@@ -84,7 +86,8 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, ma.briefable_at,
+               (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
           AND (${showArchived} OR ma.archived_at IS NULL)
@@ -100,7 +103,8 @@ export default async function MediaPage({ searchParams }: Props) {
                ma.quality_score, ma.content_pillar, ma.content_pillars, ma.content_tags,
                ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
-               ma.render_status, ma.archived_at, (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
+               ma.render_status, ma.archived_at, ma.briefable_at,
+               (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
         FROM media_assets ma
         WHERE ma.site_id = ${siteId}
           AND (${showArchived} OR ma.archived_at IS NULL)

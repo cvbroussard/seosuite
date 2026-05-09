@@ -142,32 +142,63 @@ export async function POST(req: NextRequest) {
         }
       : {};
 
+    // briefable_at: stamped at insert iff the asset is immediately viewable.
+    // Non-HEIC images are viewable from the moment R2 has the bytes. HEIC
+    // and videos require waitUntil work (convert / poster) before they're
+    // briefable; their helpers stamp briefable_at when they finish.
+    const isVideo = media_type.toLowerCase().startsWith("video");
+    const briefableAtInsert = !isHeic && !isVideo ? new Date() : null;
+
     const [asset] = await sql`
       INSERT INTO media_assets (
         site_id, storage_url, media_type, context_note,
-        source, triage_status, triaged_at, metadata, sort_order
+        source, triage_status, triaged_at, briefable_at,
+        metadata, sort_order
       )
       VALUES (
         ${site_id}, ${finalUrl}, ${media_type},
         ${context_note || null}, 'upload', ${initialStatus},
         ${briefedOnUpload ? new Date() : null},
+        ${briefableAtInsert},
         ${JSON.stringify({ ...assetMeta, ...briefedMeta })}, EXTRACT(EPOCH FROM NOW())
       )
-      RETURNING id, site_id, storage_url, media_type, context_note, triage_status, created_at
+      RETURNING id, site_id, storage_url, media_type, context_note, triage_status, briefable_at, created_at
     `;
 
-    // Two-track post-upload work:
+    // Post-upload work, all non-blocking via waitUntil. Three cases:
     //
-    // (a) Briefed-on-upload (substantive caption ≥40 chars): route through
-    //     processBriefedAsset which orchestrates the briefing-flip pipeline
-    //     atomically — vision triage with full context, AI url_slug, source
-    //     rename, poster gen w/ slug key, variant render.
+    // (a) HEIC: convert HEIC→JPEG inline (browsers can't render HEIC, so
+    //     the asset is unbriefable until conversion lands). If the
+    //     subscriber briefed-on-upload, chain into processBriefedAsset
+    //     after conversion completes — vision triage needs a JPEG too.
     //
-    // (b) Unbriefed video upload: generate poster eagerly so library cards
-    //     have a real thumbnail BEFORE the subscriber gets around to
-    //     briefing. Poster will be re-keyed at briefing flip via
-    //     processBriefedAsset (R2 server-side copy, byte-perfect).
-    if (briefedOnUpload) {
+    // (b) Briefed-on-upload non-HEIC: route through processBriefedAsset
+    //     which orchestrates the full briefing-flip pipeline atomically
+    //     (triage with context → AI url_slug → source rename → poster
+    //     for videos → variant render).
+    //
+    // (c) Unbriefed video: generate poster so library cards have a
+    //     thumbnail before the subscriber gets around to briefing.
+    //     Poster will be re-keyed at briefing flip.
+    if (isHeic) {
+      waitUntil(
+        (async () => {
+          try {
+            const { convertHeicAsset } = await import("@/lib/pipeline/heic-convert");
+            await convertHeicAsset(asset.id as string);
+            if (briefedOnUpload) {
+              const { processBriefedAsset } = await import("@/lib/pipeline/process-briefed-asset");
+              await processBriefedAsset(asset.id as string);
+            }
+          } catch (err) {
+            console.warn(
+              "HEIC convert chain failed (non-fatal):",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        })(),
+      );
+    } else if (briefedOnUpload) {
       waitUntil(
         (async () => {
           try {
@@ -181,7 +212,7 @@ export async function POST(req: NextRequest) {
           }
         })(),
       );
-    } else if (media_type.toLowerCase().startsWith("video")) {
+    } else if (isVideo) {
       waitUntil(
         (async () => {
           try {
@@ -245,14 +276,14 @@ export async function GET(req: NextRequest) {
 
   const assets = status
     ? await sql`
-        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at
+        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at, briefable_at
         FROM media_assets
         WHERE site_id = ${siteId} AND triage_status = ${status}
           AND (${showArchived} OR archived_at IS NULL)
         ORDER BY created_at DESC LIMIT 100
       `
     : await sql`
-        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at
+        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at, briefable_at
         FROM media_assets
         WHERE site_id = ${siteId}
           AND (${showArchived} OR archived_at IS NULL)
