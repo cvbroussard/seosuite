@@ -143,14 +143,16 @@ export function MediaGrid({
                 </span>
               )}
               {a.media_type === "video" ? (
+                /* Static first-frame preview only. No play-on-hover — the
+                   video element would otherwise eat the click and stick the
+                   wait cursor on the card. pointer-events-none lets the
+                   parent <button> own the entire card surface. */
                 <video
                   src={a.storage_url}
-                  className="h-full w-full object-cover"
+                  className="pointer-events-none h-full w-full object-cover"
                   muted
                   playsInline
                   preload="metadata"
-                  onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                  onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
                 />
               ) : a.media_type === "pdf" ? (
                 <a
