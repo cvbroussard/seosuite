@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 /**
  * GBP Media API — photo gallery management.
@@ -225,9 +226,14 @@ export async function autoSyncPhotos(siteId: string): Promise<{ synced: number; 
   `;
   const serviceAreaBusiness = isServiceArea.length > 0;
 
+  // Load site pillar_config — pillar derived from content_tags at read time
+  // (LOCKED 2026-05-09). Used for mapToGbpCategory below.
+  const [siteRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${siteId}`;
+  const pillarConfig = (siteRow?.pillar_config || []) as PillarConfig;
+
   // Find eligible assets not yet synced (skip previously failed uploads)
   const eligible = await sql`
-    SELECT ma.id, ma.storage_url, ma.content_pillar, ma.quality_score,
+    SELECT ma.id, ma.storage_url, ma.content_tags, ma.quality_score,
            ma.ai_analysis, ma.metadata AS asset_metadata
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
@@ -264,7 +270,11 @@ export async function autoSyncPhotos(siteId: string): Promise<{ synced: number; 
 
       const analysis = asset.ai_analysis as Record<string, unknown> | null;
       const sceneType = (analysis?.scene_type as string) || null;
-      let category = mapToGbpCategory(asset.content_pillar, sceneType);
+      const derivedPillar = primaryPillarFromTags(
+        (asset.content_tags as string[] | null) || null,
+        pillarConfig,
+      );
+      let category = mapToGbpCategory(derivedPillar, sceneType);
 
       // Service-area businesses can't use INTERIOR, EXTERIOR, COMMON_AREAS
       if (serviceAreaBusiness && (category === "INTERIOR" || category === "EXTERIOR" || category === "COMMON_AREAS")) {

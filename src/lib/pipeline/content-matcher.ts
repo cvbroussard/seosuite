@@ -13,6 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import { pickRewardPrompt, type RewardPrompt, type SceneType } from "@/lib/brand-intelligence/reward-prompts";
+import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 const anthropic = new Anthropic();
 
@@ -135,7 +136,7 @@ async function findMatchingAsset(
   const qt = await getThresholds(siteId);
   const candidates = await sql`
     SELECT ma.id, ma.storage_url, ma.context_note, ma.quality_score,
-           ma.content_pillar, ma.content_tags, ma.ai_analysis,
+           ma.content_tags, ma.ai_analysis,
            COALESCE((ma.metadata->>'used_count')::int, 0) AS used_count,
            ma.metadata->>'last_used_at' AS last_used_at
     FROM media_assets ma
@@ -221,13 +222,23 @@ async function buildAssetResult(
 
   const analysis = (asset.ai_analysis as Record<string, unknown>) || {};
 
+  // Derive contentPillar from content_tags + pillar_config (LOCKED 2026-05-09).
+  // Pillars are no longer stored on the asset; load site pillar_config and
+  // compute the primary pillar via parents-of-tags lookup.
+  const [siteRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${siteId}`;
+  const pillarConfig = (siteRow?.pillar_config || []) as PillarConfig;
+  const derivedPillar = primaryPillarFromTags(
+    (asset.content_tags as string[] | null) || null,
+    pillarConfig,
+  );
+
   return {
     id: assetId,
     storageUrl: asset.storage_url as string,
     contextNote: (asset.context_note as string) || "",
     description: (analysis.description as string) || "",
     qualityScore: Number(asset.quality_score) || 0,
-    contentPillar: (asset.content_pillar as string) || "",
+    contentPillar: derivedPillar || "",
     contentTags: (asset.content_tags as string[]) || [],
     vendors: vendors.map((v) => ({ name: v.name as string, url: v.url as string | null })),
   };

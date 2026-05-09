@@ -14,6 +14,7 @@ import { runGates, quarantineAsset } from "./quality-gates";
 import { publishPost } from "./publisher";
 import { decrypt } from "@/lib/crypto";
 import { resolvePublishTargets } from "@/lib/platform-assets";
+import { pillarsFromTags, type PillarConfig } from "@/lib/pillars";
 
 interface PublishResult {
   platform: string;
@@ -44,9 +45,15 @@ async function selectNextAsset(
 ): Promise<Record<string, unknown> | null> {
   const threshold = opts.qualityThreshold || 0.5;
 
-  // Get the last 2 published pillars for diversity
-  const recentPillars = await sql`
-    SELECT ma.content_pillar
+  // Load pillar_config once — pillars are derived from content_tags
+  // at read time per the LOCKED 2026-05-09 architecture. Replaces the
+  // legacy ma.content_pillar column reads.
+  const [siteRow] = await sql`SELECT pillar_config FROM sites WHERE id = ${siteId}`;
+  const pillarConfig = (siteRow?.pillar_config || []) as PillarConfig;
+
+  // Get the last 2 published pillars for diversity (derived from tags)
+  const recentTagsRows = await sql`
+    SELECT ma.content_tags
     FROM social_posts sp
     JOIN social_accounts sa ON sp.account_id = sa.id
     JOIN site_social_links ssl ON ssl.social_account_id = sa.id
@@ -57,16 +64,13 @@ async function selectNextAsset(
     ORDER BY sp.published_at DESC
     LIMIT 2
   `;
-  const lastPillars = [...new Set(recentPillars.map((r) => String(r.content_pillar)))];
+  const lastPillars = Array.from(new Set(
+    recentTagsRows.flatMap((r) => pillarsFromTags(r.content_tags as string[] | null, pillarConfig))
+  ));
 
-  // Build boost clause for campaign pillars
-  const boostCase = opts.boostPillars && opts.boostPillars.length > 0
-    ? `CASE WHEN content_pillar = ANY(ARRAY[${opts.boostPillars.map((p) => `'${p}'`).join(",")}]) THEN 1 ELSE 0 END`
-    : "0";
-
-  // Select the best candidate
+  // Select the best candidate (pillars derived after fetch)
   const candidates = await sql`
-    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_pillar,
+    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_tags,
            ma.media_type,
            ma.metadata->'generated_text'->>'context_note' AS gen_caption,
            ma.metadata->'generated_text'->>'social_hook' AS social_hook,
@@ -91,20 +95,27 @@ async function selectNextAsset(
 
   if (candidates.length === 0) return null;
 
-  // Prefer candidates NOT matching the last 2 pillars (diversity)
-  const diverse = candidates.filter(
-    (c) => !lastPillars.includes(String(c.content_pillar)),
+  // Compute pillars per candidate from their tags + site pillar_config
+  const candidatesWithPillars = candidates.map((c) => ({
+    ...c,
+    derived_pillars: pillarsFromTags(c.content_tags as string[] | null, pillarConfig),
+  }));
+
+  // Prefer candidates whose derived pillars don't overlap the last 2 (diversity)
+  const diverse = candidatesWithPillars.filter(
+    (c) => !c.derived_pillars.some((p: string) => lastPillars.includes(p)),
   );
 
-  // Prefer campaign-boosted pillars
+  // Prefer campaign-boosted pillars (asset matches if ANY of its derived
+  // pillars is in the boost list)
   if (opts.boostPillars && opts.boostPillars.length > 0) {
-    const boosted = (diverse.length > 0 ? diverse : candidates).filter(
-      (c) => opts.boostPillars!.includes(String(c.content_pillar)),
+    const boosted = (diverse.length > 0 ? diverse : candidatesWithPillars).filter(
+      (c) => c.derived_pillars.some((p: string) => opts.boostPillars!.includes(p)),
     );
     if (boosted.length > 0) return boosted[0];
   }
 
-  return diverse.length > 0 ? diverse[0] : candidates[0];
+  return diverse.length > 0 ? diverse[0] : candidatesWithPillars[0];
 }
 
 const VIDEO_ONLY_PLATFORMS = new Set(["tiktok", "youtube"]);
@@ -119,7 +130,7 @@ async function selectPoolVideo(
   platform: string,
 ): Promise<Record<string, unknown> | null> {
   const [video] = await sql`
-    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_pillar,
+    SELECT ma.id, ma.storage_url, ma.quality_score, ma.content_tags,
            ma.metadata->'generated_text'->>'context_note' AS gen_caption,
            ma.metadata->'generated_text'->>'social_hook' AS social_hook,
            ma.metadata->'generated_text'->>'pin_headline' AS pin_headline,

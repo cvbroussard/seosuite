@@ -11,8 +11,9 @@ interface Asset {
   context_note: string | null;
   triage_status: string;
   quality_score: number | null;
-  content_pillar: string | null;
-  content_pillars: string[] | null;
+  // content_pillar / content_pillars dropped from the asset model
+  // (LOCKED 2026-05-09). Pillars derive from content_tags via
+  // pillarsFromTags() — the asset stores tags only.
   content_tags: string[] | null;
   source: string | null;
   ai_analysis: Record<string, unknown> | null;
@@ -94,12 +95,15 @@ export function MediaGrid({
   const [liveProjectMap, setLiveProjectMap] = useState(assetProjectMap);
   const [livePersonaMap, setLivePersonaMap] = useState(assetPersonaMap);
 
-  function handleSaved(note: string, pillar: string, tags: string[], brandIds?: string[], projectIds?: string[], personaIds?: string[]) {
+  function handleSaved(note: string, _pillar: string, tags: string[], brandIds?: string[], projectIds?: string[], personaIds?: string[]) {
     if (!editing) return;
+    // pillar param retained in signature for back-compat with the modal
+    // callback contract, but ignored here — pillars derive from tags now
+    // and aren't stored on the Asset row.
     setAssets((prev) =>
       prev.map((a) =>
         a.id === editing.id
-          ? { ...a, context_note: note, content_pillar: pillar || a.content_pillar, content_tags: tags.length > 0 ? tags : a.content_tags }
+          ? { ...a, context_note: note, content_tags: tags.length > 0 ? tags : a.content_tags }
           : a
       )
     );
@@ -239,8 +243,8 @@ export function MediaGrid({
           imageUrl={editing.storage_url}
           mediaType={editing.media_type}
           initialNote={editing.context_note || ""}
-          initialPillar={editing.content_pillar || ""}
-          initialPillars={editing.content_pillars || []}
+          initialPillar=""
+          initialPillars={[]}
           initialSceneTypes={editing.scene_types || []}
           initialTags={editing.content_tags || []}
           pillarConfig={pillarConfig}
@@ -277,7 +281,7 @@ export function MediaGrid({
           sceneType={(editing.ai_analysis as Record<string, unknown>)?.scene_type as string || null}
           archivedAt={editing.archived_at}
           initialAiGenerated={Boolean((editing.metadata as Record<string, unknown> | null)?.ai_generated)}
-          aiSuggestedPillar={editing.content_pillar || null}
+          aiSuggestedPillar={null}
           aiVerifications={(() => {
             const meta = (editing.metadata || {}) as Record<string, unknown>;
             const v = meta.ai_verifications;
