@@ -505,7 +505,18 @@ export function AssetEditModal({
         {/* Sticky header — was a transparent overlay on the image; now its
             own row so close button + title sit together. */}
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-surface px-6 py-3">
-          <h3 className="text-sm font-semibold">Edit Source Asset</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold">Edit Source Asset</h3>
+            {/* Briefing-readiness pill (was below the textarea; promoted
+                here so subscribers see the autopilot-eligibility state at
+                the top of the modal). Only renders when there's a positive
+                readiness signal. */}
+            {note.trim().length >= 40 && (
+              <span className="rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium text-success">
+                ✓ Ready for autopilot
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {/* Compact metadata strip — operator-tier signals (sceneType
                 singular, qualityScore) removed; subscriber-relevant flags
@@ -561,13 +572,20 @@ export function AssetEditModal({
         <div className="px-6 pt-4">
 
             {/* Context Note — full width, at top per the layout pivot.
-                Was previously buried below the image + tagging panel. */}
+                Char counter moved beside the label; readiness pill pushed
+                up to the modal title bar (single source of truth there). */}
             <div className="mb-4">
               <div className="mb-1 flex items-center justify-between">
-                <label className="text-xs text-muted">
-                  Context Note
+                <label className="flex items-baseline gap-2 text-xs text-muted">
+                  <span>Context Note</span>
+                  <span className="text-[10px] text-muted/70">{note.length} chars</span>
+                  {note.trim().length > 0 && note.trim().length < 40 && (
+                    <span className="text-[10px] text-muted/70">
+                      ({Math.max(0, 40 - note.trim().length)} to autopilot)
+                    </span>
+                  )}
                   {speech.listening && (
-                    <span className="ml-2 text-[10px] text-danger animate-pulse">● listening</span>
+                    <span className="text-[10px] text-danger animate-pulse">● listening</span>
                   )}
                 </label>
                 <div className="flex items-center gap-3">
@@ -601,14 +619,6 @@ export function AssetEditModal({
                   style={{ minHeight: 90 }}
                   placeholder="List details: brass bar sink, #BrandName, walnut countertop, https://vendor.com/product..."
                 />
-                <div className="mt-1 flex items-center justify-between text-[10px]">
-                  <span className={note.trim().length >= 40 ? "text-success" : "text-muted"}>
-                    {note.trim().length >= 40
-                      ? "✓ Ready — eligible for autopilot"
-                      : `${Math.max(0, 40 - note.trim().length)} more chars to reach autopilot threshold`}
-                  </span>
-                  <span className="text-muted">{note.length} chars</span>
-                </div>
                 {hashQuery !== null && hashMatches.length > 0 && (
                   <div className="absolute left-0 right-0 z-10 mt-1 overflow-hidden rounded border border-border bg-surface shadow-lg">
                     {hashMatches.map((v, i) => (
@@ -664,14 +674,12 @@ export function AssetEditModal({
                 </div>
                 <div className="space-y-3">
                   {pillarConfig.map((p) => {
-                    const pillarSelected = p.tags.some((t) => tags.includes(t.id));
                     return (
-                      <div
-                        key={p.id}
-                        className={`rounded px-2 py-1.5 transition-colors ${
-                          pillarSelected ? "bg-accent/10" : ""
-                        }`}
-                      >
+                      <div key={p.id} className="rounded px-2 py-1.5">
+                        {/* Per-pillar background tint removed 2026-05-09 —
+                            visual confusion against the card backdrop;
+                            tag pill state alone (filled vs outlined) carries
+                            the selected-or-not signal. */}
                         {/* Line 1: pillar name + description on one row */}
                         <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="text-[11px] font-semibold text-foreground">
