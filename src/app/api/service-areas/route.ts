@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { name, kind, parent_region_id, place_id,
-    site_notes, custom_description, hero_asset_id, site_id } = body;
+    site_notes, custom_description, hero_asset_id, site_id,
+    seed_source, seed_recording_id, seed_asset_id } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -103,12 +104,18 @@ export async function POST(req: NextRequest) {
     canonicalId = created.id as string;
   }
 
+  // Provenance defaults to typed_subscriber unless audio fields provided
+  const seedSource = seed_source || (seed_recording_id ? "audio_transcript" : "typed_subscriber");
+
   // Create or update the site overlay
   const [overlay] = await sql`
     INSERT INTO site_service_areas (site_id, service_area_canonical_id, is_active,
-      hero_asset_id, site_notes, custom_description)
+      hero_asset_id, site_notes, custom_description,
+      seed_source, seed_recording_id, seed_asset_id, authorized_at, enrichment_status)
     VALUES (${site_id}, ${canonicalId}, TRUE,
-      ${hero_asset_id || null}, ${site_notes || null}, ${custom_description || null})
+      ${hero_asset_id || null}, ${site_notes || null}, ${custom_description || null},
+      ${seedSource}, ${seed_recording_id || null}, ${seed_asset_id || null}, NOW(),
+      'pending')
     ON CONFLICT (site_id, service_area_canonical_id) DO UPDATE SET
       is_active = TRUE,
       hero_asset_id = ${hero_asset_id || null},
@@ -116,6 +123,22 @@ export async function POST(req: NextRequest) {
       custom_description = ${custom_description || null}
     RETURNING id, is_active, hero_asset_id, site_notes, custom_description, created_at
   `;
+
+  // Async geocoding enrichment if canonical doesn't have place_id yet
+  if (seedSource === "audio_transcript") {
+    import("@vercel/functions").then(({ waitUntil }) => {
+      waitUntil(
+        (async () => {
+          try {
+            const { enrichServiceArea } = await import("@/lib/service-area-enrich");
+            await enrichServiceArea(canonicalId as string, overlay.id as string, name.trim());
+          } catch (err) {
+            console.warn(`Service area enrichment failed for ${canonicalId}:`, err instanceof Error ? err.message : err);
+          }
+        })(),
+      );
+    }).catch(() => { /* @vercel/functions unavailable */ });
+  }
 
   return NextResponse.json({
     service_area: {

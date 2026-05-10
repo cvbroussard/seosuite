@@ -252,15 +252,18 @@ export function AssetEditModal({
     sourceAssetId: assetId,
     source: "briefing",
     onCommitted: useCallback(
-      (_recordingId: string, _transcript: string) => {
+      (recordingId: string, transcript: string) => {
         // Bust the local recordings cache so the Transcription Section
         // picks up the new latest. Latest wins.
-        void _recordingId;
-        void _transcript;
         void refetchRecordings();
+        // Fire audio-first auto-tagging suggestions per
+        // auto_tagging_audit (LOCKED 2026-05-10). Returns content_tags
+        // suggestions (auto-applied) + brand/service_area candidates
+        // (subscriber single-tap confirms).
+        void runAutoTagSuggest(recordingId, transcript);
       },
-      // refetchRecordings declared below; safe because the callback only
-      // fires after assets are mounted.
+      // refetchRecordings + runAutoTagSuggest declared below; safe
+      // because the callback only fires after assets are mounted.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [],
     ),
@@ -338,6 +341,105 @@ export function AssetEditModal({
   // narrative, a typed-input recording is created.
   const [typedMode, setTypedMode] = useState(false);
   const [typedDraft, setTypedDraft] = useState("");
+
+  // Audio-first auto-tagging state per auto_tagging_audit (LOCKED 2026-05-10).
+  // Populated by runAutoTagSuggest after audio.commit() resolves. Subscriber
+  // single-tap confirms each candidate; confirmed ones get materialized via
+  // POST /api/brands or /api/service-areas with seed_source='audio_transcript'.
+  interface BrandCandidate { name: string; slug: string; context: string; existing: boolean; existing_id: string | null; }
+  interface ServiceAreaCandidate { name: string; slug: string; kind: string; context: string; existing_overlay: boolean; existing_canonical_id: string | null; overlay_id: string | null; }
+  const [brandCandidates, setBrandCandidates] = useState<BrandCandidate[]>([]);
+  const [serviceAreaCandidates, setServiceAreaCandidates] = useState<ServiceAreaCandidate[]>([]);
+  const [autoTagging, setAutoTagging] = useState(false);
+  const [confirmedSlugs, setConfirmedSlugs] = useState<Set<string>>(new Set());
+
+  const runAutoTagSuggest = useCallback(async (recordingId: string, transcript: string) => {
+    if (!transcript || transcript.trim().length < 20) return;
+    setAutoTagging(true);
+    try {
+      const res = await fetch("/api/auto-tag-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript,
+          site_id: siteId,
+          source_asset_id: assetId,
+        }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Apply content_tags suggestions immediately to Story Angle (auto-applied
+      // per audit; subscriber can deselect via existing tag pill UI).
+      if (data.content_tags?.tagIds?.length > 0) {
+        const allValidTagIds = new Set(pillarConfig.flatMap((p) => p.tags.map((t) => t.id)));
+        const validNewTags = (data.content_tags.tagIds as string[]).filter(
+          (id) => allValidTagIds.has(id),
+        );
+        setTags((prev) => Array.from(new Set([...prev, ...validNewTags])));
+      }
+
+      // Surface brand + service-area candidates for one-tap confirm.
+      // Track recordingId so the confirm handler can pass seed_recording_id.
+      void recordingId;
+      setBrandCandidates(data.brand_candidates || []);
+      setServiceAreaCandidates(data.service_area_candidates || []);
+    } catch (err) {
+      console.warn("Auto-tag suggest failed:", err);
+    } finally {
+      setAutoTagging(false);
+    }
+  }, [siteId, assetId, pillarConfig]);
+
+  async function confirmBrandCandidate(c: BrandCandidate, recordingId: string | null) {
+    if (c.existing) return; // Already exists — nothing to do
+    try {
+      const res = await fetch("/api/brands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: c.name,
+          site_id: siteId,
+          seed_source: "audio_transcript",
+          seed_recording_id: recordingId,
+          seed_asset_id: assetId,
+        }),
+      });
+      if (res.ok) {
+        setConfirmedSlugs((prev) => new Set([...prev, `brand:${c.slug}`]));
+      }
+    } catch (err) {
+      console.warn("Brand confirm failed:", err);
+    }
+  }
+
+  async function confirmServiceAreaCandidate(c: ServiceAreaCandidate, recordingId: string | null) {
+    if (c.existing_overlay) return;
+    try {
+      const res = await fetch("/api/service-areas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: c.name,
+          kind: c.kind,
+          site_id: siteId,
+          seed_source: "audio_transcript",
+          seed_recording_id: recordingId,
+          seed_asset_id: assetId,
+        }),
+      });
+      if (res.ok) {
+        setConfirmedSlugs((prev) => new Set([...prev, `area:${c.slug}`]));
+      }
+    } catch (err) {
+      console.warn("Service area confirm failed:", err);
+    }
+  }
+
+  function dismissAllSuggestions() {
+    setBrandCandidates([]);
+    setServiceAreaCandidates([]);
+  }
 
   // Keyboard navigation — minimal pass.
   // Recording-bar keyboard re-wire (Space=briefing, V=voice-over, etc.) is
@@ -791,6 +893,80 @@ export function AssetEditModal({
                 hasNext={hasNext && !!onNext}
               />
             </div>
+
+            {/* AUTO-TAG SUGGESTIONS PANEL — surfaces after audio.commit().
+                Per auto_tagging_audit (LOCKED 2026-05-10): content_tags are
+                auto-applied to Story Angle; brand + service-area candidates
+                require single-tap confirm. */}
+            {(autoTagging || brandCandidates.length > 0 || serviceAreaCandidates.length > 0) && (
+              <div className="mb-3 rounded border border-accent/40 bg-accent/5 px-3 py-2.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-accent">
+                    {autoTagging ? "✨ Analyzing your recording…" : "✨ AI noticed in your recording"}
+                  </span>
+                  {!autoTagging && (brandCandidates.length > 0 || serviceAreaCandidates.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={dismissAllSuggestions}
+                      className="text-[10px] text-muted hover:text-foreground"
+                    >
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+                {brandCandidates.length > 0 && (
+                  <div className="mb-1.5">
+                    <span className="mr-2 text-[10px] uppercase tracking-wide text-muted">Brands:</span>
+                    {brandCandidates.map((c) => {
+                      const confirmed = confirmedSlugs.has(`brand:${c.slug}`);
+                      return (
+                        <button
+                          key={c.slug}
+                          type="button"
+                          disabled={c.existing || confirmed}
+                          onClick={() => confirmBrandCandidate(c, recordings[0]?.id || null)}
+                          title={c.context}
+                          className={`mr-1.5 mb-1 inline-block rounded px-2 py-0.5 text-[11px] transition-colors ${
+                            c.existing || confirmed
+                              ? "bg-success/20 text-success cursor-default"
+                              : "bg-surface-hover text-foreground hover:bg-accent/20 hover:text-accent"
+                          }`}
+                        >
+                          {c.existing ? "✓ " : confirmed ? "✓ " : "+ "}{c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {serviceAreaCandidates.length > 0 && (
+                  <div className="mb-1.5">
+                    <span className="mr-2 text-[10px] uppercase tracking-wide text-muted">Service areas:</span>
+                    {serviceAreaCandidates.map((c) => {
+                      const confirmed = confirmedSlugs.has(`area:${c.slug}`);
+                      return (
+                        <button
+                          key={c.slug}
+                          type="button"
+                          disabled={c.existing_overlay || confirmed}
+                          onClick={() => confirmServiceAreaCandidate(c, recordings[0]?.id || null)}
+                          title={c.context}
+                          className={`mr-1.5 mb-1 inline-block rounded px-2 py-0.5 text-[11px] transition-colors ${
+                            c.existing_overlay || confirmed
+                              ? "bg-success/20 text-success cursor-default"
+                              : "bg-surface-hover text-foreground hover:bg-accent/20 hover:text-accent"
+                          }`}
+                        >
+                          {c.existing_overlay ? "✓ " : confirmed ? "✓ " : "+ "}{c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="text-[10px] text-muted">
+                  Tap to add. Existing entries shown ✓. Story Angle tags auto-applied — adjust below.
+                </div>
+              </div>
+            )}
 
             {/* SCENE SECTION — image LEFT, Scene Composition RIGHT, 2-col.
                 Image container uses position:relative + absolute children
