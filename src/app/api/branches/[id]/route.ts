@@ -52,8 +52,18 @@ export async function PATCH(
   if (body.is_primary !== undefined) {
     await sql`UPDATE branches SET is_primary = ${!!body.is_primary} WHERE id = ${id}`;
   }
+  if (body.hours !== undefined) {
+    const hj = typeof body.hours === "string" ? body.hours : JSON.stringify(body.hours || {});
+    await sql`UPDATE branches SET hours = ${hj}::jsonb WHERE id = ${id}`;
+  }
+  if (body.gbp_location_id !== undefined) {
+    await sql`UPDATE branches SET gbp_location_id = ${body.gbp_location_id || null} WHERE id = ${id}`;
+  }
+  if (body.hero_asset_id !== undefined) {
+    await sql`UPDATE branches SET hero_asset_id = ${body.hero_asset_id || null} WHERE id = ${id}`;
+  }
 
-  const [updated] = await sql`SELECT id, name, slug, address, city, state, description, phone, is_primary FROM branches WHERE id = ${id}`;
+  const [updated] = await sql`SELECT id, name, slug, address, city, state, description, phone, hours, gbp_location_id, is_primary, hero_asset_id FROM branches WHERE id = ${id}`;
   return NextResponse.json({ branch: updated });
 }
 

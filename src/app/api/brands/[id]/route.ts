@@ -40,8 +40,11 @@ export async function PATCH(
   if (body.description !== undefined) {
     await sql`UPDATE brands SET description = ${body.description || null} WHERE id = ${id}`;
   }
+  if (body.hero_asset_id !== undefined) {
+    await sql`UPDATE brands SET hero_asset_id = ${body.hero_asset_id || null} WHERE id = ${id}`;
+  }
 
-  const [updated] = await sql`SELECT id, name, slug, url, description FROM brands WHERE id = ${id}`;
+  const [updated] = await sql`SELECT id, name, slug, url, description, hero_asset_id FROM brands WHERE id = ${id}`;
   return NextResponse.json({ brand: updated });
 }
 

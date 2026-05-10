@@ -49,8 +49,18 @@ export async function PATCH(
   if (body.description !== undefined) {
     await sql`UPDATE projects SET description = ${body.description || null} WHERE id = ${id}`;
   }
+  if (body.hero_asset_id !== undefined) {
+    await sql`UPDATE projects SET hero_asset_id = ${body.hero_asset_id || null} WHERE id = ${id}`;
+  }
+  if (body.metadata !== undefined) {
+    const mj = typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata || {});
+    await sql`UPDATE projects SET metadata = ${mj}::jsonb WHERE id = ${id}`;
+  }
+  if (body.caption_mode !== undefined) {
+    await sql`UPDATE projects SET caption_mode = ${body.caption_mode} WHERE id = ${id}`;
+  }
 
-  const [updated] = await sql`SELECT id, name, slug, status, start_date, end_date, address, description FROM projects WHERE id = ${id}`;
+  const [updated] = await sql`SELECT id, name, slug, status, start_date, end_date, address, description, hero_asset_id, metadata, caption_mode, manual_caption_count FROM projects WHERE id = ${id}`;
 
   // Format dates as YYYY-MM-DD for client consumption
   return NextResponse.json({

@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
   }
 
   const projects = await sql`
-    SELECT id, name, slug, status, start_date, end_date, address, description, created_at
+    SELECT id, name, slug, status, start_date, end_date, address, description,
+           hero_asset_id, metadata, caption_mode, manual_caption_count, created_at
     FROM projects WHERE site_id = ${siteId}
     ORDER BY name ASC
   `;
@@ -28,7 +29,8 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/projects — create a project
- * Body: { name, status?, start_date?, end_date?, address?, description?, site_id }
+ * Body: { name, status?, start_date?, end_date?, address?, description?,
+ *         hero_asset_id?, metadata?, caption_mode?, site_id }
  */
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -36,7 +38,8 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, status, start_date, end_date, address, description, site_id } = body;
+  const { name, status, start_date, end_date, address, description,
+    hero_asset_id, metadata, caption_mode, site_id } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -58,11 +61,25 @@ export async function POST(req: NextRequest) {
     .replace(/^_|_$/g, "")
     .slice(0, 40);
 
+  const metadataJson = metadata ? JSON.stringify(metadata) : "{}";
+
   const [project] = await sql`
-    INSERT INTO projects (site_id, name, slug, status, start_date, end_date, address, description)
-    VALUES (${site_id}, ${name.trim()}, ${slug}, ${status || "active"}, ${start_date || null}, ${end_date || null}, ${address || null}, ${description || null})
-    ON CONFLICT (site_id, slug) DO UPDATE SET name = ${name.trim()}, status = ${status || "active"}, address = ${address || null}, description = ${description || null}
-    RETURNING id, name, slug, status, start_date, end_date, address, description
+    INSERT INTO projects (site_id, name, slug, status, start_date, end_date,
+      address, description, hero_asset_id, metadata, caption_mode)
+    VALUES (${site_id}, ${name.trim()}, ${slug}, ${status || "active"},
+      ${start_date || null}, ${end_date || null}, ${address || null},
+      ${description || null}, ${hero_asset_id || null},
+      ${metadataJson}::jsonb, ${caption_mode || "seeding"})
+    ON CONFLICT (site_id, slug) DO UPDATE SET
+      name = ${name.trim()},
+      status = ${status || "active"},
+      address = ${address || null},
+      description = ${description || null},
+      hero_asset_id = ${hero_asset_id || null},
+      metadata = ${metadataJson}::jsonb,
+      caption_mode = ${caption_mode || "seeding"}
+    RETURNING id, name, slug, status, start_date, end_date, address, description,
+              hero_asset_id, metadata, caption_mode, manual_caption_count
   `;
 
   // Geo-match: geocode address and backfill matching assets — non-blocking

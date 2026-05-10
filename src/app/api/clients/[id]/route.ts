@@ -46,8 +46,30 @@ export async function PATCH(
   if (body.description !== undefined) {
     await sql`UPDATE personas SET description = ${body.description || null} WHERE id = ${id}`;
   }
+  if (body.visual_cues !== undefined) {
+    const arr = Array.isArray(body.visual_cues)
+      ? body.visual_cues
+      : typeof body.visual_cues === "string"
+      ? body.visual_cues.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    await sql`UPDATE personas SET visual_cues = ${arr}::text[] WHERE id = ${id}`;
+  }
+  if (body.narrative_context !== undefined) {
+    await sql`UPDATE personas SET narrative_context = ${body.narrative_context || null} WHERE id = ${id}`;
+  }
+  if (body.relationships !== undefined) {
+    const rj = typeof body.relationships === "string" ? body.relationships : JSON.stringify(body.relationships || {});
+    await sql`UPDATE personas SET relationships = ${rj}::jsonb WHERE id = ${id}`;
+  }
+  if (body.hero_asset_id !== undefined) {
+    await sql`UPDATE personas SET hero_asset_id = ${body.hero_asset_id || null} WHERE id = ${id}`;
+  }
+  if (body.metadata !== undefined) {
+    const mj = typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata || {});
+    await sql`UPDATE personas SET metadata = ${mj}::jsonb WHERE id = ${id}`;
+  }
 
-  const [updated] = await sql`SELECT id, name, slug, display_name, type, consent_given, description FROM personas WHERE id = ${id}`;
+  const [updated] = await sql`SELECT id, name, slug, display_name, type, consent_given, description, visual_cues, narrative_context, relationships, appearance_count, first_seen_at, last_seen_at, hero_asset_id, metadata FROM personas WHERE id = ${id}`;
   return NextResponse.json({ client: updated });
 }
 

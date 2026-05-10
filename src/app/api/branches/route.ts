@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const branches = await sql`
     SELECT id, name, slug, address, city, state, description,
-           phone, hours, gbp_location_id, is_primary, created_at
+           phone, hours, gbp_location_id, is_primary, hero_asset_id, metadata, created_at
     FROM branches WHERE site_id = ${siteId}
     ORDER BY is_primary DESC, name ASC
   `;
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, address, city, state, description, phone, is_primary, site_id } = body;
+  const { name, address, city, state, description, phone, hours, gbp_location_id, is_primary, hero_asset_id, site_id } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -63,9 +63,19 @@ export async function POST(req: NextRequest) {
     .replace(/^_|_$/g, "")
     .slice(0, 40);
 
+  const hoursJson = hours
+    ? typeof hours === "string"
+      ? hours
+      : JSON.stringify(hours)
+    : "{}";
+
   const [branch] = await sql`
-    INSERT INTO branches (site_id, name, slug, address, city, state, description, phone, is_primary)
-    VALUES (${site_id}, ${name.trim()}, ${slug}, ${address || null}, ${city || null}, ${state || null}, ${description || null}, ${phone || null}, ${!!is_primary})
+    INSERT INTO branches (site_id, name, slug, address, city, state, description,
+      phone, hours, gbp_location_id, is_primary, hero_asset_id)
+    VALUES (${site_id}, ${name.trim()}, ${slug}, ${address || null}, ${city || null},
+      ${state || null}, ${description || null}, ${phone || null},
+      ${hoursJson}::jsonb, ${gbp_location_id || null}, ${!!is_primary},
+      ${hero_asset_id || null})
     ON CONFLICT (site_id, slug) DO UPDATE SET
       name = ${name.trim()},
       address = ${address || null},
@@ -73,8 +83,12 @@ export async function POST(req: NextRequest) {
       state = ${state || null},
       description = ${description || null},
       phone = ${phone || null},
-      is_primary = ${!!is_primary}
-    RETURNING id, name, slug, address, city, state, description, phone, is_primary
+      hours = ${hoursJson}::jsonb,
+      gbp_location_id = ${gbp_location_id || null},
+      is_primary = ${!!is_primary},
+      hero_asset_id = ${hero_asset_id || null}
+    RETURNING id, name, slug, address, city, state, description, phone, hours,
+              gbp_location_id, is_primary, hero_asset_id
   `;
 
   // Geo-match: geocode address and backfill matching assets — non-blocking

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   }
 
   const brands = await sql`
-    SELECT id, name, slug, url, description, created_at
+    SELECT id, name, slug, url, description, hero_asset_id, created_at
     FROM brands WHERE site_id = ${siteId}
     ORDER BY name ASC
   `;
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/brands — create a brand
- * Body: { name, url?, description?, site_id }
+ * Body: { name, url?, description?, hero_asset_id?, site_id }
  */
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { name, url, description, site_id } = body;
+  const { name, url, description, hero_asset_id, site_id } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -57,10 +57,14 @@ export async function POST(req: NextRequest) {
     .slice(0, 40);
 
   const [brand] = await sql`
-    INSERT INTO brands (site_id, name, slug, url, description)
-    VALUES (${site_id}, ${name.trim()}, ${slug}, ${url || null}, ${description || null})
-    ON CONFLICT (site_id, slug) DO UPDATE SET name = ${name.trim()}, url = ${url || null}, description = ${description || null}
-    RETURNING id, name, slug, url, description
+    INSERT INTO brands (site_id, name, slug, url, description, hero_asset_id)
+    VALUES (${site_id}, ${name.trim()}, ${slug}, ${url || null}, ${description || null}, ${hero_asset_id || null})
+    ON CONFLICT (site_id, slug) DO UPDATE SET
+      name = ${name.trim()},
+      url = ${url || null},
+      description = ${description || null},
+      hero_asset_id = ${hero_asset_id || null}
+    RETURNING id, name, slug, url, description, hero_asset_id
   `;
 
   return NextResponse.json({ brand });
