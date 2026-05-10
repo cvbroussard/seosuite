@@ -285,11 +285,14 @@ export function AssetEditModal({
     onStart: useCallback(() => {
       const v = videoRef.current;
       if (!v) return undefined;
-      const offsetSeconds = v.currentTime;
+      // Always rewind to frame 0 — V/O narration anchors to the start of
+      // the video so audio-to-video alignment is deterministic across
+      // takes. Whisper segment at audio time T = video position T.
+      v.currentTime = 0;
       // Best-effort play; some browsers require user-gesture coupling
       // which is satisfied because this fires inside the click handler.
       v.play().catch(() => { /* swallow autoplay rejection */ });
-      return { video_offset_seconds: offsetSeconds };
+      return { video_offset_seconds: 0 };
     }, []),
     onStopRequested: useCallback(() => {
       videoRef.current?.pause();
