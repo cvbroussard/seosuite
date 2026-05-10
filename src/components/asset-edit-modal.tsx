@@ -369,6 +369,13 @@ export function AssetEditModal({
   const [serviceAreaCandidates, setServiceAreaCandidates] = useState<ServiceAreaCandidate[]>([]);
   const [autoTagging, setAutoTagging] = useState(false);
   const [confirmedSlugs, setConfirmedSlugs] = useState<Set<string>>(new Set());
+  // Track that a suggestion run completed (success or no-result). Used
+  // to render the panel even when NER returned zero candidates so the
+  // subscriber can tell the system ran. Null = never ran this session.
+  const [lastSuggestRunAt, setLastSuggestRunAt] = useState<number | null>(null);
+  const [autoAppliedTagCount, setAutoAppliedTagCount] = useState(0);
+  const [autoLinkedBrandCount, setAutoLinkedBrandCount] = useState(0);
+  const [nerWarnings, setNerWarnings] = useState<string[]>([]);
 
   function startReplaceTranscript() {
     const latest = recordings[0];
@@ -390,8 +397,11 @@ export function AssetEditModal({
   }
 
   const runAutoTagSuggest = useCallback(async (recordingId: string, transcript: string) => {
-    if (!transcript || transcript.trim().length < 20) return;
+    if (!transcript || transcript.trim().length < 5) return;
     setAutoTagging(true);
+    setNerWarnings([]);
+    setAutoAppliedTagCount(0);
+    setAutoLinkedBrandCount(0);
     try {
       const res = await fetch("/api/auto-tag-suggest", {
         method: "POST",
@@ -402,28 +412,42 @@ export function AssetEditModal({
           source_asset_id: assetId,
         }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn("Auto-tag suggest HTTP", res.status, await res.text().catch(() => ""));
+        return;
+      }
       const data = await res.json();
 
-      // Apply content_tags suggestions immediately to Story Angle (auto-applied
-      // per audit; subscriber can deselect via existing tag pill UI).
+      // Apply content_tags suggestions immediately to Story Angle.
+      let appliedCount = 0;
       if (data.content_tags?.tagIds?.length > 0) {
         const allValidTagIds = new Set(pillarConfig.flatMap((p) => p.tags.map((t) => t.id)));
         const validNewTags = (data.content_tags.tagIds as string[]).filter(
           (id) => allValidTagIds.has(id),
         );
-        setTags((prev) => Array.from(new Set([...prev, ...validNewTags])));
+        setTags((prev) => {
+          const before = new Set(prev);
+          const merged = Array.from(new Set([...prev, ...validNewTags]));
+          appliedCount = merged.length - before.size;
+          return merged;
+        });
       }
+      setAutoAppliedTagCount(appliedCount);
 
-      // Surface brand + service-area candidates for one-tap confirm.
-      // Track recordingId so the confirm handler can pass seed_recording_id.
+      // Existing brands were auto-linked server-side; count them for display.
+      const brandList = (data.brand_candidates || []) as BrandCandidate[];
+      const linkedCount = brandList.filter((c) => c.existing).length;
+      setAutoLinkedBrandCount(linkedCount);
+
       void recordingId;
-      setBrandCandidates(data.brand_candidates || []);
+      setBrandCandidates(brandList);
       setServiceAreaCandidates(data.service_area_candidates || []);
+      setNerWarnings(Array.isArray(data.ner_warnings) ? data.ner_warnings : []);
     } catch (err) {
       console.warn("Auto-tag suggest failed:", err);
     } finally {
       setAutoTagging(false);
+      setLastSuggestRunAt(Date.now());
     }
   }, [siteId, assetId, pillarConfig]);
 
@@ -932,15 +956,17 @@ export function AssetEditModal({
 
             {/* AUTO-TAG SUGGESTIONS PANEL — surfaces after audio.commit().
                 Per auto_tagging_audit (LOCKED 2026-05-10): content_tags are
-                auto-applied to Story Angle; brand + service-area candidates
-                require single-tap confirm. */}
-            {(autoTagging || brandCandidates.length > 0 || serviceAreaCandidates.length > 0) && (
+                auto-applied to Story Angle; existing brands auto-link to
+                asset_brands silently; new brand + service-area candidates
+                require single-tap confirm. Panel renders even when NER
+                returns empty so subscriber can tell the system ran. */}
+            {(autoTagging || lastSuggestRunAt !== null) && (
               <div className="mb-3 rounded border border-accent/40 bg-accent/5 px-3 py-2.5">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-[11px] font-medium text-accent">
-                    {autoTagging ? "✨ Analyzing your recording…" : "✨ AI noticed in your recording"}
+                    {autoTagging ? "✨ Analyzing your recording…" : "✨ Auto-tag results"}
                   </span>
-                  {!autoTagging && (brandCandidates.length > 0 || serviceAreaCandidates.length > 0) && (
+                  {!autoTagging && (
                     <button
                       type="button"
                       onClick={dismissAllSuggestions}
@@ -950,6 +976,13 @@ export function AssetEditModal({
                     </button>
                   )}
                 </div>
+                {!autoTagging && (autoAppliedTagCount > 0 || autoLinkedBrandCount > 0) && (
+                  <div className="mb-1.5 text-[10px] text-success">
+                    {autoAppliedTagCount > 0 && `Applied ${autoAppliedTagCount} Story Angle tag${autoAppliedTagCount > 1 ? "s" : ""}`}
+                    {autoAppliedTagCount > 0 && autoLinkedBrandCount > 0 && " · "}
+                    {autoLinkedBrandCount > 0 && `Linked ${autoLinkedBrandCount} existing brand${autoLinkedBrandCount > 1 ? "s" : ""} to this asset`}
+                  </div>
+                )}
                 {brandCandidates.length > 0 && (
                   <div className="mb-1.5">
                     <span className="mr-2 text-[10px] uppercase tracking-wide text-muted">Brands:</span>
@@ -998,8 +1031,18 @@ export function AssetEditModal({
                     })}
                   </div>
                 )}
+                {!autoTagging && brandCandidates.length === 0 && serviceAreaCandidates.length === 0 && autoAppliedTagCount === 0 && autoLinkedBrandCount === 0 && (
+                  <div className="text-[10px] italic text-muted">
+                    No new brands, service areas, or tag matches detected in this recording. (Try mentioning specific brand names or city names if you expected suggestions.)
+                  </div>
+                )}
+                {!autoTagging && nerWarnings.length > 0 && (
+                  <div className="mb-1.5 text-[10px] text-warning">
+                    ⚠ Possible transcription issues: {nerWarnings.join(" · ")}
+                  </div>
+                )}
                 <div className="text-[10px] text-muted">
-                  Tap to add. Existing entries shown ✓. Story Angle tags auto-applied — adjust below.
+                  Tap to add new entries. Existing entries shown ✓ are already linked.
                 </div>
               </div>
             )}

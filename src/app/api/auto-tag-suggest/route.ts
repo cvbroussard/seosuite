@@ -76,18 +76,37 @@ export async function POST(req: NextRequest) {
       })),
     ]);
 
-    // For each NER brand: dedup against existing brands for this site
+    // For each NER brand: dedup against existing brands for this site.
+    // Match strategy (in order): slug exact → name substring (either way).
+    // The substring match handles partial mentions like "Thermador Range"
+    // resolving to existing "Thermador" brand.
     const existingBrands = await sql`
-      SELECT id, slug FROM brands WHERE site_id = ${site_id}
+      SELECT id, slug, name FROM brands WHERE site_id = ${site_id}
     `;
     const existingBrandSlugs = new Map<string, string>();
+    const existingBrandsList: Array<{ id: string; slug: string; name: string }> = [];
     for (const b of existingBrands) {
       existingBrandSlugs.set(b.slug as string, b.id as string);
+      existingBrandsList.push({ id: b.id as string, slug: b.slug as string, name: (b.name as string).toLowerCase() });
+    }
+
+    function findExistingBrand(candidateName: string, candidateSlug: string): string | null {
+      // Exact slug match
+      const exact = existingBrandSlugs.get(candidateSlug);
+      if (exact) return exact;
+      // Name-substring match (case-insensitive). E.g., "Thermador Range" → existing "Thermador".
+      const lower = candidateName.toLowerCase();
+      for (const b of existingBrandsList) {
+        if (lower.includes(b.name) || b.name.includes(lower)) {
+          return b.id;
+        }
+      }
+      return null;
     }
 
     const brandCandidates = ner.brands.map((b) => {
       const slug = slugify(b.name);
-      const existingId = existingBrandSlugs.get(slug);
+      const existingId = findExistingBrand(b.name, slug);
       return {
         name: b.name,
         slug,
@@ -96,6 +115,26 @@ export async function POST(req: NextRequest) {
         existing_id: existingId || null,
       };
     });
+
+    // AUTO-LINK existing brands to the source asset. Subscriber already
+    // authorized the brand's existence; mentioning it in a transcript
+    // about this asset is implicit asset-link confirmation. Net effect:
+    // existing brands appear as ✓ in UI AND get the asset_brands row.
+    if (source_asset_id) {
+      for (const c of brandCandidates) {
+        if (c.existing && c.existing_id) {
+          try {
+            await sql`
+              INSERT INTO asset_brands (asset_id, brand_id)
+              VALUES (${source_asset_id}, ${c.existing_id})
+              ON CONFLICT DO NOTHING
+            `;
+          } catch (err) {
+            console.warn(`Auto-link brand ${c.existing_id} to asset ${source_asset_id} failed:`, err);
+          }
+        }
+      }
+    }
 
     // For each NER place: dedup against site overlay AND canonical
     const existingOverlay = await sql`
