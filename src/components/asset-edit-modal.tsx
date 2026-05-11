@@ -241,6 +241,7 @@ export function AssetEditModal({
   const [savedServiceIds, setSavedServiceIds] = useState<string[]>(initialServiceIds);
   const [savedBranchIds, setSavedBranchIds] = useState<string[]>(initialBranchIds);
   const [savedServiceAreaIds, setSavedServiceAreaIds] = useState<string[]>(initialServiceAreaIds);
+  const [savedSceneTypesArr, setSavedSceneTypesArr] = useState<string[]>(initialSceneTypes);
   // Local catalog mirrors so quick-create flows can append to the picker
   // without a server refetch.
   const [localServices, setLocalServices] = useState(services);
@@ -268,6 +269,7 @@ export function AssetEditModal({
     setSavedServiceIds(initialServiceIds);
     setSavedBranchIds(initialBranchIds);
     setSavedServiceAreaIds(initialServiceAreaIds);
+    setSavedSceneTypesArr(initialSceneTypes);
     setVerifications(aiVerifications || []);
     setAiGenerated(initialAiGenerated);
     setTypedMode(false);
@@ -1032,7 +1034,7 @@ export function AssetEditModal({
     // pillar / pillars no longer sent on save. Pillar membership derives
     // from content_tags at read time.
     void pillar; void pillarsArr; void initialPillarsArr;
-    if (JSON.stringify([...sceneTypesArr].sort()) !== JSON.stringify([...initialSceneTypes].sort())) {
+    if (JSON.stringify([...sceneTypesArr].sort()) !== JSON.stringify([...savedSceneTypesArr].sort())) {
       body.scene_types = sceneTypesArr;
     }
     if (JSON.stringify(tags) !== JSON.stringify(initialTags || [])) body.content_tags = tags;
@@ -1055,6 +1057,7 @@ export function AssetEditModal({
       setSavedBranchIds(branchIds);
       setSavedServiceAreaIds(serviceAreaIds);
       setSavedTags(tags);
+      setSavedSceneTypesArr(sceneTypesArr);
       onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds);
       return true;
     }
@@ -1067,12 +1070,19 @@ export function AssetEditModal({
 
     if (!res.ok) return false;
 
+    // Critical: BOTH save paths must update saved* mirrors. Missing
+    // setSavedTags here was the bug behind story angle pills staying
+    // light-blue (preselect state) after a successful save — they
+    // never graduated to deep-blue (confirmed state) because savedTags
+    // wasn't catching up to working state. Same for sceneTypesArr.
     setSavedBrandIds(brandIds);
     setSavedProjectIds(projectIds);
     setSavedPersonaIds(personaIds);
     setSavedServiceIds(serviceIds);
     setSavedBranchIds(branchIds);
     setSavedServiceAreaIds(serviceAreaIds);
+    setSavedTags(tags);
+    setSavedSceneTypesArr(sceneTypesArr);
     onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds);
     return true;
   }
@@ -1132,7 +1142,7 @@ export function AssetEditModal({
     const servicesDirty = !sortedEq(serviceIds, savedServiceIds);
     const branchesDirty = !sortedEq(branchIds, savedBranchIds);
     const serviceAreasDirty = !sortedEq(serviceAreaIds, savedServiceAreaIds);
-    const scenesDirty = !sortedEq(sceneTypesArr, initialSceneTypes);
+    const scenesDirty = !sortedEq(sceneTypesArr, savedSceneTypesArr);
     const tagSelectionDirty = tagsDirty || brandsDirty || projectsDirty ||
       personasDirty || servicesDirty || branchesDirty || serviceAreasDirty || scenesDirty;
     const isDirty = briefingDirty || voDirty || typedDirty || tagSelectionDirty;
