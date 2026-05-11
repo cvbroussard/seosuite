@@ -182,6 +182,13 @@ export function AssetEditModal({
   const [brandIds, setBrandIds] = useState<string[]>(initialBrandIds);
   const [projectIds, setProjectIds] = useState<string[]>(initialProjectIds);
   const [personaIds, setPersonaIds] = useState<string[]>(initialPersonaIds);
+  // saved* mirror initialBrandIds/etc but advance on every successful save.
+  // Used to distinguish "confirmed" pills (saved truth, deep color) from
+  // "preselected" pills (auto-tag pending, light color, may be unchecked
+  // before save).
+  const [savedBrandIds, setSavedBrandIds] = useState<string[]>(initialBrandIds);
+  const [savedProjectIds, setSavedProjectIds] = useState<string[]>(initialProjectIds);
+  const [savedPersonaIds, setSavedPersonaIds] = useState<string[]>(initialPersonaIds);
 
   // Reset state when navigating to a different asset
   useEffect(() => {
@@ -193,6 +200,9 @@ export function AssetEditModal({
     setBrandIds(initialBrandIds);
     setProjectIds(initialProjectIds);
     setPersonaIds(initialPersonaIds);
+    setSavedBrandIds(initialBrandIds);
+    setSavedProjectIds(initialProjectIds);
+    setSavedPersonaIds(initialPersonaIds);
     setVerifications(aiVerifications || []);
     setAiGenerated(initialAiGenerated);
     setTypedMode(false);
@@ -809,6 +819,13 @@ export function AssetEditModal({
     if (JSON.stringify(personaIds.sort()) !== JSON.stringify(initialPersonaIds.sort())) body.persona_ids = personaIds;
 
     if (Object.keys(body).length === 0) {
+      // Nothing to PATCH but the recording commit may have changed truth.
+      // Graduate any preselected pills to confirmed (parent re-render will
+      // also flow updated initialBrandIds back, but graduating locally now
+      // keeps the visual transition snappy).
+      setSavedBrandIds(brandIds);
+      setSavedProjectIds(projectIds);
+      setSavedPersonaIds(personaIds);
       onSaved(note, pillar, tags, brandIds, projectIds, personaIds);
       return true;
     }
@@ -821,6 +838,9 @@ export function AssetEditModal({
 
     if (!res.ok) return false;
 
+    setSavedBrandIds(brandIds);
+    setSavedProjectIds(projectIds);
+    setSavedPersonaIds(personaIds);
     onSaved(note, pillar, tags, brandIds, projectIds, personaIds);
     return true;
   }
@@ -1348,6 +1368,8 @@ export function AssetEditModal({
             <div className="flex flex-wrap items-center gap-1.5">
               {localBrands.map((b) => {
                 const selected = brandIds.includes(b.id);
+                const confirmed = selected && savedBrandIds.includes(b.id);
+                const preselected = selected && !confirmed;
                 return (
                   <button
                     key={b.id}
@@ -1356,15 +1378,18 @@ export function AssetEditModal({
                         selected ? prev.filter((id) => id !== b.id) : [...prev, b.id]
                       )
                     }
+                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
                     className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      selected
-                        ? "bg-accent/20 text-accent"
-                        : "bg-surface-hover text-muted hover:text-foreground"
+                      confirmed
+                        ? "bg-accent text-white"
+                        : preselected
+                          ? "bg-accent/20 text-accent ring-1 ring-accent/40"
+                          : "bg-surface-hover text-muted hover:text-foreground"
                     }`}
                   >
                     {b.name}
                     {b.url && selected && (
-                      <span className="ml-1 text-accent/50">↗</span>
+                      <span className={`ml-1 ${confirmed ? "text-white/60" : "text-accent/50"}`}>↗</span>
                     )}
                   </button>
                 );
@@ -1398,6 +1423,8 @@ export function AssetEditModal({
             <div className="flex flex-wrap items-center gap-1.5">
               {localProjects.map((p) => {
                 const selected = projectIds.includes(p.id);
+                const confirmed = selected && savedProjectIds.includes(p.id);
+                const preselected = selected && !confirmed;
                 return (
                   <button
                     key={p.id}
@@ -1406,10 +1433,13 @@ export function AssetEditModal({
                         selected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
                       )
                     }
+                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
                     className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      selected
-                        ? "bg-accent/20 text-accent"
-                        : "bg-surface-hover text-muted hover:text-foreground"
+                      confirmed
+                        ? "bg-accent text-white"
+                        : preselected
+                          ? "bg-accent/20 text-accent ring-1 ring-accent/40"
+                          : "bg-surface-hover text-muted hover:text-foreground"
                     }`}
                   >
                     {p.name}
@@ -1445,6 +1475,8 @@ export function AssetEditModal({
             <div className="flex flex-wrap items-center gap-1.5">
               {personaList.map((p) => {
                 const selected = personaIds.includes(p.id);
+                const confirmed = selected && savedPersonaIds.includes(p.id);
+                const preselected = selected && !confirmed;
                 return (
                   <button
                     key={p.id}
@@ -1453,10 +1485,13 @@ export function AssetEditModal({
                         selected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
                       )
                     }
+                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
                     className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      selected
-                        ? "bg-purple-500/20 text-purple-400"
-                        : "bg-surface-hover text-muted hover:text-foreground"
+                      confirmed
+                        ? "bg-purple-500 text-white"
+                        : preselected
+                          ? "bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/40"
+                          : "bg-surface-hover text-muted hover:text-foreground"
                     }`}
                   >
                     {p.name}
