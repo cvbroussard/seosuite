@@ -167,6 +167,25 @@ export function getEffectiveRules(
 }
 
 /**
+ * Normalize an entity name for matching. Handles:
+ *  - Lowercase + trim + collapse whitespace (NBSPs/tabs → single space)
+ *  - Smart punctuation → ASCII (curly quotes, em-dash → straight quotes/hyphen)
+ *
+ * Does NOT collapse "and" ↔ "&" — that's handled at match-time via
+ * generating both forms. Keeping them distinct in the normalized form
+ * lets the regex pattern explicitly include both alternatives.
+ */
+export function normalizeEntityName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")  // curly single → '
+    .replace(/[“”]/g, '"')  // curly double → "
+    .replace(/[–—]/g, "-")  // en/em dash → hyphen
+    .replace(/\s+/g, " ")              // any whitespace runs → single space
+    .trim();
+}
+
+/**
  * Check if an entity name passes the per-group rules for catalog
  * matching. Used by the inspector's catalog-scan loop to skip
  * entities that are ineligible (too short, too few words, or group
@@ -226,16 +245,30 @@ export function findCatalogMatches(
     // transcript (single/double/NBSP/tab). This was a real bug — brand
     // names entered with stray whitespace silently failed catalog scan
     // even when the visible form matched the transcript word-for-word.
-    const normalizedName = entity.name.replace(/\s+/g, " ").trim();
+    const normalizedName = normalizeEntityName(entity.name);
     if (!normalizedName) continue;
-    const escapedName = normalizedName
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/ /g, "\\s+");
-    const pattern = rules.word_boundary_required
-      ? new RegExp(`\\b${escapedName}\\b`, "i")
-      : new RegExp(escapedName, "i");
+    // For the regex, we need to handle the "&" ↔ "and" variation by
+    // generating BOTH forms if the name contains either. Run two regex
+    // tests and use the first that hits.
+    const formsToTest = [normalizedName];
+    if (normalizedName.includes(" and ")) {
+      formsToTest.push(normalizedName.replace(/ and /g, " & "));
+    }
+    if (normalizedName.includes(" & ")) {
+      formsToTest.push(normalizedName.replace(/ & /g, " and "));
+    }
+    let match: RegExpMatchArray | null = null;
+    for (const form of formsToTest) {
+      const escapedName = form
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/ /g, "\\s+");
+      const pattern = rules.word_boundary_required
+        ? new RegExp(`\\b${escapedName}\\b`, "i")
+        : new RegExp(escapedName, "i");
+      match = transcript.match(pattern);
+      if (match) break;
+    }
 
-    const match = transcript.match(pattern);
     if (match && match.index !== undefined) {
       const ctxStart = Math.max(0, match.index - 30);
       const ctxEnd = Math.min(

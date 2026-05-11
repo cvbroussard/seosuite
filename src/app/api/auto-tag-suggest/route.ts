@@ -46,6 +46,7 @@ import {
   findCatalogMatches,
   findKeywordCues,
   getEffectiveRules,
+  normalizeEntityName,
   type TagGroup,
   type CatalogMatch,
   type AutoTagRulesOverride,
@@ -278,35 +279,46 @@ export async function POST(req: NextRequest) {
         groups.brand.applied_matches.map((m) => m.entity_id),
       );
       // Pre-compute normalized name index for fuzzy match against the
-      // FULL catalog (not just already-matched brands). Handles the case
-      // where catalog scan missed (whitespace artifact, NBSP, etc.) AND
-      // the case where Sonnet returned a longer phrase containing an
+      // FULL catalog (not just already-matched brands). Handles cases
+      // where catalog scan missed (whitespace, NBSP, smart-punctuation)
+      // AND where Sonnet returned a longer phrase containing an
       // existing brand name as substring (e.g., NER returns "Mitchell
       // and Mitchell custom hoods" but catalog has "Mitchell and
       // Mitchell" → should match the existing).
-      function normalizeName(s: string): string {
-        return s.toLowerCase().replace(/\s+/g, " ").trim();
+      //
+      // Generates BOTH '& ' and ' and ' variants per entry so a stored
+      // "Mitchell & Mitchell" matches a NER candidate "Mitchell and
+      // Mitchell custom hoods" and vice versa.
+      function nameVariants(s: string): string[] {
+        const norm = normalizeEntityName(s);
+        const variants = new Set<string>([norm]);
+        if (norm.includes(" and ")) variants.add(norm.replace(/ and /g, " & "));
+        if (norm.includes(" & ")) variants.add(norm.replace(/ & /g, " and "));
+        return Array.from(variants);
       }
       const brandIndex = brandRows.map((r) => ({
         id: r.id as string,
         name: r.name as string,
-        norm: normalizeName(r.name as string),
+        variants: nameVariants(r.name as string),
       }));
 
       for (const b of ner.brands) {
         const slug = slugify(b.name);
-        const lowerNorm = normalizeName(b.name);
+        const candidateVariants = nameVariants(b.name);
 
         // Find best existing-brand match: prefer the longest existing
         // name that's a substring (either direction) of the candidate.
-        // Longest-match-wins keeps results stable when multiple candidates
-        // could match (e.g., "Mitchell and Mitchell" beats "Mitchell").
+        // Test all variant combinations to handle "&" ↔ "and" mismatch.
         let bestMatch: { id: string; name: string; matchLen: number } | null = null;
         for (const existing of brandIndex) {
-          if (lowerNorm.includes(existing.norm) || existing.norm.includes(lowerNorm)) {
-            const matchLen = Math.min(lowerNorm.length, existing.norm.length);
-            if (!bestMatch || matchLen > bestMatch.matchLen) {
-              bestMatch = { id: existing.id, name: existing.name, matchLen };
+          for (const candVariant of candidateVariants) {
+            for (const existVariant of existing.variants) {
+              if (candVariant.includes(existVariant) || existVariant.includes(candVariant)) {
+                const matchLen = Math.min(candVariant.length, existVariant.length);
+                if (!bestMatch || matchLen > bestMatch.matchLen) {
+                  bestMatch = { id: existing.id, name: existing.name, matchLen };
+                }
+              }
             }
           }
         }
