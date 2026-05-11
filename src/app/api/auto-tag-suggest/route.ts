@@ -103,6 +103,31 @@ export async function POST(req: NextRequest) {
       return getEffectiveRules(group, tagGroupConfig[group]?.rules);
     }
 
+    // Resolve the asset's image URL for the multimodal Story Angle call.
+    // Images: use storage_url directly. Videos: prefer the poster image
+    // (referenced via poster_asset_id) since Anthropic Messages API
+    // doesn't accept video files. Skip if no asset_id or no usable URL.
+    let assetImageUrl: string | undefined;
+    if (source_asset_id) {
+      const [assetRow] = await sql`
+        SELECT
+          ma.storage_url,
+          ma.media_type,
+          poster.storage_url AS poster_url
+        FROM media_assets ma
+        LEFT JOIN media_assets poster ON poster.id = ma.poster_asset_id
+        WHERE ma.id = ${source_asset_id}
+      `;
+      if (assetRow) {
+        const mediaType = (assetRow.media_type as string | null) || "";
+        if (mediaType.startsWith("image/")) {
+          assetImageUrl = assetRow.storage_url as string | undefined;
+        } else if (mediaType.startsWith("video/") && assetRow.poster_url) {
+          assetImageUrl = assetRow.poster_url as string;
+        }
+      }
+    }
+
     // Fetch all 6 catalogs + run NER + suggestTags in parallel.
     // Catalogs: 6 small per-site queries. Promise.all collapses to one
     // network round-trip's latency.
@@ -129,7 +154,12 @@ export async function POST(req: NextRequest) {
         JOIN service_areas_canonical c ON c.id = sa.service_area_canonical_id
         WHERE sa.site_id = ${site_id}
       `,
-      suggestTags(site_id, transcript).catch(() => ({
+      // Story Angle: multimodal Haiku call when we have an image URL.
+      // Image-aware Story Angle is correct for editorial framing — vision
+      // genuinely informs which pillar fits because the picture IS the
+      // story. (Different from brand detection, where varietal precision
+      // isn't a vision strength — kept text-only there.)
+      suggestTags(site_id, transcript, assetImageUrl).catch(() => ({
         pillarId: "",
         tagIds: [] as string[],
       })),
