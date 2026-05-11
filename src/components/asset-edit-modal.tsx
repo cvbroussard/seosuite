@@ -272,6 +272,7 @@ export function AssetEditModal({
     setAiGenerated(initialAiGenerated);
     setTypedMode(false);
     setTypedDraft("");
+    setReplaceTargetId(null);
     audio.cancel();
     voiceOver.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1194,13 +1195,13 @@ export function AssetEditModal({
           </div>
         </div>
 
-        {/* Content — restructured 2026-05-10 per the recording-as-canonical
-            pivot. New stack:
+        {/* Content — restructured 2026-05-11. New stack:
               1. RecordingBar (image=1 group; video=2 groups: briefing + V/O)
               2. Scene Section (image LEFT, Scene Composition RIGHT)
-              3. Story Angle Section (full-width)
-              4. Transcription Section (latest transcript + history + Type-instead)
-            Tool selectors (brand/project/persona) follow below. */}
+              3. Transcription Section (this asset's recordings — latest + history)
+              4. Story Angle Section (full-width)
+            Tool selectors (brand/project/persona) follow below.
+            Order: narrative source FIRST, editorial framing AFTER. */}
         <div className="px-6 pt-4">
 
             {/* RECORDING BAR v2 — sticky top, consolidated 6-button toolbar.
@@ -1433,7 +1434,113 @@ export function AssetEditModal({
               </div>
             )}
 
-            {/* STORY ANGLE SECTION — full-width, second priority */}
+            {/* TRANSCRIPTION SECTION — moved ABOVE Story Angle
+                (2026-05-11). Subscriber sees the asset's narrative
+                source first (this asset's recordings only — scoped
+                via API ?source_asset_id=), then the editorial framing
+                tags below. Scope-clarifying header copy added so it's
+                unambiguous this is per-asset, not site-wide. */}
+            <div className="mb-3 rounded border border-border bg-surface px-3 py-2.5">
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[11px] font-medium text-foreground">Transcription</span>
+                  <span className="text-[10px] text-muted">— Recordings for this asset only (latest first).</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!typedMode) {
+                      setTypedDraft(recordings[0]?.transcript || initialNote || "");
+                    }
+                    setTypedMode((m) => !m);
+                  }}
+                  className="text-[10px] text-muted underline hover:text-foreground"
+                >
+                  {typedMode ? "Cancel typing" : "Type instead"}
+                </button>
+              </div>
+
+              {typedMode ? (
+                <textarea
+                  ref={textareaRef}
+                  value={typedDraft}
+                  onChange={(e) => {
+                    setTypedDraft(e.target.value);
+                    handleNoteChange(e);
+                  }}
+                  onKeyDown={handleNoteKeyDown}
+                  className="w-full text-sm"
+                  style={{ minHeight: 80 }}
+                  placeholder="Type the narrative for this asset…"
+                />
+              ) : !recordingsLoaded ? (
+                <div className="text-[11px] italic text-muted">Loading recordings for this asset…</div>
+              ) : recordings.length > 0 && recordings[0].transcript ? (
+                <>
+                  {replaceTargetId && (
+                    <div className="mb-1.5 rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[10px] text-warning">
+                      ⚠ Replace mode: this transcript will be archived when you save your new recording. Asset stays briefed.
+                    </div>
+                  )}
+                  <div className="rounded bg-background/40 p-2 text-[12px] text-foreground/90">
+                    {recordings[0].transcript}
+                  </div>
+                  <div className="mt-1.5 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={startReplaceTranscript}
+                      disabled={!!replaceTargetId || audio.state === "recording" || audio.state === "previewing" || audio.state === "staged" || audio.state === "committing"}
+                      className="text-[10px] text-muted underline hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Start a new recording that will replace this transcript on save. Old recording archives; asset stays briefed."
+                    >
+                      🔄 Replace this transcript
+                    </button>
+                    {replaceTargetId && (
+                      <button
+                        type="button"
+                        onClick={() => { setReplaceTargetId(null); audio.discard(); }}
+                        className="text-[10px] text-muted underline hover:text-foreground"
+                      >
+                        Cancel replace
+                      </button>
+                    )}
+                  </div>
+                  {recordings.length > 1 && (
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-[10px] text-muted hover:text-foreground">
+                        + {recordings.length - 1} earlier recording{recordings.length > 2 ? "s" : ""} for this asset
+                      </summary>
+                      <div className="mt-1 space-y-1.5">
+                        {recordings.slice(1).map((r) => (
+                          <div
+                            key={r.id}
+                            className="rounded border border-border bg-background/30 p-1.5 text-[11px] text-muted"
+                          >
+                            <div className="mb-0.5 text-[9px] uppercase tracking-wide text-muted/70">
+                              {new Date(r.created_at).toLocaleString()} · {r.source}
+                            </div>
+                            {r.transcript}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </>
+              ) : initialNote ? (
+                <div className="rounded bg-background/40 p-2 text-[12px] text-foreground/90 italic">
+                  {initialNote}
+                  <div className="mt-1 text-[9px] uppercase tracking-wide text-muted/70">
+                    Legacy context note for this asset — will migrate to a recording on next save.
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] italic text-muted">
+                  No recordings for this asset yet — record one above or type it in.
+                </div>
+              )}
+            </div>
+
+            {/* STORY ANGLE SECTION — moved BELOW Transcription (2026-05-11) */}
             {pillarConfig.length > 0 && (
               <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
                 <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -1500,111 +1607,6 @@ export function AssetEditModal({
                 </div>
               </div>
             )}
-
-            {/* TRANSCRIPTION SECTION — third priority. Shows the asset's
-                canonical narrative (latest recording transcript) with a
-                history accordion and a "Type instead" escape hatch. During
-                the migration window, falls back to the legacy context_note
-                if no recordings exist for the asset. */}
-            <div className="mb-3 rounded border border-border bg-surface px-3 py-2.5">
-              <div className="mb-2 flex items-baseline justify-between gap-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-medium text-foreground">Transcription</span>
-                  <span className="text-[10px] text-muted">— Asset narrative (from latest recording).</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!typedMode) {
-                      setTypedDraft(recordings[0]?.transcript || initialNote || "");
-                    }
-                    setTypedMode((m) => !m);
-                  }}
-                  className="text-[10px] text-muted underline hover:text-foreground"
-                >
-                  {typedMode ? "Cancel typing" : "Type instead"}
-                </button>
-              </div>
-
-              {typedMode ? (
-                <textarea
-                  ref={textareaRef}
-                  value={typedDraft}
-                  onChange={(e) => {
-                    setTypedDraft(e.target.value);
-                    handleNoteChange(e);
-                  }}
-                  onKeyDown={handleNoteKeyDown}
-                  className="w-full text-sm"
-                  style={{ minHeight: 80 }}
-                  placeholder="Type the narrative for this asset…"
-                />
-              ) : recordings.length > 0 && recordings[0].transcript ? (
-                <>
-                  {replaceTargetId && (
-                    <div className="mb-1.5 rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[10px] text-warning">
-                      ⚠ Replace mode: this transcript will be archived when you save your new recording. Asset stays briefed.
-                    </div>
-                  )}
-                  <div className="rounded bg-background/40 p-2 text-[12px] text-foreground/90">
-                    {recordings[0].transcript}
-                  </div>
-                  <div className="mt-1.5 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={startReplaceTranscript}
-                      disabled={!!replaceTargetId || audio.state === "recording" || audio.state === "previewing" || audio.state === "staged" || audio.state === "committing"}
-                      className="text-[10px] text-muted underline hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      title="Start a new recording that will replace this transcript on save. Old recording archives; asset stays briefed."
-                    >
-                      🔄 Replace this transcript
-                    </button>
-                    {replaceTargetId && (
-                      <button
-                        type="button"
-                        onClick={() => { setReplaceTargetId(null); audio.discard(); }}
-                        className="text-[10px] text-muted underline hover:text-foreground"
-                      >
-                        Cancel replace
-                      </button>
-                    )}
-                  </div>
-                  {recordings.length > 1 && (
-                    <details className="mt-1.5">
-                      <summary className="cursor-pointer text-[10px] text-muted hover:text-foreground">
-                        + {recordings.length - 1} earlier recording{recordings.length > 2 ? "s" : ""}
-                      </summary>
-                      <div className="mt-1 space-y-1.5">
-                        {recordings.slice(1).map((r) => (
-                          <div
-                            key={r.id}
-                            className="rounded border border-border bg-background/30 p-1.5 text-[11px] text-muted"
-                          >
-                            <div className="mb-0.5 text-[9px] uppercase tracking-wide text-muted/70">
-                              {new Date(r.created_at).toLocaleString()} · {r.source}
-                            </div>
-                            {r.transcript}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </>
-              ) : initialNote ? (
-                <div className="rounded bg-background/40 p-2 text-[12px] text-foreground/90 italic">
-                  {initialNote}
-                  <div className="mt-1 text-[9px] uppercase tracking-wide text-muted/70">
-                    Legacy context note — will migrate to a recording on next save.
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[11px] italic text-muted">
-                  {recordingsLoaded
-                    ? "No narrative yet — record one above or type it in."
-                    : "Loading…"}
-                </div>
-              )}
-            </div>
         </div>
 
         {/* Bottom Tags section retired 2026-05-09 — Story Angle card above
