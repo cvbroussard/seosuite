@@ -258,15 +258,39 @@ export function findCatalogMatches(
       formsToTest.push(normalizedName.replace(/ & /g, " and "));
     }
     let match: RegExpMatchArray | null = null;
+    let lastPatternTested = "";
     for (const form of formsToTest) {
       const escapedName = form
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/ /g, "\\s+");
-      const pattern = rules.word_boundary_required
-        ? new RegExp(`\\b${escapedName}\\b`, "i")
-        : new RegExp(escapedName, "i");
+      const patternStr = rules.word_boundary_required
+        ? `\\b${escapedName}\\b`
+        : escapedName;
+      lastPatternTested = patternStr;
+      const pattern = new RegExp(patternStr, "i");
       match = transcript.match(pattern);
       if (match) break;
+    }
+
+    // DEBUG: log every miss for entities that LOOK like they should match
+    // (entity name appears as substring of transcript via lowercase compare).
+    // Helps diagnose silent regex/normalization mismatches without
+    // flooding logs for genuinely-absent entities.
+    if (!match) {
+      const transcriptLower = transcript.toLowerCase();
+      if (transcriptLower.includes(normalizedName)) {
+        console.warn(
+          `[catalog-scan] MISS despite substring presence:`,
+          {
+            group,
+            entityName: entity.name,
+            normalized: normalizedName,
+            transcriptSnippet: transcript.slice(0, 200),
+            patternTested: lastPatternTested,
+            formsTested: formsToTest,
+          },
+        );
+      }
     }
 
     if (match && match.index !== undefined) {
