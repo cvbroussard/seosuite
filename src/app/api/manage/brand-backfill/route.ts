@@ -1,7 +1,7 @@
 import { verifyCookie } from "@/lib/cookie-sign";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { enrichBrand } from "@/lib/brand-enrich";
+import { enrichBrand, captureLogoAsHeroAsset } from "@/lib/brand-enrich";
 
 /**
  * POST /api/manage/brand-backfill
@@ -28,6 +28,19 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const limit = Number.isFinite(body.limit) ? Math.max(1, Math.min(1000, body.limit)) : 500;
   const dryRun = body.dry_run === true;
+
+  // Re-logo mode: walks all brands and replaces hero_asset_id with a
+  // Brandfetch-captured logo whenever Brandfetch has the brand. Existing
+  // hero is preserved if Brandfetch returns nothing (no downgrade).
+  // Brands already sourced from Brandfetch are skipped (idempotent).
+  const relogoBrandfetch = body.relogo_via_brandfetch === true;
+  const brandfetchClientId = process.env.BRANDFETCH_CLIENT_ID;
+  if (relogoBrandfetch && !brandfetchClientId) {
+    return NextResponse.json(
+      { error: "BRANDFETCH_CLIENT_ID env var not set — cannot re-logo via Brandfetch" },
+      { status: 400 },
+    );
+  }
 
   const rows = await sql`
     SELECT id, name FROM brands
@@ -63,30 +76,82 @@ export async function POST(req: NextRequest) {
     const id = row.id as string;
     const name = row.name as string;
     try {
-      await enrichBrand(id, name, { force: true });
-      const [after] = await sql`
-        SELECT b.enrichment_status, b.url, b.description,
-               b.enrichment_metadata->>'og_image_url' AS og_image_url,
-               b.enrichment_metadata->>'hero_source' AS hero_source,
-               ma.storage_url AS hero_url
-        FROM brands b
-        LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
-        WHERE b.id = ${id}
-      `;
-      const status = (after?.enrichment_status as string) || "unknown";
-      results.push({
-        name,
-        status,
-        url: (after?.url as string | null) || null,
-        description: (after?.description as string | null) || null,
-        hero_url: (after?.hero_url as string | null) || null,
-        og_image_url: (after?.og_image_url as string | null) || null,
-        hero_source: (after?.hero_source as string | null) || null,
-        id,
-      });
-      if (status === "enriched") enriched++;
-      else if (status === "no_match") noMatch++;
-      else if (status === "failed") failed++;
+      if (relogoBrandfetch) {
+        // Brandfetch-only re-logo. Preserves Claude/OG description,
+        // touches only hero_asset_id and metadata.hero_source.
+        const [brandRow] = await sql`
+          SELECT site_id, url,
+                 enrichment_metadata->>'hero_source' AS current_hero_source
+          FROM brands WHERE id = ${id}
+        `;
+        const brandUrl = (brandRow?.url as string | null) || null;
+        const currentSource = (brandRow?.current_hero_source as string | null) || "";
+        if (!brandUrl) {
+          results.push({ name, status: "skipped (no url)", url: null, description: null, hero_url: null, og_image_url: null, hero_source: null, id });
+        } else if (currentSource.includes("brandfetch.io")) {
+          results.push({ name, status: "skipped (already brandfetch)", url: brandUrl, description: null, hero_url: null, og_image_url: null, hero_source: currentSource, id });
+        } else {
+          let bfUrl: string | null = null;
+          try {
+            const apex = new URL(brandUrl).hostname.replace(/^www\./, "");
+            bfUrl = `https://cdn.brandfetch.io/${encodeURIComponent(apex)}?c=${encodeURIComponent(brandfetchClientId!)}`;
+          } catch { /* invalid url */ }
+          let newAssetId: string | null = null;
+          if (bfUrl) {
+            newAssetId = await captureLogoAsHeroAsset(brandRow.site_id as string, id, name, brandUrl, bfUrl);
+          }
+          if (newAssetId) {
+            await sql`
+              UPDATE brands
+              SET hero_asset_id = ${newAssetId},
+                  enrichment_metadata = jsonb_set(
+                    COALESCE(enrichment_metadata, '{}'::jsonb),
+                    '{hero_source}',
+                    to_jsonb(${bfUrl}::text)
+                  )
+              WHERE id = ${id}
+            `;
+            enriched++;
+            const [after] = await sql`
+              SELECT ma.storage_url AS hero_url
+              FROM brands b
+              LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
+              WHERE b.id = ${id}
+            `;
+            results.push({ name, status: "relogoed", url: brandUrl, description: null, hero_url: (after?.hero_url as string | null) || null, og_image_url: null, hero_source: bfUrl, id });
+          } else {
+            // Brandfetch had no entry — leave existing logo alone
+            noMatch++;
+            results.push({ name, status: "no brandfetch entry", url: brandUrl, description: null, hero_url: null, og_image_url: null, hero_source: null, id });
+          }
+        }
+      } else {
+        // Standard enrichment path (force-mode)
+        await enrichBrand(id, name, { force: true });
+        const [after] = await sql`
+          SELECT b.enrichment_status, b.url, b.description,
+                 b.enrichment_metadata->>'og_image_url' AS og_image_url,
+                 b.enrichment_metadata->>'hero_source' AS hero_source,
+                 ma.storage_url AS hero_url
+          FROM brands b
+          LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
+          WHERE b.id = ${id}
+        `;
+        const status = (after?.enrichment_status as string) || "unknown";
+        results.push({
+          name,
+          status,
+          url: (after?.url as string | null) || null,
+          description: (after?.description as string | null) || null,
+          hero_url: (after?.hero_url as string | null) || null,
+          og_image_url: (after?.og_image_url as string | null) || null,
+          hero_source: (after?.hero_source as string | null) || null,
+          id,
+        });
+        if (status === "enriched") enriched++;
+        else if (status === "no_match") noMatch++;
+        else if (status === "failed") failed++;
+      }
     } catch (err) {
       failed++;
       results.push({
