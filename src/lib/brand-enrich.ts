@@ -122,9 +122,11 @@ export async function enrichBrand(
           confidence: claudeResult.confidence,
           enriched_at: new Date().toISOString(),
           provider: "claude-sonnet-4-6",
+          fetch_target: fetchTarget,
           stage_2_og_extracted: !!(ogMeta.description || ogMeta.image),
           stage_3_logo_captured: !!heroAssetId,
           og_title: ogMeta.title,
+          og_image_url: ogMeta.image,
           force,
         })}::jsonb
       WHERE id = ${brandId}

@@ -43,7 +43,17 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const results: Array<{ id: string; name: string; status: string; error?: string }> = [];
+  type Result = {
+    name: string;
+    status: string;
+    url: string | null;
+    description: string | null;
+    hero_url: string | null;
+    og_image_url: string | null;
+    id: string;
+    error?: string;
+  };
+  const results: Result[] = [];
   let enriched = 0;
   let noMatch = 0;
   let failed = 0;
@@ -53,18 +63,37 @@ export async function POST(req: NextRequest) {
     const name = row.name as string;
     try {
       await enrichBrand(id, name, { force: true });
-      const [after] = await sql`SELECT enrichment_status FROM brands WHERE id = ${id}`;
+      const [after] = await sql`
+        SELECT b.enrichment_status, b.url, b.description,
+               b.enrichment_metadata->>'og_image_url' AS og_image_url,
+               ma.storage_url AS hero_url
+        FROM brands b
+        LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
+        WHERE b.id = ${id}
+      `;
       const status = (after?.enrichment_status as string) || "unknown";
-      results.push({ id, name, status });
+      results.push({
+        name,
+        status,
+        url: (after?.url as string | null) || null,
+        description: (after?.description as string | null) || null,
+        hero_url: (after?.hero_url as string | null) || null,
+        og_image_url: (after?.og_image_url as string | null) || null,
+        id,
+      });
       if (status === "enriched") enriched++;
       else if (status === "no_match") noMatch++;
       else if (status === "failed") failed++;
     } catch (err) {
       failed++;
       results.push({
-        id,
         name,
         status: "failed",
+        url: null,
+        description: null,
+        hero_url: null,
+        og_image_url: null,
+        id,
         error: err instanceof Error ? err.message : String(err),
       });
     }
