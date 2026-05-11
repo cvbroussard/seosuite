@@ -88,14 +88,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "site_id required" }, { status: 400 });
     }
 
-    // Verify ownership
+    // Verify ownership + load per-site keyword cue overrides
     const [site] = await sql`
-      SELECT id FROM sites
+      SELECT id, tag_group_config FROM sites
       WHERE id = ${site_id} AND subscription_id = ${auth.subscriptionId}
     `;
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
+    const tagGroupConfig = (site.tag_group_config || {}) as Partial<Record<TagGroup, { keyword_cues?: string[] }>>;
 
     // Fetch all 6 catalogs + run NER + suggestTags in parallel.
     // Catalogs: 6 small per-site queries. Promise.all collapses to one
@@ -171,7 +172,8 @@ export async function POST(req: NextRequest) {
     // deterministic parsing, no LLM call. Closes the new-entity gap
     // for non-brand groups. See keyword_cue_creation memory.
     for (const group of Object.keys(groups) as TagGroup[]) {
-      const cues = findKeywordCues(transcript, group);
+      const overrideCues = tagGroupConfig[group]?.keyword_cues;
+      const cues = findKeywordCues(transcript, group, overrideCues);
       if (cues.length === 0) continue;
       const matchedNamesLower = new Set(
         groups[group].applied_matches.map((m) => m.name.toLowerCase()),

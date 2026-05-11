@@ -257,10 +257,17 @@ function capitalizedRunBefore(words: string[], endIdx: number): string[] {
 export function findKeywordCues(
   transcript: string,
   group: TagGroup,
+  /** Optional per-site override of the keyword vocabulary. If provided
+   *  and non-empty, REPLACES the default keyword_cues for this group.
+   *  Sourced from sites.tag_group_config JSONB. */
+  overrideCues?: string[],
 ): KeywordCueCandidate[] {
   const rules = AUTO_TAG_RULES[group];
   if (!rules.allow_keyword_create_new) return [];
-  if (rules.keyword_cues.length === 0) return [];
+  const cues = (overrideCues && overrideCues.length > 0)
+    ? overrideCues.map((c) => c.toLowerCase().trim()).filter(Boolean)
+    : rules.keyword_cues;
+  if (cues.length === 0) return [];
 
   const candidates: KeywordCueCandidate[] = [];
   const seenNames = new Set<string>();
@@ -273,7 +280,7 @@ export function findKeywordCues(
     const w = words[i];
     // Strip trailing punctuation for keyword comparison
     const wLower = w.toLowerCase().replace(/[^\w]/g, "");
-    if (!rules.keyword_cues.includes(wLower)) continue;
+    if (!cues.includes(wLower)) continue;
 
     const nameWords = capitalizedRunBefore(words, i);
     if (nameWords.length === 0) continue;

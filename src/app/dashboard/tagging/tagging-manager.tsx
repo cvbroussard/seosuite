@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Brand {
   id: string;
@@ -185,6 +185,44 @@ export function TaggingManager({
   const [configLabels, setConfigLabels] = useState({ ...initialLabels });
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Keyword cue config — loaded from /api/tagging/config on first mount
+  // of the Configure section. Per-group `effective` (with defaults
+  // merged in) drives the editable text input. Saving sends back the
+  // edited list as override; sending the same as default is a no-op.
+  type KeywordCuesPerGroup = Record<string, { default: string[]; override: string[] | null; effective: string[] }>;
+  const [keywordCuesConfig, setKeywordCuesConfig] = useState<KeywordCuesPerGroup | null>(null);
+  // UI state: comma-separated edit string per group (singular key)
+  const [cueDrafts, setCueDrafts] = useState<Record<string, string>>({});
+
+  // Map SECTIONS plural key → singular AUTO_TAG_RULES key for the API
+  const SINGULAR_KEY: Record<TagGroup, string> = {
+    brands: "brand",
+    services: "service",
+    projects: "project",
+    personas: "persona",
+    branches: "branch",
+    service_areas: "service_area",
+  };
+
+  // Lazy-load cue config when subscriber opens the Configure panel
+  useEffect(() => {
+    if (!showConfig || keywordCuesConfig) return;
+    let cancelled = false;
+    fetch(`/api/tagging/config?site_id=${siteId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (cancelled || !data?.keyword_cues) return;
+        setKeywordCuesConfig(data.keyword_cues);
+        const drafts: Record<string, string> = {};
+        for (const k of Object.keys(data.keyword_cues)) {
+          drafts[k] = (data.keyword_cues[k].effective as string[]).join(", ");
+        }
+        setCueDrafts(drafts);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showConfig, siteId, keywordCuesConfig]);
+
   // Show ALL tabs in beta — even ones with no label set, so subscribers can see what's available
   const [activeTab, setActiveTab] = useState<TagGroup>("brands");
 
@@ -251,6 +289,22 @@ export function TaggingManager({
   async function saveConfig() {
     setSavingConfig(true);
     try {
+      // Build keyword_cues payload from cueDrafts. For each group:
+      //   - parse comma-separated string → array
+      //   - if matches default exactly → send empty array (reset to default)
+      //   - else → send the override
+      const keyword_cues: Record<string, string[] | null> = {};
+      if (keywordCuesConfig) {
+        for (const [pluralKey, singularKey] of Object.entries(SINGULAR_KEY)) {
+          const draft = cueDrafts[singularKey];
+          if (draft === undefined) continue;
+          const parsed = draft.split(",").map((s) => s.toLowerCase().trim()).filter(Boolean);
+          const defaults = keywordCuesConfig[singularKey]?.default || [];
+          const matchesDefault = parsed.length === defaults.length && parsed.every((v, i) => v === defaults[i]);
+          keyword_cues[singularKey] = matchesDefault ? [] : parsed;
+          void pluralKey;
+        }
+      }
       const res = await fetch("/api/tagging/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -262,6 +316,7 @@ export function TaggingManager({
           branch_label: configLabels.branch_label?.trim() || null,
           service_area_label: configLabels.service_area_label?.trim() || null,
           service_label: configLabels.service_label?.trim() || null,
+          keyword_cues: Object.keys(keyword_cues).length > 0 ? keyword_cues : undefined,
         }),
       });
       if (res.ok) {
@@ -515,7 +570,10 @@ export function TaggingManager({
 
       {showConfig && (
         <div className="mb-8 rounded-lg border border-border bg-surface p-4">
-          <h3 className="mb-4 text-sm font-medium">Tag Group Labels (rename per business)</h3>
+          <h3 className="mb-1 text-sm font-medium">Tag Group Labels</h3>
+          <p className="mb-3 text-[11px] text-muted">
+            Display name for each tag group in your dashboard (e.g., rename &quot;Brands&quot; to &quot;Vendors&quot;).
+          </p>
           <div className="space-y-3">
             {SECTIONS.map((s) => (
               <div key={s.labelKey} className="flex items-center gap-3">
@@ -529,7 +587,59 @@ export function TaggingManager({
               </div>
             ))}
           </div>
-          <div className="mt-4 flex gap-3">
+
+          <h3 className="mt-6 mb-1 text-sm font-medium">Auto-tag Keyword Cues</h3>
+          <p className="mb-3 text-[11px] text-muted">
+            Words we listen for in your audio briefings to detect new tag entries. When you say
+            <span className="text-foreground"> &ldquo;the Henderson Kitchen Remodel <strong>project</strong>&rdquo; </span>
+            the cue word &ldquo;project&rdquo; tells us to create a new project. Comma-separated. Edit per group; clear back to defaults to reset.
+          </p>
+          {!keywordCuesConfig ? (
+            <div className="text-[11px] text-muted">Loading keyword cues...</div>
+          ) : (
+            <div className="space-y-3">
+              {SECTIONS.map((s) => {
+                const singularKey = SINGULAR_KEY[s.key];
+                const cueData = keywordCuesConfig[singularKey];
+                if (!cueData) return null;
+                const isOverride = cueData.override !== null;
+                return (
+                  <div key={s.key} className="flex items-start gap-3">
+                    <span className="w-32 pt-1.5 text-xs text-dim">{s.defaultLabel}</span>
+                    <div className="flex-1">
+                      <input
+                        value={cueDrafts[singularKey] ?? ""}
+                        onChange={(e) => setCueDrafts((prev) => ({ ...prev, [singularKey]: e.target.value }))}
+                        placeholder={`Defaults: ${cueData.default.join(", ")}`}
+                        className="w-full text-sm"
+                      />
+                      <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted">
+                        <span>
+                          {isOverride
+                            ? `Custom (default: ${cueData.default.join(", ")})`
+                            : "Using defaults"}
+                        </span>
+                        {isOverride && (
+                          <button
+                            type="button"
+                            onClick={() => setCueDrafts((prev) => ({
+                              ...prev,
+                              [singularKey]: cueData.default.join(", "),
+                            }))}
+                            className="text-accent hover:underline"
+                          >
+                            Reset to defaults
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-6 flex gap-3">
             <button
               onClick={saveConfig}
               disabled={savingConfig}
