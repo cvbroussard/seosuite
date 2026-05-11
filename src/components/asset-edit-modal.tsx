@@ -246,6 +246,7 @@ export function AssetEditModal({
   const [localServices, setLocalServices] = useState(services);
   const [localBranches, setLocalBranches] = useState(branches);
   const [localServiceAreas, setLocalServiceAreas] = useState(serviceAreas);
+  const [localPersonas, setLocalPersonas] = useState(personaList);
 
   // Reset state when navigating to a different asset
   useEffect(() => {
@@ -298,11 +299,13 @@ export function AssetEditModal({
   const [newServiceName, setNewServiceName] = useState("");
   const [newBranchName, setNewBranchName] = useState("");
   const [newServiceAreaName, setNewServiceAreaName] = useState("");
+  const [newPersonaName, setNewPersonaName] = useState("");
   const [creatingBrand, setCreatingBrand] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [creatingService, setCreatingService] = useState(false);
   const [creatingBranch, setCreatingBranch] = useState(false);
   const [creatingServiceArea, setCreatingServiceArea] = useState(false);
+  const [creatingPersona, setCreatingPersona] = useState(false);
   const [saving, setSaving] = useState(false);
   // Generate button removed — text generation is automatic in the
   // pipeline cron. Caption + pin_headline + display_caption + alt_text
@@ -609,7 +612,7 @@ export function AssetEditModal({
           onProjectCreated?.(entry as Project);
           break;
         case "persona":
-          // personaList is read-only prop — can't sync local; rely on parent refresh
+          setLocalPersonas((prev) => prev.some((p) => p.id === entry.id) ? prev : [...prev, { id: entry.id, name: entry.name, type: "person" }].sort((a, b) => a.name.localeCompare(b.name)));
           setPersonaIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
           break;
         case "branch":
@@ -893,6 +896,30 @@ export function AssetEditModal({
       }
     } catch { /* ignore */ }
     setCreatingBranch(false);
+  }
+
+  async function quickCreatePersona() {
+    if (!newPersonaName.trim()) return;
+    setCreatingPersona(true);
+    try {
+      const res = await fetch("/api/personas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newPersonaName.trim(),
+          site_id: siteId,
+          type: "person",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const created = data.persona || data;
+        setLocalPersonas((prev) => [...prev, { id: created.id as string, name: created.name as string, type: (created.type as string) || "person" }].sort((a, b) => a.name.localeCompare(b.name)));
+        setPersonaIds((prev) => [...prev, created.id]);
+        setNewPersonaName("");
+      }
+    } catch { /* ignore */ }
+    setCreatingPersona(false);
   }
 
   async function quickCreateServiceArea() {
@@ -1584,10 +1611,9 @@ export function AssetEditModal({
             owns all pillar tag selection. Selected pills are visible inline
             on each pillar row; no need for a separate chip strip. */}
 
-        {/* Row 3: Brands */}
-        {brandLabel && (
-          <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{brandLabel}</label>
+        {/* Row 3: Brands — hard-exposed regardless of label/empty state */}
+        <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{brandLabel || "Brands"}</label>
             <div className="flex flex-wrap items-center gap-1.5">
               {localBrands.map((b) => {
                 const selected = brandIds.includes(b.id);
@@ -1622,7 +1648,7 @@ export function AssetEditModal({
                   value={newBrandName}
                   onChange={(e) => setNewBrandName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && quickCreateBrand()}
-                  placeholder={`+ ${brandLabel}`}
+                  placeholder={`+ ${brandLabel || "Brand"}`}
                   className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
                 />
                 {newBrandName.trim() && (
@@ -1637,12 +1663,10 @@ export function AssetEditModal({
               </span>
             </div>
           </div>
-        )}
 
-        {/* Row 4: Projects */}
-        {projectLabel && (
-          <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{projectLabel}</label>
+        {/* Row 4: Projects — hard-exposed regardless of label/empty state */}
+        <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{projectLabel || "Projects"}</label>
             <div className="flex flex-wrap items-center gap-1.5">
               {localProjects.map((p) => {
                 const selected = projectIds.includes(p.id);
@@ -1674,7 +1698,7 @@ export function AssetEditModal({
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && quickCreateProject()}
-                  placeholder={`+ ${projectLabel}`}
+                  placeholder={`+ ${projectLabel || "Project"}`}
                   className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
                 />
                 {newProjectName.trim() && (
@@ -1689,14 +1713,14 @@ export function AssetEditModal({
               </span>
             </div>
           </div>
-        )}
 
-        {/* Row 5: Personas */}
-        {personaLabel && personaList.length > 0 && (
-          <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{personaLabel}</label>
+        {/* Row 5: Personas — hard-exposed regardless of label/empty state.
+            Quick-create flow uses /api/personas with type=person + consent
+            unset (subscriber refines in /dashboard/tagging). */}
+        <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{personaLabel || "People"}</label>
             <div className="flex flex-wrap items-center gap-1.5">
-              {personaList.map((p) => {
+              {localPersonas.map((p) => {
                 const selected = personaIds.includes(p.id);
                 const confirmed = selected && savedPersonaIds.includes(p.id);
                 const preselected = selected && !confirmed;
@@ -1721,14 +1745,30 @@ export function AssetEditModal({
                   </button>
                 );
               })}
+              <span className="flex items-center gap-1">
+                <input
+                  value={newPersonaName}
+                  onChange={(e) => setNewPersonaName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && quickCreatePersona()}
+                  placeholder={`+ ${personaLabel || "Person"}`}
+                  className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
+                />
+                {newPersonaName.trim() && (
+                  <button
+                    onClick={quickCreatePersona}
+                    disabled={creatingPersona}
+                    className="text-[10px] text-accent hover:underline"
+                  >
+                    {creatingPersona ? "..." : "Add"}
+                  </button>
+                )}
+              </span>
             </div>
           </div>
-        )}
 
-        {/* Row 6: Services */}
-        {serviceLabel && (
-          <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{serviceLabel}</label>
+        {/* Row 6: Services — hard-exposed regardless of label/empty state */}
+        <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{serviceLabel || "Services"}</label>
             <div className="flex flex-wrap items-center gap-1.5">
               {localServices.map((s) => {
                 const selected = serviceIds.includes(s.id);
@@ -1760,7 +1800,7 @@ export function AssetEditModal({
                   value={newServiceName}
                   onChange={(e) => setNewServiceName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && quickCreateService()}
-                  placeholder={`+ ${serviceLabel}`}
+                  placeholder={`+ ${serviceLabel || "Service"}`}
                   className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
                 />
                 {newServiceName.trim() && (
@@ -1775,12 +1815,10 @@ export function AssetEditModal({
               </span>
             </div>
           </div>
-        )}
 
-        {/* Row 7: Branches */}
-        {branchLabel && (
-          <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{branchLabel}</label>
+        {/* Row 7: Branches — hard-exposed regardless of label/empty state */}
+        <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{branchLabel || "Locations"}</label>
             <div className="flex flex-wrap items-center gap-1.5">
               {localBranches.map((b) => {
                 const selected = branchIds.includes(b.id);
@@ -1812,7 +1850,7 @@ export function AssetEditModal({
                   value={newBranchName}
                   onChange={(e) => setNewBranchName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && quickCreateBranch()}
-                  placeholder={`+ ${branchLabel}`}
+                  placeholder={`+ ${branchLabel || "Location"}`}
                   className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
                 />
                 {newBranchName.trim() && (
@@ -1827,12 +1865,10 @@ export function AssetEditModal({
               </span>
             </div>
           </div>
-        )}
 
-        {/* Row 8: Service Areas */}
-        {serviceAreaLabel && (
-          <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{serviceAreaLabel}</label>
+        {/* Row 8: Service Areas — hard-exposed regardless of label/empty state */}
+        <div className="border-t border-border px-6 py-4">
+            <label className="mb-1.5 block text-xs text-muted">{serviceAreaLabel || "Service Areas"}</label>
             <div className="flex flex-wrap items-center gap-1.5">
               {localServiceAreas.map((sa) => {
                 const selected = serviceAreaIds.includes(sa.id);
@@ -1864,7 +1900,7 @@ export function AssetEditModal({
                   value={newServiceAreaName}
                   onChange={(e) => setNewServiceAreaName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && quickCreateServiceArea()}
-                  placeholder={`+ ${serviceAreaLabel}`}
+                  placeholder={`+ ${serviceAreaLabel || "Service Area"}`}
                   className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
                 />
                 {newServiceAreaName.trim() && (
@@ -1879,7 +1915,6 @@ export function AssetEditModal({
               </span>
             </div>
           </div>
-        )}
 
         {/* Asset Studio enhancement tools removed from the source-asset modal
             (2026-05-09). Per the apprentice→master architecture lock: tools
