@@ -265,10 +265,24 @@ function buildLogoCandidates(brandUrl: string, ogImage: string | null): string[]
   if (ogImage) candidates.push(ogImage);
   try {
     const parsed = new URL(brandUrl);
-    candidates.push(`${parsed.origin}/apple-touch-icon.png`);
-    candidates.push(`${parsed.origin}/apple-touch-icon-precomposed.png`);
-    candidates.push(`${parsed.origin}/favicon.ico`);
-    candidates.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(parsed.hostname)}&sz=128`);
+    const apex = parsed.hostname.replace(/^www\./, "");
+
+    // Try favicon paths from BOTH hostname variants (www and apex).
+    // Some sites only serve favicons from one or the other.
+    const hosts = parsed.hostname === apex ? [parsed.hostname] : [parsed.hostname, apex];
+    for (const host of hosts) {
+      const origin = `${parsed.protocol}//${host}`;
+      candidates.push(`${origin}/apple-touch-icon.png`);
+      candidates.push(`${origin}/apple-touch-icon-precomposed.png`);
+      candidates.push(`${origin}/favicon.ico`);
+    }
+
+    // Google fallback — try apex first (broader indexing), then www
+    // variant if different. Google often only indexes one variant.
+    candidates.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(apex)}&sz=128`);
+    if (apex !== parsed.hostname) {
+      candidates.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(parsed.hostname)}&sz=128`);
+    }
   } catch {
     // brandUrl invalid — fall through with whatever we have
   }
