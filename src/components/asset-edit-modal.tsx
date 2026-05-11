@@ -1241,13 +1241,16 @@ export function AssetEditModal({
           </div>
         </div>
 
-        {/* Content — restructured 2026-05-11. New stack:
+        {/* Content — restructured 2026-05-11 (second pass). New stack:
               1. RecordingBar (image=1 group; video=2 groups: briefing + V/O)
-              2. Scene Section (image LEFT, Scene Composition RIGHT)
-              3. Transcription Section (this asset's recordings — latest + history)
-              4. Story Angle Section (full-width)
-            Tool selectors (brand/project/persona) follow below.
-            Order: narrative source FIRST, editorial framing AFTER. */}
+              2. Auto-tag inspector (when active — surfaces ✨ Suggest tags results)
+              3. Transcription Section (latest expanded + earlier collapsed)
+              4. Scene Section (image LEFT, Scene Composition RIGHT)
+              5. Legacy Context Note (handwritten cue card — read while recording)
+              6. Story Angle Section (full-width)
+            Tool selectors (brand/project/persona/etc.) follow below.
+            Subscriber's read-flow: see narrative source first, review what's
+            in the image, then read the cue card for the NEXT take. */}
         <div className="px-6 pt-4">
 
             {/* RECORDING BAR v2 — sticky top, consolidated 6-button toolbar.
@@ -1382,110 +1385,11 @@ export function AssetEditModal({
               );
             })()}
 
-            {/* SCENE SECTION — image LEFT, Scene Composition RIGHT, 2-col.
-                Image container uses position:relative + absolute children
-                so the media never exceeds the SC card's height. Grid's
-                items-stretch makes both columns the same row height; the
-                absolute media + object-contain confines the visual to that. */}
-            <div className="mb-3 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-              <div className="relative min-h-[200px] overflow-hidden bg-background">
-                {mediaType?.startsWith("video") || mediaType === "video" ? (
-                  <video
-                    ref={videoRef}
-                    src={imageUrl}
-                    controls
-                    className="absolute inset-0 h-full w-full object-contain"
-                  />
-                ) : faceData && faceData.length > 0 ? (
-                  <FaceOverlay
-                    imageUrl={imageUrl}
-                    faces={faceData}
-                    detectionWidth={faceDetectionWidth}
-                    detectionHeight={faceDetectionHeight}
-                    personas={personaList}
-                    assetId={assetId}
-                    onFaceNamed={(faceIndex, personaId, personaName) => {
-                      setFaceData((prev) =>
-                        prev ? prev.map((f, i) =>
-                          i === faceIndex ? { ...f, personaId, personaName } : f
-                        ) : prev
-                      );
-                    }}
-                  />
-                ) : (
-                  <img
-                    src={imageUrl}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-contain"
-                  />
-                )}
-              </div>
-              <div>
-                {SCENE_TYPES.length > 0 && (
-                  <div className="rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
-                    <div className="mb-2 flex items-baseline justify-between gap-3">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[11px] font-medium text-accent">Scene Composition</span>
-                        <span className="text-[10px] text-muted">— What&apos;s actually shown.</span>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {SCENE_TYPES.map((s) => {
-                        const checked = sceneTypesArr.includes(s.id);
-                        return (
-                          <label
-                            key={s.id}
-                            className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 hover:bg-accent/5"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSceneTypesArr((prev) => [...prev, s.id]);
-                                } else {
-                                  setSceneTypesArr((prev) => prev.filter((id) => id !== s.id));
-                                }
-                              }}
-                              className="mt-0.5 shrink-0"
-                            />
-                            <span className="flex-1 text-[11px]">
-                              <span className="font-medium text-foreground">{s.label}</span>
-                              <span className="ml-1 text-muted">— {s.description}</span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* LEGACY CONTEXT NOTE — read-only "cue card" for handwritten
-                notes from the pre-recording era. Surfaces only when the
-                asset has a non-empty context_note (B2K and EK both have
-                rich handwritten notes that are useful as a script/prompt
-                while recording). Disappears once context_note is dropped
-                in migration #109. */}
-            {initialNote && initialNote.trim() && (
-              <div className="mb-3 rounded border border-warning/30 bg-warning/5 px-3 py-2.5">
-                <div className="mb-1.5 flex items-baseline gap-2">
-                  <span className="text-[11px] font-medium text-warning">Legacy Context Note</span>
-                  <span className="text-[10px] text-muted">— Handwritten cue card. Read from this while recording.</span>
-                </div>
-                <div className="whitespace-pre-wrap rounded bg-background/40 p-2 text-[12px] leading-relaxed text-foreground/90">
-                  {initialNote}
-                </div>
-              </div>
-            )}
-
-            {/* TRANSCRIPTION SECTION — moved ABOVE Story Angle
-                (2026-05-11). Subscriber sees the asset's narrative
-                source first (this asset's recordings only — scoped
-                via API ?source_asset_id=), then the editorial framing
-                tags below. Scope-clarifying header copy added so it's
-                unambiguous this is per-asset, not site-wide. */}
+            {/* TRANSCRIPTION SECTION — top of the content stack
+                (2026-05-11 reorder). Renders right under the
+                RecordingBar/auto-tag inspector so subscriber sees
+                the canonical narrative source first. Latest transcript
+                expanded; earlier ones collapsed in the accordion. */}
             <div className="mb-3 rounded border border-border bg-surface px-3 py-2.5">
               <div className="mb-2 flex items-baseline justify-between gap-3">
                 <div className="flex items-baseline gap-2">
@@ -1603,6 +1507,104 @@ export function AssetEditModal({
                 </div>
               )}
             </div>
+
+            {/* SCENE SECTION — image LEFT, Scene Composition RIGHT, 2-col.
+                Image container uses position:relative + absolute children
+                so the media never exceeds the SC card's height. Grid's
+                items-stretch makes both columns the same row height; the
+                absolute media + object-contain confines the visual to that. */}
+            <div className="mb-3 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+              <div className="relative min-h-[200px] overflow-hidden bg-background">
+                {mediaType?.startsWith("video") || mediaType === "video" ? (
+                  <video
+                    ref={videoRef}
+                    src={imageUrl}
+                    controls
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                ) : faceData && faceData.length > 0 ? (
+                  <FaceOverlay
+                    imageUrl={imageUrl}
+                    faces={faceData}
+                    detectionWidth={faceDetectionWidth}
+                    detectionHeight={faceDetectionHeight}
+                    personas={personaList}
+                    assetId={assetId}
+                    onFaceNamed={(faceIndex, personaId, personaName) => {
+                      setFaceData((prev) =>
+                        prev ? prev.map((f, i) =>
+                          i === faceIndex ? { ...f, personaId, personaName } : f
+                        ) : prev
+                      );
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={imageUrl}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                )}
+              </div>
+              <div>
+                {SCENE_TYPES.length > 0 && (
+                  <div className="rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
+                    <div className="mb-2 flex items-baseline justify-between gap-3">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[11px] font-medium text-accent">Scene Composition</span>
+                        <span className="text-[10px] text-muted">— What&apos;s actually shown.</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {SCENE_TYPES.map((s) => {
+                        const checked = sceneTypesArr.includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 hover:bg-accent/5"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSceneTypesArr((prev) => [...prev, s.id]);
+                                } else {
+                                  setSceneTypesArr((prev) => prev.filter((id) => id !== s.id));
+                                }
+                              }}
+                              className="mt-0.5 shrink-0"
+                            />
+                            <span className="flex-1 text-[11px]">
+                              <span className="font-medium text-foreground">{s.label}</span>
+                              <span className="ml-1 text-muted">— {s.description}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* LEGACY CONTEXT NOTE — handwritten cue card subscriber reads
+                from while recording. Now positioned after Scene so the
+                subscriber's reading flow is: Transcription review → Scene
+                review → Legacy cue card (the prompt for the next take).
+                Surfaces only when the asset has a non-empty context_note.
+                Disappears once context_note column is dropped. */}
+            {initialNote && initialNote.trim() && (
+              <div className="mb-3 rounded border border-warning/30 bg-warning/5 px-3 py-2.5">
+                <div className="mb-1.5 flex items-baseline gap-2">
+                  <span className="text-[11px] font-medium text-warning">Legacy Context Note</span>
+                  <span className="text-[10px] text-muted">— Handwritten cue card. Read from this while recording.</span>
+                </div>
+                <div className="whitespace-pre-wrap rounded bg-background/40 p-2 text-[12px] leading-relaxed text-foreground/90">
+                  {initialNote}
+                </div>
+              </div>
+            )}
 
             {/* STORY ANGLE SECTION — moved BELOW Transcription (2026-05-11) */}
             {pillarConfig.length > 0 && (
