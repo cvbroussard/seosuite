@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { toast } from "@/components/feedback";
+import { toast, confirm as confirmDialog } from "@/components/feedback";
 import type { PillarGroup } from "./tag-picker";
 import { FaceOverlay } from "./face-overlay";
 import { useAudioBriefing } from "@/hooks/use-audio-briefing";
@@ -1117,7 +1117,9 @@ export function AssetEditModal({
   // every tag working-state diff. The auto-tag inspector eagerly
   // populates working state via 'Suggest tags' (preselected pills);
   // closing without save would silently discard those changes.
-  function handleClose() {
+  // Uses the in-app confirm dialog (styled via @/components/feedback)
+  // instead of window.confirm — async via Promise.
+  async function handleClose() {
     const briefingDirty = audio.state === "staged" || audio.state === "recording";
     const voDirty = voiceOver.state === "staged" || voiceOver.state === "recording";
     const typedDirty = typedMode && typedDraft.trim().length > 0;
@@ -1141,7 +1143,13 @@ export function AssetEditModal({
       if (typedDirty) parts.push("typed narrative");
       if (tagSelectionDirty) parts.push("tag changes");
       const what = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
-      const ok = window.confirm(`You have unsaved ${what}. Close and discard?`);
+      const ok = await confirmDialog({
+        title: "Unsaved changes",
+        body: `You have unsaved ${what}. Close and discard?`,
+        confirmLabel: "Discard & close",
+        cancelLabel: "Keep editing",
+        danger: true,
+      });
       if (!ok) return;
       handleCancel();
     }
