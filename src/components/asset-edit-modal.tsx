@@ -1113,14 +1113,35 @@ export function AssetEditModal({
     setTypedDraft("");
   }
 
-  // Close — dirty-form check, then close. Routes through window.confirm
-  // for now (full dirty-form guard arrives with task #183).
+  // Close — full dirty-form check across recording, typed input, and
+  // every tag working-state diff. The auto-tag inspector eagerly
+  // populates working state via 'Suggest tags' (preselected pills);
+  // closing without save would silently discard those changes.
   function handleClose() {
     const briefingDirty = audio.state === "staged" || audio.state === "recording";
     const voDirty = voiceOver.state === "staged" || voiceOver.state === "recording";
     const typedDirty = typedMode && typedDraft.trim().length > 0;
-    if (briefingDirty || voDirty || typedDirty) {
-      const ok = window.confirm("You have unsaved recordings or typed text. Close and discard them?");
+    const sortedEq = (a: string[], b: string[]) =>
+      JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+    const tagsDirty = !sortedEq(tags, savedTags);
+    const brandsDirty = !sortedEq(brandIds, savedBrandIds);
+    const projectsDirty = !sortedEq(projectIds, savedProjectIds);
+    const personasDirty = !sortedEq(personaIds, savedPersonaIds);
+    const servicesDirty = !sortedEq(serviceIds, savedServiceIds);
+    const branchesDirty = !sortedEq(branchIds, savedBranchIds);
+    const serviceAreasDirty = !sortedEq(serviceAreaIds, savedServiceAreaIds);
+    const scenesDirty = !sortedEq(sceneTypesArr, initialSceneTypes);
+    const tagSelectionDirty = tagsDirty || brandsDirty || projectsDirty ||
+      personasDirty || servicesDirty || branchesDirty || serviceAreasDirty || scenesDirty;
+    const isDirty = briefingDirty || voDirty || typedDirty || tagSelectionDirty;
+    if (isDirty) {
+      // Build a specific message so subscriber knows WHAT they'd lose
+      const parts: string[] = [];
+      if (briefingDirty || voDirty) parts.push("a recording");
+      if (typedDirty) parts.push("typed narrative");
+      if (tagSelectionDirty) parts.push("tag changes");
+      const what = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+      const ok = window.confirm(`You have unsaved ${what}. Close and discard?`);
       if (!ok) return;
       handleCancel();
     }
