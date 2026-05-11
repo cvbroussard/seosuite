@@ -213,39 +213,78 @@ export async function POST(req: NextRequest) {
       const matchedBrandIds = new Set(
         groups.brand.applied_matches.map((m) => m.entity_id),
       );
-      const matchedBrandNamesLower = new Set(
-        groups.brand.applied_matches.map((m) => m.name.toLowerCase()),
-      );
+      // Pre-compute normalized name index for fuzzy match against the
+      // FULL catalog (not just already-matched brands). Handles the case
+      // where catalog scan missed (whitespace artifact, NBSP, etc.) AND
+      // the case where Sonnet returned a longer phrase containing an
+      // existing brand name as substring (e.g., NER returns "Mitchell
+      // and Mitchell custom hoods" but catalog has "Mitchell and
+      // Mitchell" → should match the existing).
+      function normalizeName(s: string): string {
+        return s.toLowerCase().replace(/\s+/g, " ").trim();
+      }
+      const brandIndex = brandRows.map((r) => ({
+        id: r.id as string,
+        name: r.name as string,
+        norm: normalizeName(r.name as string),
+      }));
+
       for (const b of ner.brands) {
         const slug = slugify(b.name);
-        const lower = b.name.toLowerCase();
-        // Skip if NER candidate matches an already-applied existing brand.
-        // Catalog scan + name-substring check both ways for robustness.
-        const overlaps = Array.from(matchedBrandNamesLower).some(
-          (existing) => lower.includes(existing) || existing.includes(lower),
-        );
-        if (overlaps) continue;
-        // Skip if slug already exists in catalog (defensive — usually
-        // caught by overlaps check, but slug-based dedup is cheap).
-        const existingBrand = brandRows.find(
-          (r) => slugify(r.name as string) === slug,
-        );
-        if (existingBrand) {
-          // It exists in catalog but didn't catalog-match (maybe due to
-          // word-boundary or eligibility rules). Add to applied_matches
-          // anyway — subscriber said the name, brand exists, link it.
-          if (!matchedBrandIds.has(existingBrand.id as string)) {
+        const lowerNorm = normalizeName(b.name);
+
+        // Find best existing-brand match: prefer the longest existing
+        // name that's a substring (either direction) of the candidate.
+        // Longest-match-wins keeps results stable when multiple candidates
+        // could match (e.g., "Mitchell and Mitchell" beats "Mitchell").
+        let bestMatch: { id: string; name: string; matchLen: number } | null = null;
+        for (const existing of brandIndex) {
+          if (lowerNorm.includes(existing.norm) || existing.norm.includes(lowerNorm)) {
+            const matchLen = Math.min(lowerNorm.length, existing.norm.length);
+            if (!bestMatch || matchLen > bestMatch.matchLen) {
+              bestMatch = { id: existing.id, name: existing.name, matchLen };
+            }
+          }
+        }
+
+        if (bestMatch) {
+          // NER candidate corresponds to an existing brand. Skip the
+          // suggested_new path entirely. If catalog scan didn't already
+          // surface this (e.g., regex missed due to whitespace), promote
+          // it into applied_matches now so subscriber sees it as ✓
+          // existing instead of `+ new`.
+          if (!matchedBrandIds.has(bestMatch.id)) {
             groups.brand.applied_matches.push({
-              entity_id: existingBrand.id as string,
-              name: existingBrand.name as string,
+              entity_id: bestMatch.id,
+              name: bestMatch.name,
               match_text: b.name,
               match_start: -1,
               context_excerpt: b.context,
             });
-            matchedBrandIds.add(existingBrand.id as string);
+            matchedBrandIds.add(bestMatch.id);
           }
           continue;
         }
+
+        // Defensive: slug-equality fallback (catches weird normalization
+        // edge cases the substring check above wouldn't hit)
+        const slugMatch = brandRows.find(
+          (r) => slugify(r.name as string) === slug,
+        );
+        if (slugMatch) {
+          if (!matchedBrandIds.has(slugMatch.id as string)) {
+            groups.brand.applied_matches.push({
+              entity_id: slugMatch.id as string,
+              name: slugMatch.name as string,
+              match_text: b.name,
+              match_start: -1,
+              context_excerpt: b.context,
+            });
+            matchedBrandIds.add(slugMatch.id as string);
+          }
+          continue;
+        }
+
         groups.brand.suggested_new.push({
           name: b.name,
           slug,

@@ -219,7 +219,18 @@ export function findCatalogMatches(
   for (const entity of entities) {
     if (!entityNameEligibleForCatalogMatch(group, entity.name, overrideRules)) continue;
 
-    const escapedName = entity.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Normalize whitespace BEFORE regex escape: trim leading/trailing,
+    // collapse internal runs of any whitespace (incl. tabs, NBSPs) to
+    // single spaces. Then in the pattern, replace each literal space
+    // with \s+ so the regex tolerates any whitespace variant in the
+    // transcript (single/double/NBSP/tab). This was a real bug — brand
+    // names entered with stray whitespace silently failed catalog scan
+    // even when the visible form matched the transcript word-for-word.
+    const normalizedName = entity.name.replace(/\s+/g, " ").trim();
+    if (!normalizedName) continue;
+    const escapedName = normalizedName
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/ /g, "\\s+");
     const pattern = rules.word_boundary_required
       ? new RegExp(`\\b${escapedName}\\b`, "i")
       : new RegExp(escapedName, "i");
