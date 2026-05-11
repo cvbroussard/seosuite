@@ -133,10 +133,13 @@ export async function enrichBrand(
     // og description, or logo). "no_match" if nothing came back.
     const gotNewData = !!(claudeResult.url || ogMeta.description || heroAssetId);
 
-    // Pattern C: when the captured logo came from Brandfetch's CDN,
-    // remember the domain so renderers can construct variant URLs
-    // (icon vs logo vs symbol, light vs dark, etc.) at runtime.
-    const brandfetchDomain = extractBrandfetchDomain(heroSource);
+    // When the captured logo came from Brandfetch's CDN, record the
+    // full URL so downstream public-facing surfaces (marketing sites,
+    // article inline mentions) can serve elegant variants. Dashboard
+    // render still goes through hero_asset_id (R2 — fast, cheap, ours).
+    const logoServiceUrl = heroSource && heroSource.startsWith("https://cdn.brandfetch.io/")
+      ? heroSource
+      : null;
 
     await sql`
       UPDATE brands
@@ -144,7 +147,7 @@ export async function enrichBrand(
         url = COALESCE(brands.url, ${claudeResult.url}),
         description = COALESCE(brands.description, ${finalDescription}),
         hero_asset_id = COALESCE(brands.hero_asset_id, ${heroAssetId}),
-        brandfetch_domain = COALESCE(brands.brandfetch_domain, ${brandfetchDomain}),
+        logo_service_url = COALESCE(brands.logo_service_url, ${logoServiceUrl}),
         enrichment_status = ${gotNewData ? "enriched" : "no_match"},
         enriched_at = NOW(),
         enrichment_metadata = ${JSON.stringify({
@@ -245,22 +248,6 @@ async function fetchOGMeta(url: string): Promise<OGMeta> {
     };
   } catch {
     return { title: null, description: null, image: null };
-  }
-}
-
-/**
- * Pull the domain segment out of a Brandfetch CDN URL so we can store
- * it on the brand row for runtime variant rendering. Returns null for
- * non-Brandfetch sources.
- */
-export function extractBrandfetchDomain(heroSource: string | null): string | null {
-  if (!heroSource || !heroSource.startsWith("https://cdn.brandfetch.io/")) return null;
-  try {
-    const path = new URL(heroSource).pathname.replace(/^\//, "");
-    const domain = decodeURIComponent(path.split("/")[0]);
-    return domain || null;
-  } catch {
-    return null;
   }
 }
 

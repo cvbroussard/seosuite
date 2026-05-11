@@ -70,7 +70,7 @@ export async function PATCH(
 
   const [updated] = await sql`
     SELECT b.id, b.name, b.slug, b.url, b.description, b.hero_asset_id,
-           b.brandfetch_domain, ma.storage_url AS hero_url
+           b.logo_service_url, ma.storage_url AS hero_url
     FROM brands b
     LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
     WHERE b.id = ${id}
