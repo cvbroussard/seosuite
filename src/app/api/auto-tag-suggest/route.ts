@@ -47,6 +47,8 @@ import {
   findKeywordCues,
   getEffectiveRules,
   normalizeEntityName,
+  tokenizeEntityName,
+  findFuzzyTokenSpan,
   type TagGroup,
   type CatalogMatch,
   type AutoTagRulesOverride,
@@ -278,47 +280,47 @@ export async function POST(req: NextRequest) {
       const matchedBrandIds = new Set(
         groups.brand.applied_matches.map((m) => m.entity_id),
       );
-      // Pre-compute normalized name index for fuzzy match against the
-      // FULL catalog (not just already-matched brands). Handles cases
-      // where catalog scan missed (whitespace, NBSP, smart-punctuation)
-      // AND where Sonnet returned a longer phrase containing an
-      // existing brand name as substring (e.g., NER returns "Mitchell
-      // and Mitchell custom hoods" but catalog has "Mitchell and
-      // Mitchell" → should match the existing).
-      //
-      // Generates BOTH '& ' and ' and ' variants per entry so a stored
-      // "Mitchell & Mitchell" matches a NER candidate "Mitchell and
-      // Mitchell custom hoods" and vice versa.
-      function nameVariants(s: string): string[] {
-        const norm = normalizeEntityName(s);
-        const variants = new Set<string>([norm]);
-        if (norm.includes(" and ")) variants.add(norm.replace(/ and /g, " & "));
-        if (norm.includes(" & ")) variants.add(norm.replace(/ & /g, " and "));
-        return Array.from(variants);
-      }
+      // Pre-tokenize the full catalog index. NER candidate is then
+      // fuzzy-token-matched against each catalog entry. fuzzyWordEqual
+      // (in auto-tag-rules) handles & ↔ and equivalence + Levenshtein ≤1
+      // for words ≥4 chars (catches Whisper spelling drift like Mitchell↔
+      // Mitchel). Sliding-window match → catalog entity tokens must
+      // appear consecutively in NER candidate's token list.
       const brandIndex = brandRows.map((r) => ({
         id: r.id as string,
         name: r.name as string,
-        variants: nameVariants(r.name as string),
+        tokens: tokenizeEntityName(r.name as string),
       }));
 
       for (const b of ner.brands) {
         const slug = slugify(b.name);
-        const candidateVariants = nameVariants(b.name);
+        // Tokenize NER candidate name for sliding-window fuzzy match.
+        // Pad with .start/.end to satisfy findFuzzyTokenSpan signature
+        // (positions don't matter here — we only need the boolean match).
+        const candidateTokens = tokenizeEntityName(b.name).map((word, i) => ({
+          word, start: i, end: i + 1,
+        }));
 
-        // Find best existing-brand match: prefer the longest existing
-        // name that's a substring (either direction) of the candidate.
-        // Test all variant combinations to handle "&" ↔ "and" mismatch.
+        // Find best existing-brand match: prefer the LONGEST catalog
+        // entity that fuzzy-token-matches as a substring of the NER
+        // candidate. Longest-wins keeps results stable when multiple
+        // could match (e.g. "Mitchell" beats "Mit" if both exist).
         let bestMatch: { id: string; name: string; matchLen: number } | null = null;
         for (const existing of brandIndex) {
-          for (const candVariant of candidateVariants) {
-            for (const existVariant of existing.variants) {
-              if (candVariant.includes(existVariant) || existVariant.includes(candVariant)) {
-                const matchLen = Math.min(candVariant.length, existVariant.length);
-                if (!bestMatch || matchLen > bestMatch.matchLen) {
-                  bestMatch = { id: existing.id, name: existing.name, matchLen };
-                }
-              }
+          if (existing.tokens.length === 0) continue;
+          // Forward direction: catalog tokens fuzzy-match within NER candidate
+          const forward = findFuzzyTokenSpan(candidateTokens, existing.tokens);
+          // Reverse direction: NER candidate tokens fuzzy-match within catalog
+          // (handles case where NER returned shorter form than catalog)
+          const candidateAsTokens = candidateTokens.map((t) => t.word);
+          const reverseHaystack = existing.tokens.map((word, i) => ({
+            word, start: i, end: i + 1,
+          }));
+          const reverse = findFuzzyTokenSpan(reverseHaystack, candidateAsTokens);
+          if (forward || reverse) {
+            const matchLen = existing.tokens.join(" ").length;
+            if (!bestMatch || matchLen > bestMatch.matchLen) {
+              bestMatch = { id: existing.id, name: existing.name, matchLen };
             }
           }
         }

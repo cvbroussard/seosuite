@@ -171,9 +171,8 @@ export function getEffectiveRules(
  *  - Lowercase + trim + collapse whitespace (NBSPs/tabs → single space)
  *  - Smart punctuation → ASCII (curly quotes, em-dash → straight quotes/hyphen)
  *
- * Does NOT collapse "and" ↔ "&" — that's handled at match-time via
- * generating both forms. Keeping them distinct in the normalized form
- * lets the regex pattern explicitly include both alternatives.
+ * Does NOT collapse "and" ↔ "&" — that's handled at match time by
+ * fuzzyWordEqual() so & ↔ and treat as equivalent token-by-token.
  */
 export function normalizeEntityName(s: string): string {
   return s
@@ -183,6 +182,130 @@ export function normalizeEntityName(s: string): string {
     .replace(/[–—]/g, "-")  // en/em dash → hyphen
     .replace(/\s+/g, " ")              // any whitespace runs → single space
     .trim();
+}
+
+/**
+ * Levenshtein edit distance between two strings. O(n*m) time, O(n) space.
+ * Bounded version: returns Infinity if distance exceeds maxDistance
+ * (early exit for efficiency when we only care about small edits).
+ */
+function levenshtein(a: string, b: string, maxDistance = 1): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > maxDistance) return Infinity;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  // Single-row DP
+  let prev: number[] = Array(b.length + 1).fill(0).map((_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const curr: number[] = [i];
+    let minInRow = i;
+    for (let j = 1; j <= b.length; j++) {
+      if (a.charAt(i - 1) === b.charAt(j - 1)) {
+        curr.push(prev[j - 1]);
+      } else {
+        curr.push(Math.min(prev[j - 1], curr[j - 1], prev[j]) + 1);
+      }
+      if (curr[j] < minInRow) minInRow = curr[j];
+    }
+    // Early exit if even the minimum value in this row exceeds budget
+    if (minInRow > maxDistance) return Infinity;
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Word-level fuzzy equality. Handles:
+ *  - Exact match (fast path)
+ *  - "&" ↔ "and" (special equivalence)
+ *  - Levenshtein ≤1 for words ≥4 chars (catches single-letter typos, plurals,
+ *    Whisper spelling drift like Mitchell↔Mitchel)
+ *  - Short words (<4 chars) require EXACT match (avoids false positives on
+ *    common short words like "the"/"she", "and"/"end")
+ */
+function fuzzyWordEqual(a: string, b: string): boolean {
+  if (a === b) return true;
+  // & ↔ and equivalence
+  if ((a === "&" && b === "and") || (a === "and" && b === "&")) return true;
+  // Require both words ≥4 chars for fuzzy matching
+  if (a.length < 4 || b.length < 4) return false;
+  return levenshtein(a, b, 1) <= 1;
+}
+
+/**
+ * Tokenize text into words with character-offset tracking. Used for
+ * fuzzy match position recovery (so we can extract context_excerpt
+ * around the matched span in the original transcript).
+ *
+ * Normalization: lowercase + strip punctuation (preserving "&" and
+ * apostrophes which can carry semantic weight). NBSPs/tabs collapsed
+ * to spaces via the same lowercase pipeline.
+ */
+type TokenWithPos = { word: string; start: number; end: number };
+
+function tokenizeWithPositions(text: string): TokenWithPos[] {
+  const tokens: TokenWithPos[] = [];
+  // Build the normalized form to tokenize, but track positions in original
+  const lower = text.toLowerCase();
+  // Word is alphanumeric + apostrophe + hyphen + ampersand (treated as
+  // a standalone token via its own regex group)
+  const re = /[\w'-]+|&/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(lower)) !== null) {
+    tokens.push({
+      word: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+    });
+  }
+  return tokens;
+}
+
+/**
+ * Find a sliding-window fuzzy match for `needle` token list inside
+ * `haystack` token list. Returns the start/end position in the
+ * haystack's tokens, or null if no match.
+ *
+ * Match rules:
+ *  - Tokens must appear in order
+ *  - Each token pair must pass fuzzyWordEqual
+ *  - All needle tokens must match consecutively in haystack
+ *
+ * Used by both catalog scan (entity name in transcript) and NER fuzzy
+ * dedup (existing entity name in NER-extracted candidate name).
+ */
+export function findFuzzyTokenSpan(
+  haystack: TokenWithPos[],
+  needleWords: string[],
+): { startIdx: number; endIdx: number; charStart: number; charEnd: number } | null {
+  if (needleWords.length === 0) return null;
+  if (needleWords.length > haystack.length) return null;
+  for (let start = 0; start <= haystack.length - needleWords.length; start++) {
+    let allMatch = true;
+    for (let i = 0; i < needleWords.length; i++) {
+      if (!fuzzyWordEqual(haystack[start + i].word, needleWords[i])) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) {
+      const endIdx = start + needleWords.length - 1;
+      return {
+        startIdx: start,
+        endIdx,
+        charStart: haystack[start].start,
+        charEnd: haystack[endIdx].end,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Tokenize an entity name into normalized word list (for fuzzy matching).
+ */
+export function tokenizeEntityName(name: string): string[] {
+  return tokenizeWithPositions(normalizeEntityName(name)).map((t) => t.word);
 }
 
 /**
@@ -233,51 +356,31 @@ export function findCatalogMatches(
   overrideRules?: AutoTagRulesOverride,
 ): CatalogMatch[] {
   const rules = getEffectiveRules(group, overrideRules);
+  void rules; // word_boundary_required is implicit in tokenization now
   const matches: CatalogMatch[] = [];
+
+  // Tokenize transcript ONCE for the whole entity loop. Each token
+  // carries its char position so we can recover context_excerpt from
+  // the original transcript text.
+  const transcriptTokens = tokenizeWithPositions(transcript);
 
   for (const entity of entities) {
     if (!entityNameEligibleForCatalogMatch(group, entity.name, overrideRules)) continue;
 
-    // Normalize whitespace BEFORE regex escape: trim leading/trailing,
-    // collapse internal runs of any whitespace (incl. tabs, NBSPs) to
-    // single spaces. Then in the pattern, replace each literal space
-    // with \s+ so the regex tolerates any whitespace variant in the
-    // transcript (single/double/NBSP/tab). This was a real bug — brand
-    // names entered with stray whitespace silently failed catalog scan
-    // even when the visible form matched the transcript word-for-word.
-    const normalizedName = normalizeEntityName(entity.name);
-    if (!normalizedName) continue;
-    // For the regex, we need to handle the "&" ↔ "and" variation by
-    // generating BOTH forms if the name contains either. Run two regex
-    // tests and use the first that hits.
-    const formsToTest = [normalizedName];
-    if (normalizedName.includes(" and ")) {
-      formsToTest.push(normalizedName.replace(/ and /g, " & "));
-    }
-    if (normalizedName.includes(" & ")) {
-      formsToTest.push(normalizedName.replace(/ & /g, " and "));
-    }
-    let match: RegExpMatchArray | null = null;
-    let lastPatternTested = "";
-    for (const form of formsToTest) {
-      const escapedName = form
-        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-        .replace(/ /g, "\\s+");
-      const patternStr = rules.word_boundary_required
-        ? `\\b${escapedName}\\b`
-        : escapedName;
-      lastPatternTested = patternStr;
-      const pattern = new RegExp(patternStr, "i");
-      match = transcript.match(pattern);
-      if (match) break;
-    }
+    // Tokenize entity name. Whitespace + smart-punctuation handled by
+    // tokenizer; & ↔ and equivalence handled inside fuzzyWordEqual at
+    // the per-token level. No need for variant generation anymore.
+    const entityTokens = tokenizeEntityName(entity.name);
+    if (entityTokens.length === 0) continue;
 
-    // DEBUG: log every miss for entities that LOOK like they should match
-    // (entity name appears as substring of transcript via lowercase compare).
-    // Helps diagnose silent regex/normalization mismatches without
-    // flooding logs for genuinely-absent entities.
-    if (!match) {
+    const span = findFuzzyTokenSpan(transcriptTokens, entityTokens);
+
+    if (!span) {
+      // DEBUG: log misses for entities that LOOK like they should match
+      // (entity name appears as substring of transcript via lowercase
+      // compare). Helps diagnose silent normalization mismatches.
       const transcriptLower = transcript.toLowerCase();
+      const normalizedName = normalizeEntityName(entity.name);
       if (transcriptLower.includes(normalizedName)) {
         console.warn(
           `[catalog-scan] MISS despite substring presence:`,
@@ -285,29 +388,27 @@ export function findCatalogMatches(
             group,
             entityName: entity.name,
             normalized: normalizedName,
+            entityTokens,
             transcriptSnippet: transcript.slice(0, 200),
-            patternTested: lastPatternTested,
-            formsTested: formsToTest,
           },
         );
       }
+      continue;
     }
 
-    if (match && match.index !== undefined) {
-      const ctxStart = Math.max(0, match.index - 30);
-      const ctxEnd = Math.min(
-        transcript.length,
-        match.index + match[0].length + 30,
-      );
+    {
+      const ctxStart = Math.max(0, span.charStart - 30);
+      const ctxEnd = Math.min(transcript.length, span.charEnd + 30);
       const ctx = transcript.slice(ctxStart, ctxEnd).trim();
       const ellipsisStart = ctxStart > 0 ? "…" : "";
       const ellipsisEnd = ctxEnd < transcript.length ? "…" : "";
+      const matchText = transcript.slice(span.charStart, span.charEnd);
 
       matches.push({
         entity_id: entity.id,
         name: entity.name,
-        match_text: match[0],
-        match_start: match.index,
+        match_text: matchText,
+        match_start: span.charStart,
         context_excerpt: ellipsisStart + ctx + ellipsisEnd,
       });
     }
