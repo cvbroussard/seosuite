@@ -349,7 +349,12 @@ function resolveUrl(src: string | null, base: string): string | null {
  * stays out of the orchestrator pool — it's a reference asset for the
  * brand, not a publishable creative.
  */
-async function captureLogoAsHeroAsset(
+/**
+ * Public — used both by the automated enrichment pipeline and by the
+ * subscriber-facing PATCH /api/brands/:id endpoint when a logo URL
+ * is pasted manually.
+ */
+export async function captureLogoAsHeroAsset(
   siteId: string,
   brandId: string,
   brandName: string,

@@ -1029,12 +1029,32 @@ export function TaggingManager({
           <div key={brand.id} className={`border-b border-border py-3 last:border-0 ${editing === brand.id ? "" : "flex items-center gap-4"}`}>
             {editing === brand.id ? (
               <div className="flex-1 space-y-2">
-                <div className="flex gap-2">
-                  <input value={String(editFields.name ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, name: e.target.value }))} className="flex-1 text-sm" placeholder="Name" autoFocus />
-                  <input value={String(editFields.url ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, url: e.target.value }))} className="flex-1 text-sm" placeholder="https://..." />
+                <div className="flex items-start gap-3">
+                  {brand.hero_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={brand.hero_url} alt={`${brand.name} current logo`} className="h-14 w-14 flex-shrink-0 rounded border border-border bg-bg-soft object-contain p-1" />
+                  ) : (
+                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded border border-border bg-bg-soft text-base font-medium text-muted">
+                      {brand.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex gap-2">
+                      <input value={String(editFields.name ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, name: e.target.value }))} className="flex-1 text-sm" placeholder="Name" autoFocus />
+                      <input value={String(editFields.url ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, url: e.target.value }))} className="flex-1 text-sm" placeholder="https://..." />
+                    </div>
+                    <input value={String(editFields.description ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))} className="w-full text-sm" placeholder="Description" />
+                  </div>
                 </div>
-                <input value={String(editFields.description ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))} className="w-full text-sm" placeholder="Description" />
-                <input value={String(editFields.hero_asset_id ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, hero_asset_id: e.target.value }))} className="w-full text-sm" placeholder="Hero asset UUID" />
+                <div>
+                  <input
+                    value={String(editFields.hero_image_url ?? "")}
+                    onChange={(e) => setEditFields((f) => ({ ...f, hero_image_url: e.target.value }))}
+                    className="w-full text-sm"
+                    placeholder="Paste a logo URL to set/replace (e.g. https://…/logo.png)"
+                  />
+                  <p className="mt-1 text-[10px] text-dim">Paste any image URL. We&rsquo;ll download it and save it as this brand&rsquo;s logo.</p>
+                </div>
                 <SaveCancelRow onSave={() => updateItem("brands", brand.id)} onCancel={() => setEditing(null)} />
               </div>
             ) : (
@@ -1057,7 +1077,7 @@ export function TaggingManager({
                   {brand.description && <p className="text-xs text-dim">{brand.description}</p>}
                 </div>
                 <span className="text-xs text-muted">{brand.slug}</span>
-                <EditDeleteRow type="brands" id={brand.id} onEdit={() => { setEditing(brand.id); setEditFields({ name: brand.name, url: brand.url || "", description: brand.description || "", hero_asset_id: brand.hero_asset_id || "" }); }} />
+                <EditDeleteRow type="brands" id={brand.id} onEdit={() => { setEditing(brand.id); setEditFields({ name: brand.name, url: brand.url || "", description: brand.description || "", hero_asset_id: brand.hero_asset_id || "", hero_image_url: "" }); }} />
               </>
             )}
           </div>
