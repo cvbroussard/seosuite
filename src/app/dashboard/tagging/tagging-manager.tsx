@@ -956,28 +956,30 @@ export function TaggingManager({
       {/* ── Branches tab ──────────────────────────────────────────────── */}
       {activeTab === "branches" && (
         <>
+          {/* 2-column responsive grid. Long fields (address, GBP, hero,
+              description) span both columns. City + State pair on one
+              row. Primary checkbox + Add button get their own footer
+              row for clear visual separation between fields and submit. */}
           <div className="mb-6 space-y-2">
-            <div className="flex gap-2">
-              <input value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} className="flex-1 text-sm" placeholder="Branch name (e.g. Burbank Showroom)" />
-              <input value={newBranchPhone} onChange={(e) => setNewBranchPhone(e.target.value)} className="w-40 text-sm" placeholder="Phone" />
-              <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer whitespace-nowrap">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <input value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} className="text-sm" placeholder="Branch name (e.g. Burbank Showroom)" />
+              <input value={newBranchPhone} onChange={(e) => setNewBranchPhone(e.target.value)} className="text-sm" placeholder="Phone" />
+              <input value={newBranchAddress} onChange={(e) => setNewBranchAddress(e.target.value)} className="text-sm md:col-span-2" placeholder="Address" />
+              <input value={newBranchCity} onChange={(e) => setNewBranchCity(e.target.value)} className="text-sm" placeholder="City" />
+              <input value={newBranchState} onChange={(e) => setNewBranchState(e.target.value)} className="text-sm" placeholder="State" />
+              <input value={newBranchGbp} onChange={(e) => setNewBranchGbp(e.target.value)} className="text-sm md:col-span-2" placeholder="GBP location ID (e.g. accounts/123/locations/456)" />
+              <input value={newBranchHero} onChange={(e) => setNewBranchHero(e.target.value)} className="text-sm md:col-span-2" placeholder="Hero asset UUID" />
+              <input value={newBranchDesc} onChange={(e) => setNewBranchDesc(e.target.value)} className="text-sm md:col-span-2" placeholder="Description" />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer">
                 <input type="checkbox" checked={newBranchPrimary} onChange={(e) => setNewBranchPrimary(e.target.checked)} className="accent-accent" />
-                Primary
+                Primary branch
               </label>
               <button onClick={addBranch} disabled={adding || !newBranchName.trim()} className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50">
-                {adding ? "..." : "Add"}
+                {adding ? "..." : "Add Branch"}
               </button>
             </div>
-            <div className="flex gap-2">
-              <input value={newBranchAddress} onChange={(e) => setNewBranchAddress(e.target.value)} className="flex-1 text-sm" placeholder="Address" />
-              <input value={newBranchCity} onChange={(e) => setNewBranchCity(e.target.value)} className="w-40 text-sm" placeholder="City" />
-              <input value={newBranchState} onChange={(e) => setNewBranchState(e.target.value)} className="w-20 text-sm" placeholder="State" />
-            </div>
-            <div className="flex gap-2">
-              <input value={newBranchGbp} onChange={(e) => setNewBranchGbp(e.target.value)} className="flex-1 text-sm" placeholder="GBP location ID (e.g. accounts/123/locations/456)" />
-              <input value={newBranchHero} onChange={(e) => setNewBranchHero(e.target.value)} className="w-72 text-sm" placeholder="Hero asset UUID" />
-            </div>
-            <input value={newBranchDesc} onChange={(e) => setNewBranchDesc(e.target.value)} className="w-full text-sm" placeholder="Description" />
           </div>
           {renderBranchList()}
         </>
@@ -987,7 +989,7 @@ export function TaggingManager({
       {activeTab === "service_areas" && (
         <>
           <div className="mb-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-            Beta surface. Service areas use a platform canonical+overlay shape — adding here creates or links to a canonical row, then attaches your site overlay.
+            Beta — service areas are shared across the platform. Adding a region (e.g. &ldquo;Pasadena&rdquo;) uses the same canonical entry as other businesses serving that area; your business simply attaches its own coverage to it.
           </div>
           <div className="mb-6 space-y-2">
             <div className="flex gap-2">
