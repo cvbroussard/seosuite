@@ -50,9 +50,19 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     allow_auto_link_existing: true,
     // Sonnet NER for proper-noun brands (Thermador, Brizo) is the one
     // case where world-knowledge usefully proposes new entities.
+    // NER surfaces TOP-LEVEL brand names (Sonnet consolidates product
+    // variants into the parent brand). Sub-brand discovery is
+    // explicitly subscriber-manual via /dashboard/tagging — see
+    // memory/project_tracpost_brand_entity_granularity.md.
     allow_suggest_create_new: true,
     allow_auto_create_new: false,
-    allow_keyword_create_new: true,
+    // Keyword cue creation DISABLED for brands (LOCKED 2026-05-11).
+    // Sub-brand fragments (e.g. "Thermador refrigerator brand") would
+    // create catalog noise. Subscribers add sub-brands manually when
+    // they want that granularity. Vocabulary kept here so operator can
+    // re-enable per-business via /dashboard/tagging Configure if a
+    // specific use case warrants it.
+    allow_keyword_create_new: false,
     keyword_cues: ["brand"],
   },
   service: {
