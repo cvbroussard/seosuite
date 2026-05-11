@@ -209,6 +209,11 @@ export function AssetEditModal({
   // single source of truth. Scene types stay as their own array.
   const [sceneTypesArr, setSceneTypesArr] = useState<string[]>(initialSceneTypes);
   const [tags, setTags] = useState<string[]>(initialTags || []);
+  // saved* mirror for Story Angle tags — same three-state pattern as
+  // brands/projects/personas (per project_tracpost_three_state_pills.md).
+  // Auto-tag-suggest writes to `tags` directly; without a saved mirror,
+  // pre-save preselects look identical to saved truth.
+  const [savedTags, setSavedTags] = useState<string[]>(initialTags || []);
   // pillarsArr derived from tags + pillarConfig (parents of selected tags).
   // Computed inline at save time; no setter needed.
   const pillarsArr = Array.from(
@@ -249,6 +254,7 @@ export function AssetEditModal({
     setPillar(initialPillar);
     setSceneTypesArr(initialSceneTypes);
     setTags(initialTags || []);
+    setSavedTags(initialTags || []);
     setBrandIds(initialBrandIds);
     setProjectIds(initialProjectIds);
     setPersonaIds(initialPersonaIds);
@@ -976,6 +982,7 @@ export function AssetEditModal({
       setSavedServiceIds(serviceIds);
       setSavedBranchIds(branchIds);
       setSavedServiceAreaIds(serviceAreaIds);
+      setSavedTags(tags);
       onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds);
       return true;
     }
@@ -1394,6 +1401,8 @@ export function AssetEditModal({
                       <div className="flex flex-wrap gap-1.5">
                         {p.tags.map((t) => {
                           const checked = tags.includes(t.id);
+                          const confirmed = checked && savedTags.includes(t.id);
+                          const preselected = checked && !confirmed;
                           return (
                             <button
                               key={t.id}
@@ -1404,10 +1413,13 @@ export function AssetEditModal({
                                   setTags((prev) => [...prev, t.id]);
                                 }
                               }}
+                              title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
                               className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
-                                checked
+                                confirmed
                                   ? "bg-accent text-white"
-                                  : "bg-surface-hover text-muted hover:text-foreground"
+                                  : preselected
+                                    ? "bg-accent/20 text-accent ring-1 ring-accent/40"
+                                    : "bg-surface-hover text-muted hover:text-foreground"
                               }`}
                             >
                               {t.label}
