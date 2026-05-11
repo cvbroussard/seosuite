@@ -88,8 +88,6 @@ export async function POST(req: NextRequest) {
         const currentSource = (brandRow?.current_hero_source as string | null) || "";
         if (!brandUrl) {
           results.push({ name, status: "skipped (no url)", url: null, description: null, hero_url: null, og_image_url: null, hero_source: null, id });
-        } else if (currentSource.includes("brandfetch.io")) {
-          results.push({ name, status: "skipped (already brandfetch)", url: brandUrl, description: null, hero_url: null, og_image_url: null, hero_source: currentSource, id });
         } else {
           let bfUrl: string | null = null;
           try {
