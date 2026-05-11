@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     description: string | null;
     hero_url: string | null;
     og_image_url: string | null;
+    hero_source: string | null;
     id: string;
     error?: string;
   };
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
       const [after] = await sql`
         SELECT b.enrichment_status, b.url, b.description,
                b.enrichment_metadata->>'og_image_url' AS og_image_url,
+               b.enrichment_metadata->>'hero_source' AS hero_source,
                ma.storage_url AS hero_url
         FROM brands b
         LEFT JOIN media_assets ma ON ma.id = b.hero_asset_id
@@ -79,6 +81,7 @@ export async function POST(req: NextRequest) {
         description: (after?.description as string | null) || null,
         hero_url: (after?.hero_url as string | null) || null,
         og_image_url: (after?.og_image_url as string | null) || null,
+        hero_source: (after?.hero_source as string | null) || null,
         id,
       });
       if (status === "enriched") enriched++;
@@ -93,6 +96,7 @@ export async function POST(req: NextRequest) {
         description: null,
         hero_url: null,
         og_image_url: null,
+        hero_source: null,
         id,
         error: err instanceof Error ? err.message : String(err),
       });
