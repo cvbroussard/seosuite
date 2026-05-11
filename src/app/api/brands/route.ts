@@ -82,8 +82,10 @@ export async function POST(req: NextRequest) {
     RETURNING id, name, slug, url, description, hero_asset_id, seed_source, enrichment_status
   `;
 
-  // Async enrichment if no URL provided and seed came from audio (no manual url)
-  if (!url && seed_source === "audio_transcript") {
+  // Async enrichment whenever no URL was provided. Gate is independent of
+  // seed_source — keyword_cue, manual_modal, typed_subscriber all enrich
+  // the same way. Idempotency lives inside enrichBrand() via enriched_at.
+  if (!url) {
     import("@vercel/functions").then(({ waitUntil }) => {
       waitUntil(
         (async () => {
