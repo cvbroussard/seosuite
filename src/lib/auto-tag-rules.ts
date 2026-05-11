@@ -34,6 +34,12 @@ export type AutoTagRules = {
   allow_suggest_create_new: boolean;
   /** NER may CREATE + LINK new entities WITHOUT subscriber confirmation. Almost always N — too risky. */
   allow_auto_create_new: boolean;
+  /** Keyword cue parser may surface new-entity candidates when subscriber
+   *  uses a group-specific cue word ('project', 'service', etc.) near a
+   *  capitalized name in the transcript. See keyword_cue_creation memory. */
+  allow_keyword_create_new: boolean;
+  /** Group-specific keyword vocabulary for the cue parser. Lowercase. */
+  keyword_cues: string[];
 };
 
 export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
@@ -46,6 +52,8 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     // case where world-knowledge usefully proposes new entities.
     allow_suggest_create_new: true,
     allow_auto_create_new: false,
+    allow_keyword_create_new: true,
+    keyword_cues: ["brand"],
   },
   service: {
     min_match_chars: 4,
@@ -58,6 +66,8 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     // remodel" vs "Custom kitchen design".
     allow_suggest_create_new: false,
     allow_auto_create_new: false,
+    allow_keyword_create_new: true,
+    keyword_cues: ["service"],
   },
   project: {
     min_match_chars: 5,
@@ -68,6 +78,8 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     allow_auto_link_existing: true,
     allow_suggest_create_new: false,
     allow_auto_create_new: false,
+    allow_keyword_create_new: true,
+    keyword_cues: ["project"],
   },
   persona: {
     min_match_chars: 3,
@@ -77,6 +89,12 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     // Privacy-excluded — NER never surfaces person mentions.
     allow_suggest_create_new: false,
     allow_auto_create_new: false,
+    // Keyword-cue creation IS allowed for personas — explicit subscriber
+    // intent ("our client Mary Jones") satisfies the privacy concern
+    // that motivated NER exclusion (subscriber is naming this person on
+    // purpose; consent capture happens at confirmation step).
+    allow_keyword_create_new: true,
+    keyword_cues: ["client", "customer"],
   },
   branch: {
     min_match_chars: 3,
@@ -86,6 +104,8 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     // Operator-managed structural units; not extractable from world knowledge.
     allow_suggest_create_new: false,
     allow_auto_create_new: false,
+    allow_keyword_create_new: true,
+    keyword_cues: ["branch", "location", "office", "store"],
   },
   service_area: {
     min_match_chars: 4,
@@ -94,10 +114,13 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
     // Existing site overlay matches are unambiguous (subscriber
     // already chose which canonical to link).
     allow_auto_link_existing: true,
-    // Disabled until proximity-anchored canonical dedup ships —
-    // Point Breeze cross-canonical ambiguity unresolved.
+    // NER place extraction stays disabled (Point Breeze cross-
+    // canonical ambiguity). Keyword cue path works because subscriber
+    // explicit + geocoding-on-create resolves geographic ambiguity.
     allow_suggest_create_new: false,
     allow_auto_create_new: false,
+    allow_keyword_create_new: true,
+    keyword_cues: ["area", "neighborhood"],
   },
 };
 
@@ -179,4 +202,102 @@ export function findCatalogMatches(
   }
 
   return matches;
+}
+
+export type KeywordCueCandidate = {
+  /** Extracted name (run of capitalized words preceding the keyword). */
+  name: string;
+  /** The keyword that triggered extraction (e.g., "project"). */
+  keyword: string;
+  /** Group this candidate belongs to. */
+  group: TagGroup;
+  /** Surrounding transcript context for subscriber inspection. */
+  context_excerpt: string;
+};
+
+/**
+ * Walk backward from a keyword position to capture the run of
+ * capitalized words that names the entity. Stops at lowercase
+ * stop-word, sentence boundary, or no-capital-found.
+ *
+ * Per feedback_auto_tag_imperfection_tolerance.md: edge cases get
+ * manual fallback. Don't try to handle every variant.
+ */
+const STOP_WORDS = new Set([
+  "the", "a", "an", "our", "my", "your", "this", "that", "these", "those",
+  "in", "on", "at", "for", "with", "from", "to", "of", "and", "or", "but",
+  "amazing", "beautiful", "stunning", "incredible", "great", "awesome",
+  "is", "was", "were", "are", "be", "been", "being",
+  "completed", "finished", "ongoing", "active",
+]);
+
+function capitalizedRunBefore(words: string[], endIdx: number): string[] {
+  const captured: string[] = [];
+  for (let i = endIdx - 1; i >= 0; i--) {
+    const w = words[i];
+    const stripped = w.replace(/[^\w'-]/g, "");
+    if (!stripped) break;
+    if (STOP_WORDS.has(stripped.toLowerCase())) break;
+    // Capitalized = first letter uppercase. Allow numbers/hyphens within.
+    const firstCharUpper = /^[A-Z]/.test(stripped);
+    if (!firstCharUpper) break;
+    captured.unshift(stripped);
+  }
+  return captured;
+}
+
+/**
+ * Scan transcript for keyword-cue patterns. Returns candidates of the
+ * form `<capitalized name> <keyword>` for the given group.
+ *
+ * Example: "the Gibson Family Condo Transformation project" with
+ * keyword "project" → candidate { name: "Gibson Family Condo
+ * Transformation", keyword: "project", group: "project" }
+ */
+export function findKeywordCues(
+  transcript: string,
+  group: TagGroup,
+): KeywordCueCandidate[] {
+  const rules = AUTO_TAG_RULES[group];
+  if (!rules.allow_keyword_create_new) return [];
+  if (rules.keyword_cues.length === 0) return [];
+
+  const candidates: KeywordCueCandidate[] = [];
+  const seenNames = new Set<string>();
+
+  // Tokenize on whitespace, preserve punctuation in tokens for boundary
+  // detection. Track absolute char positions for context excerpts.
+  const words = transcript.split(/\s+/);
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    // Strip trailing punctuation for keyword comparison
+    const wLower = w.toLowerCase().replace(/[^\w]/g, "");
+    if (!rules.keyword_cues.includes(wLower)) continue;
+
+    const nameWords = capitalizedRunBefore(words, i);
+    if (nameWords.length === 0) continue;
+
+    const name = nameWords.join(" ");
+    // Apply same min_match_chars/words rules as catalog scan
+    if (name.length < rules.min_match_chars) continue;
+    if (nameWords.length < rules.min_match_words) continue;
+
+    if (seenNames.has(name.toLowerCase())) continue;
+    seenNames.add(name.toLowerCase());
+
+    // Build context excerpt — ~30 chars before name to ~30 chars after keyword
+    const startWordIdx = Math.max(0, i - nameWords.length - 3);
+    const endWordIdx = Math.min(words.length, i + 4);
+    const context = words.slice(startWordIdx, endWordIdx).join(" ");
+
+    candidates.push({
+      name,
+      keyword: wLower,
+      group,
+      context_excerpt: context,
+    });
+  }
+
+  return candidates;
 }

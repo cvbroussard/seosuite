@@ -44,6 +44,7 @@ import { extractEntities } from "@/lib/ner";
 import {
   AUTO_TAG_RULES,
   findCatalogMatches,
+  findKeywordCues,
   type TagGroup,
   type CatalogMatch,
 } from "@/lib/auto-tag-rules";
@@ -60,6 +61,10 @@ type NewCandidate = {
   name: string;
   slug: string;
   context: string;
+  /** "ner" | "keyword" — surfaces in inspector pill as tooltip hint. */
+  source?: string;
+  /** Keyword that triggered creation (when source="keyword"). */
+  keyword?: string;
 };
 
 type GroupResult = {
@@ -160,8 +165,41 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Brand new-entity suggestions from NER (only group with
-    // suggest_create_new=true per AUTO_TAG_RULES).
+    // STEP 3: Keyword cue scan — proposes new entities for ANY group
+    // where the subscriber explicitly used a cue word ('project',
+    // 'service', 'branch', etc.) near a capitalized name. Cheap
+    // deterministic parsing, no LLM call. Closes the new-entity gap
+    // for non-brand groups. See keyword_cue_creation memory.
+    for (const group of Object.keys(groups) as TagGroup[]) {
+      const cues = findKeywordCues(transcript, group);
+      if (cues.length === 0) continue;
+      const matchedNamesLower = new Set(
+        groups[group].applied_matches.map((m) => m.name.toLowerCase()),
+      );
+      for (const c of cues) {
+        const lower = c.name.toLowerCase();
+        // Skip if catalog scan already found this entity (not new).
+        // Substring check both ways for robustness against partial matches.
+        const overlapsExisting = Array.from(matchedNamesLower).some(
+          (existing) => lower.includes(existing) || existing.includes(lower),
+        );
+        if (overlapsExisting) continue;
+        // Skip if same name already in suggested_new (NER might also surface it).
+        const alreadyNew = groups[group].suggested_new.some(
+          (s) => s.name.toLowerCase() === lower,
+        );
+        if (alreadyNew) continue;
+        groups[group].suggested_new.push({
+          name: c.name,
+          slug: slugify(c.name),
+          context: c.context_excerpt,
+          source: "keyword",
+          keyword: c.keyword,
+        });
+      }
+    }
+
+    // STEP 2 (NER): Brand new-entity suggestions from world knowledge.
     if (AUTO_TAG_RULES.brand.allow_suggest_create_new) {
       const matchedBrandIds = new Set(
         groups.brand.applied_matches.map((m) => m.entity_id),

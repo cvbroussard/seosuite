@@ -445,7 +445,7 @@ export function AssetEditModal({
   // matches (existing-catalog hits, server-side auto-linked) and suggested
   // new (NER proposals — brand-only). All matches additive, no suppression.
   type InspectorMatch = { entity_id: string; name: string; match_text: string; match_start: number; context_excerpt: string };
-  type InspectorNew = { name: string; slug: string; context: string };
+  type InspectorNew = { name: string; slug: string; context: string; source?: string; keyword?: string };
   type InspectorGroup = { applied_matches: InspectorMatch[]; suggested_new: InspectorNew[] };
   type InspectorTagGroup = "brand" | "service" | "project" | "persona" | "branch" | "service_area";
   type InspectorState = Record<InspectorTagGroup, InspectorGroup>;
@@ -552,56 +552,93 @@ export function AssetEditModal({
     }
   }, [siteId, assetId, pillarConfig]);
 
-  // Confirm a NEW-entity NER suggestion (brand-only per locked rules).
-  // Creates the brand server-side and syncs all relevant local state so
-  // the bottom Brands picker reflects the new selection.
-  async function confirmNewBrand(c: InspectorNew, recordingId: string | null) {
+  // Confirm a NEW-entity suggestion. Generic dispatcher across all 6
+  // groups — different POST endpoints + different response shapes per
+  // group, but all share the post-create local-state sync pattern
+  // (push to localXxx + working xxxIds + promote to applied_matches).
+  async function confirmNewEntity(group: InspectorTagGroup, c: InspectorNew, recordingId: string | null) {
+    const endpointByGroup: Record<InspectorTagGroup, string> = {
+      brand: "/api/brands",
+      service: "/api/services",
+      project: "/api/projects",
+      persona: "/api/personas",
+      branch: "/api/branches",
+      service_area: "/api/service-areas",
+    };
+    const endpoint = endpointByGroup[group];
     try {
-      const res = await fetch("/api/brands", {
+      const reqBody: Record<string, unknown> = {
+        name: c.name,
+        site_id: siteId,
+        seed_source: c.source === "keyword" ? "keyword_cue" : "audio_transcript",
+        seed_recording_id: recordingId,
+        seed_asset_id: assetId,
+      };
+      if (group === "service_area") reqBody.kind = "city";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: c.name,
-          site_id: siteId,
-          seed_source: "audio_transcript",
-          seed_recording_id: recordingId,
-          seed_asset_id: assetId,
-        }),
+        body: JSON.stringify(reqBody),
       });
       if (!res.ok) {
-        console.warn(`Brand confirm HTTP ${res.status}`);
+        console.warn(`${group} confirm HTTP ${res.status}`);
         return;
       }
       const data = await res.json();
-      if (!data.brand?.id) return;
-      setLocalBrands((prev) => {
-        if (prev.some((b) => b.id === data.brand.id)) return prev;
-        return [...prev, data.brand].sort((a: Brand, b: Brand) => a.name.localeCompare(b.name));
-      });
-      setBrandIds((prev) => (prev.includes(data.brand.id) ? prev : [...prev, data.brand.id]));
-      onBrandCreated?.(data.brand);
+      // Response shape varies per endpoint — extract entity defensively
+      const created = data.brand || data.service || data.project ||
+        data.persona || data.branch || data.overlay || data.service_area || data;
+      if (!created?.id) return;
+      // Push to local catalog + working state + saved* graduate skip
+      // (saved* will graduate on next successful save)
+      const entry = { id: created.id as string, name: (created.name || c.name) as string, slug: (created.slug || c.slug) as string };
+      switch (group) {
+        case "brand":
+          setLocalBrands((prev) => prev.some((b) => b.id === entry.id) ? prev : [...prev, { ...entry, url: created.url || null } as Brand].sort((a, b) => a.name.localeCompare(b.name)));
+          setBrandIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
+          onBrandCreated?.({ ...entry, url: created.url || null } as Brand);
+          break;
+        case "service":
+          setLocalServices((prev) => prev.some((s) => s.id === entry.id) ? prev : [...prev, entry].sort((a, b) => a.name.localeCompare(b.name)));
+          setServiceIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
+          onServiceCreated?.(entry);
+          break;
+        case "project":
+          setLocalProjects((prev) => prev.some((p) => p.id === entry.id) ? prev : [...prev, entry as Project].sort((a, b) => a.name.localeCompare(b.name)));
+          setProjectIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
+          onProjectCreated?.(entry as Project);
+          break;
+        case "persona":
+          // personaList is read-only prop — can't sync local; rely on parent refresh
+          setPersonaIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
+          break;
+        case "branch":
+          setLocalBranches((prev) => prev.some((b) => b.id === entry.id) ? prev : [...prev, entry].sort((a, b) => a.name.localeCompare(b.name)));
+          setBranchIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
+          onBranchCreated?.(entry);
+          break;
+        case "service_area":
+          setLocalServiceAreas((prev) => prev.some((sa) => sa.id === entry.id) ? prev : [...prev, entry].sort((a, b) => a.name.localeCompare(b.name)));
+          setServiceAreaIds((prev) => prev.includes(entry.id) ? prev : [...prev, entry.id]);
+          onServiceAreaCreated?.(entry);
+          break;
+      }
       // Promote suggested_new → applied_matches (visual graduation)
       setInspectorState((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
-          brand: {
+          [group]: {
             applied_matches: [
-              ...prev.brand.applied_matches,
-              {
-                entity_id: data.brand.id as string,
-                name: data.brand.name as string,
-                match_text: c.name,
-                match_start: -1,
-                context_excerpt: c.context,
-              },
+              ...prev[group].applied_matches,
+              { entity_id: entry.id, name: entry.name, match_text: c.name, match_start: -1, context_excerpt: c.context },
             ],
-            suggested_new: prev.brand.suggested_new.filter((s) => s.slug !== c.slug),
+            suggested_new: prev[group].suggested_new.filter((s) => s.slug !== c.slug),
           },
         };
       });
     } catch (err) {
-      console.warn("Brand confirm failed:", err);
+      console.warn(`${group} confirm failed:`, err);
     }
   }
 
@@ -1243,15 +1280,14 @@ export function AssetEditModal({
                           <button
                             key={`new:${s.slug}`}
                             type="button"
-                            onClick={() => {
-                              if (g.key === "brand") {
-                                void confirmNewBrand(s, recordings[0]?.id || null);
-                              }
-                            }}
-                            title={s.context}
+                            onClick={() => void confirmNewEntity(g.key, s, recordings[0]?.id || null)}
+                            title={s.source === "keyword" ? `Keyword "${s.keyword}" — ${s.context}` : s.context}
                             className="rounded bg-surface-hover px-2 py-0.5 text-[11px] text-foreground transition-colors hover:bg-accent/20 hover:text-accent"
                           >
                             + {s.name}
+                            {s.source === "keyword" && (
+                              <span className="ml-1 text-[9px] text-muted">({s.keyword})</span>
+                            )}
                           </button>
                         ))}
                       </div>
