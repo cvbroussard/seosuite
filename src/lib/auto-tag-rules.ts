@@ -125,6 +125,38 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
 };
 
 /**
+ * Per-site rule override (subset of AutoTagRules). Stored on
+ * sites.tag_group_config.{group}.rules. Any field present overrides
+ * the corresponding default; absent fields fall back to AUTO_TAG_RULES.
+ */
+export type AutoTagRulesOverride = Partial<AutoTagRules>;
+
+/**
+ * Merge per-site override on top of the locked defaults to produce
+ * the effective ruleset for a group. Helper used by both the API
+ * (parsing tag_group_config) and the catalog/keyword scanners.
+ */
+export function getEffectiveRules(
+  group: TagGroup,
+  override?: AutoTagRulesOverride,
+): AutoTagRules {
+  const defaults = AUTO_TAG_RULES[group];
+  if (!override) return defaults;
+  return {
+    min_match_chars: override.min_match_chars ?? defaults.min_match_chars,
+    min_match_words: override.min_match_words ?? defaults.min_match_words,
+    word_boundary_required: override.word_boundary_required ?? defaults.word_boundary_required,
+    allow_auto_link_existing: override.allow_auto_link_existing ?? defaults.allow_auto_link_existing,
+    allow_suggest_create_new: override.allow_suggest_create_new ?? defaults.allow_suggest_create_new,
+    allow_auto_create_new: override.allow_auto_create_new ?? defaults.allow_auto_create_new,
+    allow_keyword_create_new: override.allow_keyword_create_new ?? defaults.allow_keyword_create_new,
+    keyword_cues: override.keyword_cues && override.keyword_cues.length > 0
+      ? override.keyword_cues
+      : defaults.keyword_cues,
+  };
+}
+
+/**
  * Check if an entity name passes the per-group rules for catalog
  * matching. Used by the inspector's catalog-scan loop to skip
  * entities that are ineligible (too short, too few words, or group
@@ -133,8 +165,9 @@ export const AUTO_TAG_RULES: Record<TagGroup, AutoTagRules> = {
 export function entityNameEligibleForCatalogMatch(
   group: TagGroup,
   name: string,
+  overrideRules?: AutoTagRulesOverride,
 ): boolean {
-  const rules = AUTO_TAG_RULES[group];
+  const rules = getEffectiveRules(group, overrideRules);
   if (!rules.allow_auto_link_existing) return false;
   const trimmed = name.trim();
   if (trimmed.length < rules.min_match_chars) return false;
@@ -168,12 +201,13 @@ export function findCatalogMatches(
   transcript: string,
   group: TagGroup,
   entities: Array<{ id: string; name: string }>,
+  overrideRules?: AutoTagRulesOverride,
 ): CatalogMatch[] {
-  const rules = AUTO_TAG_RULES[group];
+  const rules = getEffectiveRules(group, overrideRules);
   const matches: CatalogMatch[] = [];
 
   for (const entity of entities) {
-    if (!entityNameEligibleForCatalogMatch(group, entity.name)) continue;
+    if (!entityNameEligibleForCatalogMatch(group, entity.name, overrideRules)) continue;
 
     const escapedName = entity.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = rules.word_boundary_required
@@ -261,8 +295,10 @@ export function findKeywordCues(
    *  and non-empty, REPLACES the default keyword_cues for this group.
    *  Sourced from sites.tag_group_config JSONB. */
   overrideCues?: string[],
+  /** Optional per-site rule override. Honored alongside cues. */
+  overrideRules?: AutoTagRulesOverride,
 ): KeywordCueCandidate[] {
-  const rules = AUTO_TAG_RULES[group];
+  const rules = getEffectiveRules(group, overrideRules);
   if (!rules.allow_keyword_create_new) return [];
   const cues = (overrideCues && overrideCues.length > 0)
     ? overrideCues.map((c) => c.toLowerCase().trim()).filter(Boolean)

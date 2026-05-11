@@ -194,6 +194,25 @@ export function TaggingManager({
   // UI state: comma-separated edit string per group (singular key)
   const [cueDrafts, setCueDrafts] = useState<Record<string, string>>({});
 
+  // Auto-tag rules config — same shape as keyword cues. Per-group
+  // override of AutoTagRules booleans + numeric thresholds. Drives the
+  // trust-trajectory toggles (allow_auto_create_new is the load-bearing
+  // one — when true + wired, skips subscriber confirmation step).
+  type RuleSet = {
+    min_match_chars: number;
+    min_match_words: number;
+    word_boundary_required: boolean;
+    allow_auto_link_existing: boolean;
+    allow_suggest_create_new: boolean;
+    allow_auto_create_new: boolean;
+    allow_keyword_create_new: boolean;
+  };
+  type RulesPerGroup = Record<string, { default: RuleSet; override: Partial<RuleSet> | null; effective: RuleSet }>;
+  const [rulesConfig, setRulesConfig] = useState<RulesPerGroup | null>(null);
+  // UI state: per-group draft of the effective rules. Subscriber edits
+  // these; on save, the diff vs default becomes the override.
+  const [ruleDrafts, setRuleDrafts] = useState<Record<string, RuleSet>>({});
+
   // Map SECTIONS plural key → singular AUTO_TAG_RULES key for the API
   const SINGULAR_KEY: Record<TagGroup, string> = {
     brands: "brand",
@@ -204,20 +223,30 @@ export function TaggingManager({
     service_areas: "service_area",
   };
 
-  // Lazy-load cue config when subscriber opens the Configure panel
+  // Lazy-load cue + rules config when subscriber opens the Configure panel
   useEffect(() => {
     if (!showConfig || keywordCuesConfig) return;
     let cancelled = false;
     fetch(`/api/tagging/config?site_id=${siteId}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (cancelled || !data?.keyword_cues) return;
-        setKeywordCuesConfig(data.keyword_cues);
-        const drafts: Record<string, string> = {};
-        for (const k of Object.keys(data.keyword_cues)) {
-          drafts[k] = (data.keyword_cues[k].effective as string[]).join(", ");
+        if (cancelled || !data) return;
+        if (data.keyword_cues) {
+          setKeywordCuesConfig(data.keyword_cues);
+          const drafts: Record<string, string> = {};
+          for (const k of Object.keys(data.keyword_cues)) {
+            drafts[k] = (data.keyword_cues[k].effective as string[]).join(", ");
+          }
+          setCueDrafts(drafts);
         }
-        setCueDrafts(drafts);
+        if (data.rules) {
+          setRulesConfig(data.rules);
+          const rDrafts: Record<string, RuleSet> = {};
+          for (const k of Object.keys(data.rules)) {
+            rDrafts[k] = { ...(data.rules[k].effective as RuleSet) };
+          }
+          setRuleDrafts(rDrafts);
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -305,6 +334,16 @@ export function TaggingManager({
           void pluralKey;
         }
       }
+      // Build rules payload — send the FULL effective rule object per
+      // group (server diffs against defaults to extract minimal override)
+      const rules: Record<string, Partial<RuleSet>> = {};
+      if (rulesConfig) {
+        for (const [, singularKey] of Object.entries(SINGULAR_KEY)) {
+          const draft = ruleDrafts[singularKey];
+          if (!draft) continue;
+          rules[singularKey] = { ...draft };
+        }
+      }
       const res = await fetch("/api/tagging/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -317,6 +356,7 @@ export function TaggingManager({
           service_area_label: configLabels.service_area_label?.trim() || null,
           service_label: configLabels.service_label?.trim() || null,
           keyword_cues: Object.keys(keyword_cues).length > 0 ? keyword_cues : undefined,
+          rules: Object.keys(rules).length > 0 ? rules : undefined,
         }),
       });
       if (res.ok) {
@@ -634,6 +674,139 @@ export function TaggingManager({
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+
+          <h3 className="mt-6 mb-1 text-sm font-medium">Auto-tag Rules</h3>
+          <p className="mb-3 text-[11px] text-muted">
+            Per-group behavior knobs. The trust trajectory: turn ON <strong>Auto-create new</strong> to skip the
+            <span className="rounded bg-surface-hover px-1 mx-1 text-foreground">+</span>
+            confirmation step — new entities will be created and linked automatically when keyword cues fire.
+          </p>
+          {!rulesConfig ? (
+            <div className="text-[11px] text-muted">Loading rules...</div>
+          ) : (
+            <div className="space-y-2">
+              {SECTIONS.map((s) => {
+                const singularKey = SINGULAR_KEY[s.key];
+                const r = ruleDrafts[singularKey];
+                const cfg = rulesConfig[singularKey];
+                if (!r || !cfg) return null;
+                const isOverride = cfg.override !== null && Object.keys(cfg.override || {}).length > 0;
+                const updateRule = <K extends keyof RuleSet>(k: K, v: RuleSet[K]) => {
+                  setRuleDrafts((prev) => ({ ...prev, [singularKey]: { ...prev[singularKey], [k]: v } }));
+                };
+                const resetToDefaults = () => {
+                  setRuleDrafts((prev) => ({ ...prev, [singularKey]: { ...cfg.default } }));
+                };
+                return (
+                  <details key={s.key} className="rounded border border-border bg-bg-base">
+                    <summary className="flex cursor-pointer items-center gap-3 px-3 py-2 text-xs hover:bg-surface-hover">
+                      <span className="w-32 text-dim">{s.defaultLabel}</span>
+                      <span className="flex-1 text-[10px] text-muted">
+                        Auto-link existing: {r.allow_auto_link_existing ? "✓" : "✗"} ·
+                        Suggest new: {r.allow_suggest_create_new ? "✓" : "✗"} ·
+                        Keyword create: {r.allow_keyword_create_new ? "✓" : "✗"} ·
+                        <span className={r.allow_auto_create_new ? "text-warning" : ""}>
+                          {" "}Auto-create: {r.allow_auto_create_new ? "✓ (skips confirm)" : "✗"}
+                        </span>
+                      </span>
+                      {isOverride && <span className="text-[10px] text-accent">Custom</span>}
+                    </summary>
+                    <div className="space-y-2 border-t border-border px-3 py-3 text-xs">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={r.allow_auto_link_existing}
+                          onChange={(e) => updateRule("allow_auto_link_existing", e.target.checked)}
+                        />
+                        <span className="flex-1">
+                          <strong>Auto-link existing matches</strong>
+                          <div className="text-[10px] text-muted">
+                            When transcript mentions a name already in your catalog, link it to the asset automatically.
+                          </div>
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={r.allow_suggest_create_new}
+                          onChange={(e) => updateRule("allow_suggest_create_new", e.target.checked)}
+                        />
+                        <span className="flex-1">
+                          <strong>Suggest new entities (NER)</strong>
+                          <div className="text-[10px] text-muted">
+                            Sonnet proposes new entries based on world-knowledge proper nouns. Defaults ON for brands only.
+                          </div>
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={r.allow_keyword_create_new}
+                          onChange={(e) => updateRule("allow_keyword_create_new", e.target.checked)}
+                        />
+                        <span className="flex-1">
+                          <strong>Suggest new entities (keyword cues)</strong>
+                          <div className="text-[10px] text-muted">
+                            Subscriber-explicit cue words (e.g., &quot;the X <em>project</em>&quot;) propose new entries.
+                          </div>
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={r.allow_auto_create_new}
+                          onChange={(e) => updateRule("allow_auto_create_new", e.target.checked)}
+                        />
+                        <span className="flex-1">
+                          <strong className={r.allow_auto_create_new ? "text-warning" : ""}>
+                            Auto-create new entities (skip confirmation)
+                          </strong>
+                          <div className="text-[10px] text-muted">
+                            Skip the <span className="rounded bg-surface-hover px-1 text-foreground">+</span> confirmation step entirely. New entities created + linked the moment they&apos;re detected. Subscriber unchecks if wrong before save. <em className="text-warning">Trust this only after observing accurate detections for this group.</em>
+                          </div>
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-3 border-t border-border pt-2">
+                        <span className="w-32 text-dim">Min match chars</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={r.min_match_chars}
+                          onChange={(e) => updateRule("min_match_chars", parseInt(e.target.value, 10) || cfg.default.min_match_chars)}
+                          className="w-16 text-xs"
+                        />
+                        <span className="text-[10px] text-muted">(default: {cfg.default.min_match_chars})</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="w-32 text-dim">Min match words</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={r.min_match_words}
+                          onChange={(e) => updateRule("min_match_words", parseInt(e.target.value, 10) || cfg.default.min_match_words)}
+                          className="w-16 text-xs"
+                        />
+                        <span className="text-[10px] text-muted">(default: {cfg.default.min_match_words})</span>
+                      </div>
+                      {isOverride && (
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={resetToDefaults}
+                            className="text-[10px] text-accent hover:underline"
+                          >
+                            Reset to defaults
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 );
               })}
             </div>

@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { AUTO_TAG_RULES, type TagGroup } from "@/lib/auto-tag-rules";
+import { AUTO_TAG_RULES, getEffectiveRules, type TagGroup, type AutoTagRules, type AutoTagRulesOverride } from "@/lib/auto-tag-rules";
 
 const TAG_GROUPS: TagGroup[] = ["brand", "service", "project", "persona", "branch", "service_area"];
+
+// Numeric rule fields (separated for sanitization in PATCH).
+const NUMERIC_RULE_KEYS = ["min_match_chars", "min_match_words"] as const;
+const BOOLEAN_RULE_KEYS = [
+  "word_boundary_required",
+  "allow_auto_link_existing",
+  "allow_suggest_create_new",
+  "allow_auto_create_new",
+  "allow_keyword_create_new",
+] as const;
 
 /**
  * GET /api/tagging/config?site_id=...
@@ -29,10 +39,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Site not found" }, { status: 404 });
   }
 
-  const config = (site.tag_group_config || {}) as Partial<Record<TagGroup, { keyword_cues?: string[] }>>;
-  // Subscriber sees the FULL effective vocabulary per group, plus the
-  // hard-coded defaults for reference. If they edit, their list REPLACES
-  // the default — they fully control the vocabulary.
+  const config = (site.tag_group_config || {}) as Partial<Record<TagGroup, { keyword_cues?: string[]; rules?: AutoTagRulesOverride }>>;
+  // Subscriber sees the FULL effective vocabulary + rules per group,
+  // plus the hard-coded defaults for reference. If they edit, override
+  // values REPLACE defaults per field (partial merge).
   const keyword_cues: Record<TagGroup, { default: string[]; override: string[] | null; effective: string[] }> = {
     brand: { default: [], override: null, effective: [] },
     service: { default: [], override: null, effective: [] },
@@ -41,13 +51,20 @@ export async function GET(req: NextRequest) {
     branch: { default: [], override: null, effective: [] },
     service_area: { default: [], override: null, effective: [] },
   };
+  const rules: Record<TagGroup, { default: AutoTagRules; override: AutoTagRulesOverride | null; effective: AutoTagRules }> = {} as Record<TagGroup, { default: AutoTagRules; override: AutoTagRulesOverride | null; effective: AutoTagRules }>;
   for (const g of TAG_GROUPS) {
     const def = AUTO_TAG_RULES[g].keyword_cues;
-    const override = config[g]?.keyword_cues || null;
+    const overrideCues = config[g]?.keyword_cues || null;
     keyword_cues[g] = {
       default: def,
-      override,
-      effective: (override && override.length > 0) ? override : def,
+      override: overrideCues,
+      effective: (overrideCues && overrideCues.length > 0) ? overrideCues : def,
+    };
+    const overrideRules = config[g]?.rules || null;
+    rules[g] = {
+      default: AUTO_TAG_RULES[g],
+      override: overrideRules,
+      effective: getEffectiveRules(g, overrideRules || undefined),
     };
   }
 
@@ -61,6 +78,7 @@ export async function GET(req: NextRequest) {
       service_label: site.service_label as string | null,
     },
     keyword_cues,
+    rules,
   });
 }
 
@@ -82,7 +100,7 @@ export async function PATCH(req: NextRequest) {
   const auth = authResult as AuthContext;
 
   const body = await req.json();
-  const { site_id, brand_label, project_label, persona_label, branch_label, service_area_label, service_label, keyword_cues } = body;
+  const { site_id, brand_label, project_label, persona_label, branch_label, service_area_label, service_label, keyword_cues, rules: rulesBody } = body;
 
   if (!site_id) {
     return NextResponse.json({ error: "site_id required" }, { status: 400 });
@@ -97,9 +115,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Per-group merge into existing tag_group_config (don't whole-replace).
-  // Allows partial updates — subscriber editing one group's cues doesn't
-  // wipe the others.
-  let nextConfig = (site.tag_group_config || {}) as Record<string, { keyword_cues?: string[] }>;
+  // Allows partial updates — subscriber editing one group's cues or
+  // rules doesn't wipe the others or the other field type.
+  let nextConfig = (site.tag_group_config || {}) as Record<string, { keyword_cues?: string[]; rules?: AutoTagRulesOverride }>;
   if (keyword_cues && typeof keyword_cues === "object") {
     nextConfig = { ...nextConfig };
     for (const g of TAG_GROUPS) {
@@ -123,6 +141,53 @@ export async function PATCH(req: NextRequest) {
             }
           }
         }
+      }
+    }
+  }
+  if (rulesBody && typeof rulesBody === "object") {
+    nextConfig = { ...nextConfig };
+    for (const g of TAG_GROUPS) {
+      if (!(g in rulesBody)) continue;
+      const groupRules = (rulesBody as Record<string, AutoTagRulesOverride | null>)[g];
+      if (groupRules === null) {
+        // explicit null → drop the rules override entirely
+        if (nextConfig[g]) {
+          const { rules: _drop, ...rest } = nextConfig[g];
+          void _drop;
+          if (Object.keys(rest).length === 0) delete nextConfig[g];
+          else nextConfig[g] = rest;
+        }
+        continue;
+      }
+      if (typeof groupRules !== "object") continue;
+      // Sanitize: only accept known keys, coerce to correct type, drop
+      // anything that matches the default (keeps override object minimal).
+      const sanitized: AutoTagRulesOverride = {};
+      const defaults = AUTO_TAG_RULES[g];
+      for (const k of NUMERIC_RULE_KEYS) {
+        if (k in groupRules) {
+          const v = groupRules[k];
+          if (typeof v === "number" && Number.isFinite(v) && v >= 1 && v <= 100) {
+            if (v !== defaults[k]) sanitized[k] = Math.floor(v);
+          }
+        }
+      }
+      for (const k of BOOLEAN_RULE_KEYS) {
+        if (k in groupRules) {
+          const v = groupRules[k];
+          if (typeof v === "boolean") {
+            if (v !== defaults[k]) sanitized[k] = v;
+          }
+        }
+      }
+      if (Object.keys(sanitized).length > 0) {
+        nextConfig[g] = { ...nextConfig[g], rules: sanitized };
+      } else if (nextConfig[g]?.rules) {
+        // Submitted matched all defaults → drop the override
+        const { rules: _drop, ...rest } = nextConfig[g];
+        void _drop;
+        if (Object.keys(rest).length === 0) delete nextConfig[g];
+        else nextConfig[g] = rest;
       }
     }
   }

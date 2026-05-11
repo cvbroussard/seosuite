@@ -45,8 +45,10 @@ import {
   AUTO_TAG_RULES,
   findCatalogMatches,
   findKeywordCues,
+  getEffectiveRules,
   type TagGroup,
   type CatalogMatch,
+  type AutoTagRulesOverride,
 } from "@/lib/auto-tag-rules";
 
 function slugify(s: string): string {
@@ -96,7 +98,10 @@ export async function POST(req: NextRequest) {
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
-    const tagGroupConfig = (site.tag_group_config || {}) as Partial<Record<TagGroup, { keyword_cues?: string[] }>>;
+    const tagGroupConfig = (site.tag_group_config || {}) as Partial<Record<TagGroup, { keyword_cues?: string[]; rules?: AutoTagRulesOverride }>>;
+    function rulesFor(group: TagGroup) {
+      return getEffectiveRules(group, tagGroupConfig[group]?.rules);
+    }
 
     // Fetch all 6 catalogs + run NER + suggestTags in parallel.
     // Catalogs: 6 small per-site queries. Promise.all collapses to one
@@ -163,6 +168,7 @@ export async function POST(req: NextRequest) {
         transcript,
         group,
         groupEntities[group],
+        tagGroupConfig[group]?.rules,
       );
     }
 
@@ -173,7 +179,8 @@ export async function POST(req: NextRequest) {
     // for non-brand groups. See keyword_cue_creation memory.
     for (const group of Object.keys(groups) as TagGroup[]) {
       const overrideCues = tagGroupConfig[group]?.keyword_cues;
-      const cues = findKeywordCues(transcript, group, overrideCues);
+      const overrideRules = tagGroupConfig[group]?.rules;
+      const cues = findKeywordCues(transcript, group, overrideCues, overrideRules);
       if (cues.length === 0) continue;
       const matchedNamesLower = new Set(
         groups[group].applied_matches.map((m) => m.name.toLowerCase()),
@@ -202,7 +209,7 @@ export async function POST(req: NextRequest) {
     }
 
     // STEP 2 (NER): Brand new-entity suggestions from world knowledge.
-    if (AUTO_TAG_RULES.brand.allow_suggest_create_new) {
+    if (rulesFor("brand").allow_suggest_create_new) {
       const matchedBrandIds = new Set(
         groups.brand.applied_matches.map((m) => m.entity_id),
       );
@@ -253,7 +260,7 @@ export async function POST(req: NextRequest) {
     // pills in modal; subscriber unchecks before save if any false hits.
     if (source_asset_id) {
       for (const group of Object.keys(groups) as TagGroup[]) {
-        const rules = AUTO_TAG_RULES[group];
+        const rules = rulesFor(group);
         if (!rules.allow_auto_link_existing) continue;
         for (const m of groups[group].applied_matches) {
           try {
