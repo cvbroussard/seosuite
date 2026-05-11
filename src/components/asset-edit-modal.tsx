@@ -481,8 +481,15 @@ export function AssetEditModal({
     }
   }
 
+  // Track the last transcript we ran auto-tag-suggest against. Used to
+  // guard against double-firing when the same transcript reaches us
+  // BOTH eagerly (staged state, pre-commit) AND via onCommitted.
+  const lastProcessedTranscriptRef = useRef<string>("");
+
   const runAutoTagSuggest = useCallback(async (recordingId: string, transcript: string) => {
     if (!transcript || transcript.trim().length < 5) return;
+    if (lastProcessedTranscriptRef.current === transcript) return;
+    lastProcessedTranscriptRef.current = transcript;
     setAutoTagging(true);
     setNerWarnings([]);
     setAutoAppliedTagCount(0);
@@ -1486,6 +1493,24 @@ export function AssetEditModal({
                     {recordings[0].transcript}
                   </div>
                   <div className="mt-1.5 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Manual auto-tag trigger. Fires NER+catalog scan
+                        // on the staged or saved transcript so subscriber
+                        // can review results BEFORE committing the modal.
+                        // Idempotent — same transcript twice is a no-op.
+                        const transcript = audio.previewTranscript || recordings[0]?.transcript || "";
+                        if (transcript.trim().length >= 5) {
+                          void runAutoTagSuggest("", transcript);
+                        }
+                      }}
+                      disabled={autoTagging || (audio.state !== "staged" && !recordings[0]?.transcript)}
+                      className="text-[10px] text-accent underline hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Run auto-tag suggestions on the current transcript. Cheaper than waiting for Save — lets you re-record if you want before spending the AI call."
+                    >
+                      ✨ Suggest tags
+                    </button>
                     <button
                       type="button"
                       onClick={startReplaceTranscript}
