@@ -35,27 +35,41 @@ interface OGMeta {
 }
 
 /**
- * Enrich a brand row through Stages 1, 2, 3. Idempotent — checks
- * `brands.enriched_at` first and bails if already done.
+ * Enrich a brand row through Stages 1, 2, 3.
+ *
+ * Default mode (force=false): idempotent — bails if `enriched_at` is set,
+ * status is 'skipped', or url is already populated. The auto-on-creation
+ * path uses this.
+ *
+ * Force mode (force=true): bypasses all bail-outs. Used by the operator
+ * backfill route to sweep every brand regardless of state. Existing
+ * user-set values (url, description, hero_asset_id) are preserved via
+ * COALESCE — force never overwrites truth, only fills gaps.
  */
-export async function enrichBrand(brandId: string, brandName: string): Promise<void> {
-  // Skip if already enriched. Primary check is the first-class
-  // enriched_at column (migrate-114). enrichment_status string still
-  // honored for explicit 'skipped' / 'failed' states the column can't
-  // express on its own.
+export async function enrichBrand(
+  brandId: string,
+  brandName: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  const { force = false } = opts;
+
   const [current] = await sql`
-    SELECT site_id, enrichment_status, enriched_at, url FROM brands WHERE id = ${brandId}
+    SELECT site_id, enrichment_status, enriched_at, url, hero_asset_id
+    FROM brands WHERE id = ${brandId}
   `;
   if (!current) return;
-  if (current.enriched_at) return; // already enriched at some point
-  if (current.enrichment_status === "skipped") return;
-  if (current.url) {
-    // URL already set (manually) — skip enrichment, mark as such
-    await sql`
-      UPDATE brands SET enrichment_status = 'skipped', enriched_at = NOW()
-      WHERE id = ${brandId}
-    `;
-    return;
+
+  if (!force) {
+    if (current.enriched_at) return;
+    if (current.enrichment_status === "skipped") return;
+    if (current.url) {
+      // URL already set (manually) — skip enrichment, mark as such
+      await sql`
+        UPDATE brands SET enrichment_status = 'skipped', enriched_at = NOW()
+        WHERE id = ${brandId}
+      `;
+      return;
+    }
   }
 
   await sql`
@@ -64,33 +78,44 @@ export async function enrichBrand(brandId: string, brandName: string): Promise<v
   `;
 
   const siteId = current.site_id as string;
+  const existingUrl = (current.url as string | null) || null;
+  const existingHeroId = (current.hero_asset_id as string | null) || null;
 
   try {
     // Stage 1: Claude knowledge lookup
     const claudeResult = await askClaudeAboutBrand(brandName);
 
-    // Stage 2: Web fetch + OG extract (only if Claude returned a URL)
+    // Stage 2: Web fetch + OG extract.
+    // Prefer the brand's existing user-set URL over Claude's URL — the
+    // subscriber's URL is ground truth, Claude's is a guess.
+    const fetchTarget = existingUrl || claudeResult.url;
     let ogMeta: OGMeta = { title: null, description: null, image: null };
-    if (claudeResult.url) {
-      ogMeta = await fetchOGMeta(claudeResult.url);
+    if (fetchTarget) {
+      ogMeta = await fetchOGMeta(fetchTarget);
     }
 
     // Description preference: og:description (real, scraped) > Claude's summary
     const finalDescription = ogMeta.description || claudeResult.description;
 
-    // Stage 3: Logo capture (only if og:image present)
+    // Stage 3: Logo capture. Skip if a hero is already set on the brand
+    // (force mode would otherwise create an orphan media_asset that
+    // COALESCE drops on the way out — wasteful R2 write).
     let heroAssetId: string | null = null;
-    if (ogMeta.image && claudeResult.url) {
-      heroAssetId = await captureLogoAsHeroAsset(siteId, brandId, brandName, claudeResult.url, ogMeta.image);
+    if (ogMeta.image && fetchTarget && !existingHeroId) {
+      heroAssetId = await captureLogoAsHeroAsset(siteId, brandId, brandName, fetchTarget, ogMeta.image);
     }
+
+    // Status: "enriched" if any new useful data landed (claude url,
+    // og description, or logo). "no_match" if nothing came back.
+    const gotNewData = !!(claudeResult.url || ogMeta.description || heroAssetId);
 
     await sql`
       UPDATE brands
       SET
-        url = ${claudeResult.url},
+        url = COALESCE(brands.url, ${claudeResult.url}),
         description = COALESCE(brands.description, ${finalDescription}),
         hero_asset_id = COALESCE(brands.hero_asset_id, ${heroAssetId}),
-        enrichment_status = ${claudeResult.url ? "enriched" : "no_match"},
+        enrichment_status = ${gotNewData ? "enriched" : "no_match"},
         enriched_at = NOW(),
         enrichment_metadata = ${JSON.stringify({
           category: claudeResult.category,
@@ -100,6 +125,7 @@ export async function enrichBrand(brandId: string, brandName: string): Promise<v
           stage_2_og_extracted: !!(ogMeta.description || ogMeta.image),
           stage_3_logo_captured: !!heroAssetId,
           og_title: ogMeta.title,
+          force,
         })}::jsonb
       WHERE id = ${brandId}
     `;
