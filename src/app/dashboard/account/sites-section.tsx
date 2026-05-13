@@ -45,6 +45,25 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
   const [existingAccounts, setExistingAccounts] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  async function reactivate(siteId: string) {
+    setTogglingId(siteId);
+    try {
+      const res = await fetch(`/api/sites/${siteId}/toggle`, { method: "POST" });
+      if (res.ok) {
+        await fetch("/api/auth/refresh-session", { method: "POST" });
+        window.location.reload();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Could not reactivate");
+        setTogglingId(null);
+      }
+    } catch {
+      setError("Request failed");
+      setTogglingId(null);
+    }
+  }
 
   const toCreate = PLATFORMS.filter((p) => !existingAccounts.has(p.id));
   const toLink = PLATFORMS.filter((p) => existingAccounts.has(p.id));
@@ -336,13 +355,13 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
         <p className="text-sm text-muted">No active sites. Add one to get started.</p>
       )}
 
-      {/* Inactive Sites */}
+      {/* Inactive Sites — click to reactivate (toggles sites.is_active) */}
       {inactiveSites.length > 0 && (
-        <div className="mt-4 opacity-60">
+        <div className="mt-4">
           {inactiveSites.map((site) => (
             <div
               key={site.id}
-              className="flex items-baseline justify-between border-b border-border py-2"
+              className="flex items-center justify-between border-b border-border py-2 opacity-60 transition-opacity hover:opacity-100"
             >
               <div>
                 <span className="text-sm font-medium">{site.name}</span>
@@ -350,7 +369,16 @@ export function SitesSection({ initialSites }: { initialSites: SiteInfo[] }) {
                   {site.business_type || "—"} · {site.location || "—"}
                 </span>
               </div>
-              <span className="rounded bg-muted/10 px-2 py-0.5 text-[10px] text-muted">inactive</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-muted/10 px-2 py-0.5 text-[10px] text-muted">inactive</span>
+                <button
+                  onClick={() => reactivate(site.id)}
+                  disabled={togglingId === site.id}
+                  className="rounded border border-accent/40 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  {togglingId === site.id ? "Reactivating..." : "Reactivate"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
