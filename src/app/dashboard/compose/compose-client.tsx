@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ScheduledCountdown } from "@/components/scheduled-countdown";
 
@@ -179,11 +179,16 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Anchor pool load — fires when the Topic step is active and we haven't
-  // loaded yet. Subscriber-facing label is "Topic"; the API returns the
-  // active site's published blog posts + active/complete projects.
+  // Anchor pool load — fires once when the Topic step is first active.
+  // Uses a ref to track "did we attempt the fetch" so we don't loop on
+  // success-with-empty (anchors.length stays 0 → effect re-fires forever
+  // when included in deps). Subscriber-facing label is "Topic"; the API
+  // returns the active site's published blog posts + active/complete
+  // projects + active services.
+  const anchorsFetchedRef = useRef(false);
   useEffect(() => {
-    if (step !== "topic" || anchors.length > 0 || anchorsLoading) return;
+    if (step !== "topic" || anchorsFetchedRef.current) return;
+    anchorsFetchedRef.current = true;
     setAnchorsLoading(true);
     setAnchorsError(null);
     fetch("/api/compose/anchors")
@@ -191,7 +196,7 @@ export function ComposeClient({ siteId: _siteId }: ComposeClientProps) {
       .then((d) => setAnchors(d.anchors || []))
       .catch(() => setAnchorsError("Failed to load topics"))
       .finally(() => setAnchorsLoading(false));
-  }, [step, anchors.length, anchorsLoading]);
+  }, [step]);
 
   // Group templates by platform
   const grouped: Record<string, PostTemplate[]> = {};
