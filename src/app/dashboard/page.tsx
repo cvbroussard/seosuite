@@ -294,7 +294,7 @@ export default async function DashboardOverview() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2>Upcoming Posts</h2>
-          <Link href="/dashboard/calendar" className="text-sm text-accent hover:underline">
+          <Link href="/dashboard/on-deck" className="text-sm text-accent hover:underline">
             View calendar
           </Link>
         </div>
