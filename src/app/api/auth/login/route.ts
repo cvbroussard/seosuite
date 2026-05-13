@@ -60,10 +60,12 @@ export async function POST(req: NextRequest) {
     ORDER BY is_active DESC, created_at ASC
   `;
 
-  // Auto-select on single-site subscriptions: there's no ambiguity, no reason
-  // to make the subscriber click. Multi-site subscribers still pick explicitly
-  // from the dashboard tile or breadcrumb dropdown.
-  const activeSiteId = sites.length === 1 ? (sites[0].id as string) : null;
+  // Auto-select when only ONE active site exists: no ambiguity, no reason
+  // to make the subscriber click. Inactive sites don't count toward the
+  // "single site" check — a subscriber with B² active + EK deactivated
+  // should still get auto-picked into B².
+  const activeOnly = sites.filter((s) => s.is_active !== false);
+  const activeSiteId = activeOnly.length === 1 ? (activeOnly[0].id as string) : null;
 
   // Session payload — no API key stored
   const session = {

@@ -99,14 +99,14 @@ export function PageHeader({ siteName, siteIcon, sites, activeSiteId, children }
             <span className="text-dim">/</span>
             <div className="relative" ref={pickerRef}>
               <button
-                onClick={() => sites.length > 1 && setPickerOpen(!pickerOpen)}
-                className={`flex items-center gap-1.5 font-medium text-foreground ${sites.length > 1 ? "hover:text-accent" : "cursor-default"}`}
+                onClick={() => sites.filter((s) => s.is_active !== false).length > 1 && setPickerOpen(!pickerOpen)}
+                className={`flex items-center gap-1.5 font-medium text-foreground ${sites.filter((s) => s.is_active !== false).length > 1 ? "hover:text-accent" : "cursor-default"}`}
               >
                 {siteIcon && (
                   <img src={siteIcon} alt="" className="h-5 w-5 rounded-sm object-cover" />
                 )}
                 {siteName}
-                {sites.length > 1 && (
+                {sites.filter((s) => s.is_active !== false).length > 1 && (
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${pickerOpen ? "rotate-180" : ""}`}>
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
@@ -115,7 +115,10 @@ export function PageHeader({ siteName, siteIcon, sites, activeSiteId, children }
 
               {pickerOpen && (
                 <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded border border-border bg-surface py-1 shadow-lg">
-                  {sites.map((site) => (
+                  {/* Picker shows ACTIVE sites only — deactivated businesses
+                      are intentionally absent (subscriber wouldn't switch
+                      to a paused business). */}
+                  {sites.filter((s) => s.is_active !== false).map((site) => (
                     <button
                       key={site.id}
                       onClick={() => {

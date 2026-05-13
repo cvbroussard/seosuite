@@ -29,7 +29,12 @@ export default async function DashboardLayout({
   const role = session.role || "owner";
   if (role === "capture") redirect("/login?error=mobile_only");
 
-  const activeSite = session.sites.find((s) => s.id === session.activeSiteId) || session.sites[0];
+  // Prefer active sites — if activeSiteId points to a deactivated site
+  // (e.g. subscriber just deactivated their current business), fall
+  // through to the first active site rather than rendering the inactive
+  // one as the dashboard's working context.
+  const activeSites = session.sites.filter((s) => s.is_active !== false);
+  const activeSite = activeSites.find((s) => s.id === session.activeSiteId) || activeSites[0];
   const siteId = activeSite?.id;
 
   // Fetch site logo for breadcrumb

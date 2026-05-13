@@ -30,7 +30,15 @@ export async function POST() {
     plan: session.plan,
     role: session.role || "owner",
     sites: sites.map((s) => ({ id: s.id, name: s.name, url: s.url, is_active: s.is_active !== false })),
-    activeSiteId: sites.find((s) => s.id === session.activeSiteId) ? session.activeSiteId : sites[0]?.id || null,
+    // Active-aware fallback: if the previous activeSiteId points to an
+    // inactive site (e.g. subscriber just deactivated their current
+    // business), fall through to the first ACTIVE site rather than
+    // keeping the stale inactive one.
+    activeSiteId: (() => {
+      const activeOnly = sites.filter((s) => s.is_active !== false);
+      const current = activeOnly.find((s) => s.id === session.activeSiteId);
+      return current ? session.activeSiteId : (activeOnly[0]?.id || null);
+    })(),
   };
 
   const response = NextResponse.json({ ok: true });
