@@ -313,9 +313,14 @@ export function Sidebar({ userName, sites, activeSiteId, role = "owner", plan = 
           </div>
         )}
 
-        {/* Account nav */}
+        {/* Account nav — hidden entirely for reviewers */}
         <div className="flex flex-col gap-px">
-          {(isOwner ? ACCOUNT_NAV : ACCOUNT_NAV.filter(i => !OWNER_ONLY_ACCOUNT_PATHS.has(i.path))).map((item) => {
+          {(isReviewer
+            ? []
+            : isOwner
+              ? ACCOUNT_NAV
+              : ACCOUNT_NAV.filter(i => !OWNER_ONLY_ACCOUNT_PATHS.has(i.path))
+          ).map((item) => {
             const href = prefix + item.path;
             const active = pathname === href || pathname === href + "/";
             return (
