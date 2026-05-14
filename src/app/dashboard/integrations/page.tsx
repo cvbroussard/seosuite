@@ -68,12 +68,21 @@ export default async function AccountsPage() {
     }
   }
 
-  // 3. Pending assignment: subscriber has assets but this site has none assigned
+  // 3. Pending assignment: subscriber has assets but THIS site has none
+  // assigned. Mirror the platform-status API filter — exclude assets bound
+  // to other sites in the subscription so the tile doesn't show
+  // pending_assignment when the only available asset is already taken
+  // by a sibling site (e.g., EK's IG when viewing B²'s integrations).
   const available = await sql`
     SELECT pa.platform, COUNT(*)::int AS count
     FROM platform_assets pa
     JOIN social_accounts sa ON sa.id = pa.social_account_id
     WHERE sa.subscription_id = ${session.subscriptionId}
+      AND NOT EXISTS (
+        SELECT 1 FROM site_platform_assets spa_other
+        WHERE spa_other.platform_asset_id = pa.id
+          AND spa_other.site_id != ${activeSiteId}
+      )
     GROUP BY pa.platform
   `;
   for (const row of available) {
