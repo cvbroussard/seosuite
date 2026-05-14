@@ -122,6 +122,7 @@ interface AssetEditModalProps {
     serviceIds?: string[],
     branchIds?: string[],
     serviceAreaIds?: string[],
+    sceneTypes?: string[],
   ) => void;
   onDeleted?: () => void;
   onBrandCreated?: (brand: Brand) => void;
@@ -1058,7 +1059,7 @@ export function AssetEditModal({
       setSavedServiceAreaIds(serviceAreaIds);
       setSavedTags(tags);
       setSavedSceneTypesArr(sceneTypesArr);
-      onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds);
+      onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds, sceneTypesArr);
       return true;
     }
 
@@ -1083,7 +1084,7 @@ export function AssetEditModal({
     setSavedServiceAreaIds(serviceAreaIds);
     setSavedTags(tags);
     setSavedSceneTypesArr(sceneTypesArr);
-    onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds);
+    onSaved(note, pillar, tags, brandIds, projectIds, personaIds, serviceIds, branchIds, serviceAreaIds, sceneTypesArr);
     return true;
   }
 

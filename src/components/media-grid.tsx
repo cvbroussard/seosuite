@@ -125,7 +125,7 @@ export function MediaGrid({
   const [liveBranchMap, setLiveBranchMap] = useState(assetBranchMap);
   const [liveServiceAreaMap, setLiveServiceAreaMap] = useState(assetServiceAreaMap);
 
-  function handleSaved(note: string, _pillar: string, tags: string[], brandIds?: string[], projectIds?: string[], personaIds?: string[], serviceIds?: string[], branchIds?: string[], serviceAreaIds?: string[]) {
+  function handleSaved(note: string, _pillar: string, tags: string[], brandIds?: string[], projectIds?: string[], personaIds?: string[], serviceIds?: string[], branchIds?: string[], serviceAreaIds?: string[], sceneTypes?: string[]) {
     if (!editing) return;
     // pillar param retained in signature for back-compat with the modal
     // callback contract, but ignored here — pillars derive from tags now
@@ -133,7 +133,12 @@ export function MediaGrid({
     setAssets((prev) =>
       prev.map((a) =>
         a.id === editing.id
-          ? { ...a, context_note: note, content_tags: tags.length > 0 ? tags : a.content_tags }
+          ? {
+              ...a,
+              context_note: note,
+              content_tags: tags.length > 0 ? tags : a.content_tags,
+              scene_types: sceneTypes !== undefined ? sceneTypes : a.scene_types,
+            }
           : a
       )
     );
