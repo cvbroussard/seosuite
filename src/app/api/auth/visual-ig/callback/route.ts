@@ -5,7 +5,6 @@ import {
   exchangeIgCodeForToken,
   exchangeIgShortForLong,
   getIgUserInfo,
-  getGrantedScopes,
   missingRequiredScopes,
   IG_REQUIRED_SCOPES,
 } from "@/lib/meta-ig";
@@ -56,14 +55,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 1. Short-lived token exchange
-    const { shortToken } = await exchangeIgCodeForToken(code);
+    // 1. Short-lived token exchange — also captures granted permissions.
+    // The IG Login API returns permissions in the token-exchange response;
+    // there is no /me/permissions endpoint on graph.instagram.com.
+    const { shortToken, permissions: grantedScopes } = await exchangeIgCodeForToken(code);
 
     // 2. Long-lived (60-day) exchange
     const { accessToken, expiresIn } = await exchangeIgShortForLong(shortToken);
 
     // 3. Partial-grant policy: verify all required scopes were granted
-    const grantedScopes = await getGrantedScopes(accessToken);
     const missing = missingRequiredScopes(grantedScopes);
     if (missing.length > 0) {
       const detail = `Missing required permissions: ${missing.join(", ")}. Reconnect with all toggles enabled.`;

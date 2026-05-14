@@ -50,11 +50,15 @@ export function getInstagramAuthUrl(state: string): string {
 
 /**
  * Exchange the authorization code for a short-lived IG token (1h).
- * Returns the IG user ID alongside (it's bundled in the response).
+ * Returns the IG user ID and granted permissions alongside the token —
+ * both are bundled in the response. Permissions come from THIS endpoint,
+ * not from any /me/permissions call (that endpoint is FB-Graph-only and
+ * does not exist on graph.instagram.com).
  */
 export async function exchangeIgCodeForToken(code: string): Promise<{
   shortToken: string;
   igUserId: string;
+  permissions: string[];
 }> {
   const body = new URLSearchParams({
     client_id: process.env.META_VISUAL_APP_ID!,
@@ -68,9 +72,18 @@ export async function exchangeIgCodeForToken(code: string): Promise<{
   if (!res.ok) {
     throw new Error(`IG token exchange failed: ${JSON.stringify(data.error || data)}`);
   }
+  // Meta returns `permissions` either as a JSON array or comma-separated
+  // string depending on API version — accept both shapes defensively.
+  const rawPerms = data.permissions;
+  const permissions: string[] = Array.isArray(rawPerms)
+    ? rawPerms.map(String)
+    : typeof rawPerms === "string"
+      ? rawPerms.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : [];
   return {
     shortToken: String(data.access_token),
     igUserId: String(data.user_id),
+    permissions,
   };
 }
 
