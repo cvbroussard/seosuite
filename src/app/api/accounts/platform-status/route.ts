@@ -43,6 +43,11 @@ export async function GET(req: NextRequest) {
     // the same query used in the pending_assignment branch — subscribers in
     // either state see the same selectable list (one is the initial pick,
     // the other is a re-pick).
+    //
+    // Exclude assets bound to OTHER sites in this subscription — prevents
+    // accidental cross-site binding (e.g., picking EK's IG while on B²'s
+    // integrations page). To re-bind an asset that's currently with another
+    // site, the subscriber must disconnect there first.
     const allAssets = await sql`
       SELECT pa.id, pa.asset_id, pa.asset_name,
              sa.account_name AS connected_user_name,
@@ -51,6 +56,11 @@ export async function GET(req: NextRequest) {
       JOIN social_accounts sa ON sa.id = pa.social_account_id
       WHERE pa.platform = ${platform}
         AND sa.subscription_id = ${session.subscriptionId}
+        AND NOT EXISTS (
+          SELECT 1 FROM site_platform_assets spa_other
+          WHERE spa_other.platform_asset_id = pa.id
+            AND spa_other.site_id != ${siteId}
+        )
       ORDER BY pa.asset_name
     `;
     // For now we don't track per-asset published/scheduled counts in the new model
@@ -103,13 +113,21 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 3. Pending assignment: check if subscriber has any platform_assets for this platform
+  // 3. Pending assignment: check if subscriber has any platform_assets for this
+  // platform that are NOT already bound to another site in this subscription.
+  // If every existing asset is already taken by other sites, this site is
+  // effectively `not_connected` — there's nothing legitimate to surface.
   const [pendingAsset] = await sql`
     SELECT pa.id, pa.asset_name
     FROM platform_assets pa
     JOIN social_accounts sa ON sa.id = pa.social_account_id
     WHERE pa.platform = ${platform}
       AND sa.subscription_id = ${session.subscriptionId}
+      AND NOT EXISTS (
+        SELECT 1 FROM site_platform_assets spa_other
+        WHERE spa_other.platform_asset_id = pa.id
+          AND spa_other.site_id != ${siteId}
+      )
     LIMIT 1
   `;
 
@@ -123,6 +141,11 @@ export async function GET(req: NextRequest) {
       JOIN social_accounts sa ON sa.id = pa.social_account_id
       WHERE pa.platform = ${platform}
         AND sa.subscription_id = ${session.subscriptionId}
+        AND NOT EXISTS (
+          SELECT 1 FROM site_platform_assets spa_other
+          WHERE spa_other.platform_asset_id = pa.id
+            AND spa_other.site_id != ${siteId}
+        )
       ORDER BY pa.asset_name
     `;
     // The OAuth grant we'd revoke if the subscriber disconnects from this
