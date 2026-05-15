@@ -463,6 +463,9 @@ export function AssetEditModal({
   // tell the system ran. Null = never ran this session.
   const [lastSuggestRunAt, setLastSuggestRunAt] = useState<number | null>(null);
   const [autoAppliedTagCount, setAutoAppliedTagCount] = useState(0);
+  // Track WHICH tag IDs were auto-applied so the result card can render
+  // them as labeled pills (not just a count). Resets per auto-tag run.
+  const [autoAppliedTagIds, setAutoAppliedTagIds] = useState<string[]>([]);
   const [nerWarnings, setNerWarnings] = useState<string[]>([]);
 
   function startReplaceTranscript() {
@@ -525,6 +528,7 @@ export function AssetEditModal({
       // Story Angles: separate layer (editorial framing per-post). Apply
       // suggested pillar tags immediately to working Story Angle state.
       let appliedCount = 0;
+      let appliedIds: string[] = [];
       const tagSuggestion = data.story_angles || data.content_tags || {};
       if (tagSuggestion.tagIds?.length > 0) {
         const allValidTagIds = new Set(pillarConfig.flatMap((p) => p.tags.map((t) => t.id)));
@@ -535,10 +539,15 @@ export function AssetEditModal({
           const before = new Set(prev);
           const merged = Array.from(new Set([...prev, ...validNewTags]));
           appliedCount = merged.length - before.size;
+          // Capture the IDs that were freshly applied (excludes tags
+          // that were already on the asset before this run) so the
+          // result card can render them as labeled pills.
+          appliedIds = validNewTags.filter((id) => !before.has(id));
           return merged;
         });
       }
       setAutoAppliedTagCount(appliedCount);
+      setAutoAppliedTagIds(appliedIds);
 
       const groupsResp = (data.groups || {}) as Partial<InspectorState>;
       const groups: InspectorState = {
@@ -1334,6 +1343,40 @@ export function AssetEditModal({
                     ⚠ Heads up — review these auto-matches before saving (uncheck any that look wrong): {nerWarnings.join(" · ")}
                   </div>
                 )}
+                {/* Story Angle pills — same shape as the per-group sections
+                    below, but rendered separately because story angles flow
+                    into content_tags (not asset_* join tables). Surfaces
+                    WHICH tags were applied, not just the count. */}
+                {!autoTagging && autoAppliedTagIds.length > 0 && (() => {
+                  const labelByTagId = new Map(
+                    pillarConfig.flatMap((p) => p.tags.map((t) => [t.id, t.label] as const))
+                  );
+                  return (
+                    <div className="mb-2">
+                      <div className="mb-0.5 text-[10px] uppercase tracking-wide text-muted">Story Angles</div>
+                      <div className="flex flex-wrap items-start gap-1.5">
+                        {autoAppliedTagIds.map((tagId) => {
+                          const label = labelByTagId.get(tagId) || tagId;
+                          const stillSelected = tags.includes(tagId);
+                          return (
+                            <button
+                              key={`story:${tagId}`}
+                              type="button"
+                              onClick={() => setTags((prev) => stillSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId])}
+                              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                                stillSelected
+                                  ? "bg-accent/20 text-accent ring-1 ring-accent/40"
+                                  : "bg-surface-hover text-muted hover:text-foreground"
+                              }`}
+                            >
+                              ✓ {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {!autoTagging && inspectorState && groupConfig.map((g) => {
                   const groupData = inspectorState[g.key];
                   if (!groupData) return null;
