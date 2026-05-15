@@ -116,17 +116,26 @@ export async function POST(req: NextRequest) {
     // the poster INLINE here. One-time cost per legacy video — the poster
     // persists on the asset row, future calls use it directly.
     let assetImageUrl: string | undefined;
+    let assetGpsLat: number | null = null;
+    let assetGpsLng: number | null = null;
     if (source_asset_id) {
       const [assetRow] = await sql`
         SELECT
           ma.storage_url,
           ma.media_type,
           ma.poster_asset_id,
+          ma.gps_lat,
+          ma.gps_lng,
           poster.storage_url AS poster_url
         FROM media_assets ma
         LEFT JOIN media_assets poster ON poster.id = ma.poster_asset_id
         WHERE ma.id = ${source_asset_id}
       `;
+      // Capture GPS for viewport-based service area auto-matching below.
+      if (assetRow) {
+        assetGpsLat = assetRow.gps_lat as number | null;
+        assetGpsLng = assetRow.gps_lng as number | null;
+      }
       if (assetRow) {
         const mediaType = (assetRow.media_type as string | null) || "";
         if (mediaType.startsWith("image/")) {
@@ -238,6 +247,66 @@ export async function POST(req: NextRequest) {
         groupEntities[group],
         tagGroupConfig[group]?.rules,
       );
+    }
+
+    // STEP 2.5: GPS-based service area matching (Phase 2B, 2026-05-15).
+    // Asset's EXIF GPS lat/lng → in-memory viewport containment check
+    // against site's service area catalog. Cached viewports mean zero
+    // API calls per match. Adds matches alongside transcript-derived
+    // ones with provenance="gps" for the UI to render 📍 badge.
+    if (assetGpsLat !== null && assetGpsLng !== null) {
+      try {
+        const { matchAssetByViewport } = await import("@/lib/reverse-geocode");
+        const viewportCatalog = await sql`
+          SELECT
+            sa.id AS overlay_id,
+            c.id AS canonical_id,
+            c.name,
+            c.place_id,
+            c.kind,
+            c.viewport
+          FROM site_service_areas sa
+          JOIN service_areas_canonical c ON c.id = sa.service_area_canonical_id
+          WHERE sa.site_id = ${site_id}
+            AND sa.is_active = TRUE
+            AND c.viewport IS NOT NULL
+        `;
+        const gpsMatches = matchAssetByViewport(
+          assetGpsLat,
+          assetGpsLng,
+          viewportCatalog as Array<{
+            overlay_id: string;
+            canonical_id: string;
+            name: string;
+            place_id: string | null;
+            kind: string;
+            viewport: { low: { latitude: number; longitude: number }; high: { latitude: number; longitude: number } } | null;
+          }>,
+        );
+        // Merge GPS matches into service_area applied_matches. Dedupe
+        // against transcript-derived matches by overlay_id (entity_id) —
+        // if both signals point to the same service area, we keep one
+        // entry (transcript-derived takes precedence in display since
+        // it's first in the array).
+        const existingIds = new Set(
+          groups.service_area.applied_matches.map((m) => m.entity_id),
+        );
+        for (const m of gpsMatches) {
+          if (existingIds.has(m.overlayId)) continue;
+          groups.service_area.applied_matches.push({
+            entity_id: m.overlayId,
+            name: m.name,
+            match_text: "📍 GPS",
+            match_start: -1,
+            context_excerpt: `Asset GPS (${assetGpsLat.toFixed(4)}, ${assetGpsLng.toFixed(4)}) falls within ${m.name}'s viewport`,
+          });
+        }
+      } catch (err) {
+        console.warn(
+          "GPS-based service area matching failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
 
     // STEP 3: Keyword cue scan — proposes new entities for ANY group

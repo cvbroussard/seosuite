@@ -45,7 +45,7 @@ async function fetchDetails(placeId) {
       {
         headers: {
           "X-Goog-Api-Key": KEY,
-          "X-Goog-FieldMask": "types,displayName",
+          "X-Goog-FieldMask": "types,displayName,viewport",
         },
       },
     );
@@ -58,6 +58,7 @@ async function fetchDetails(placeId) {
     return {
       types: data.types || [],
       displayName: data.displayName?.text || "",
+      viewport: data.viewport || null,
     };
   } catch (err) {
     console.warn(`  ! Fetch error for ${placeId}: ${err.message}`);
@@ -76,7 +77,7 @@ async function backfill() {
   console.log("Backfilling service_areas_canonical.kind from Place ID details...\n");
 
   const rows = await sql`
-    SELECT id, name, kind, place_id
+    SELECT id, name, kind, place_id, viewport
     FROM service_areas_canonical
     WHERE place_id IS NOT NULL AND place_id != ''
     ORDER BY name
@@ -84,7 +85,8 @@ async function backfill() {
 
   console.log(`Found ${rows.length} rows with place_id\n`);
 
-  let updated = 0;
+  let kindUpdates = 0;
+  let viewportUpdates = 0;
   let unchanged = 0;
   let errors = 0;
 
@@ -96,19 +98,31 @@ async function backfill() {
       continue;
     }
     const newKind = deriveKind(details.types, details.displayName);
-    if (newKind === row.kind) {
-      unchanged++;
-      console.log(`  = ${row.name}  kind=${row.kind} (unchanged) types=${details.types.join(",")}`);
-    } else {
+    const kindChanged = newKind !== row.kind;
+    const viewportMissing = !row.viewport && details.viewport;
+
+    if (kindChanged && viewportMissing) {
+      await sql`UPDATE service_areas_canonical SET kind = ${newKind}, viewport = ${JSON.stringify(details.viewport)}::jsonb WHERE id = ${row.id}`;
+      kindUpdates++;
+      viewportUpdates++;
+      console.log(`  ✓ ${row.name}  kind: ${row.kind} → ${newKind} + viewport set`);
+    } else if (kindChanged) {
       await sql`UPDATE service_areas_canonical SET kind = ${newKind} WHERE id = ${row.id}`;
-      updated++;
-      console.log(`  ✓ ${row.name}  kind: ${row.kind} → ${newKind}  types=${details.types.join(",")}`);
+      kindUpdates++;
+      console.log(`  ✓ ${row.name}  kind: ${row.kind} → ${newKind}`);
+    } else if (viewportMissing) {
+      await sql`UPDATE service_areas_canonical SET viewport = ${JSON.stringify(details.viewport)}::jsonb WHERE id = ${row.id}`;
+      viewportUpdates++;
+      console.log(`  ✓ ${row.name}  viewport set (kind unchanged: ${row.kind})`);
+    } else {
+      unchanged++;
+      console.log(`  = ${row.name}  kind=${row.kind} viewport=present (unchanged)`);
     }
     // Light rate limiting — Places API has per-minute caps in free tier
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  console.log(`\n${updated} updated, ${unchanged} unchanged, ${errors} errors`);
+  console.log(`\n${kindUpdates} kind updated, ${viewportUpdates} viewport updated, ${unchanged} unchanged, ${errors} errors`);
 }
 
 backfill().catch((err) => {

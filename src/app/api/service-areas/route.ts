@@ -77,14 +77,21 @@ export async function POST(req: NextRequest) {
   // Per 2026-05-15 architecture: Place ID IS the canonical geographic
   // identity; kind is a derived label, not a subscriber input.
   let k = kind || "city";
+  let viewport: object | null = null;
   if (place_id) {
     try {
       const { fetchPlaceDetails, deriveKindFromTypes } = await import("@/lib/reverse-geocode");
       const details = await fetchPlaceDetails(place_id);
-      if (details && details.types.length > 0) {
-        k = deriveKindFromTypes(details.types, details.displayName);
+      if (details) {
+        if (details.types.length > 0) {
+          k = deriveKindFromTypes(details.types, details.displayName);
+        }
+        // Cache the viewport for in-memory containment matching at
+        // asset auto-tag time. Geographic boundaries rarely change so
+        // this cache is essentially permanent.
+        viewport = details.viewport;
       }
-    } catch { /* fall back to submitted kind */ }
+    } catch { /* fall back to submitted kind, no viewport */ }
   }
   const validKinds = ["city", "county", "zip", "region", "state", "metro", "neighborhood"];
   if (!validKinds.includes(k)) {
@@ -109,10 +116,19 @@ export async function POST(req: NextRequest) {
   const [existing] = await sql`SELECT id FROM service_areas_canonical WHERE slug = ${slug}`;
   if (existing) {
     canonicalId = existing.id as string;
+    // If existing canonical lacks a viewport but we just fetched one,
+    // backfill it. Common for entries created before viewport caching.
+    if (viewport) {
+      await sql`
+        UPDATE service_areas_canonical
+        SET viewport = COALESCE(viewport, ${JSON.stringify(viewport)}::jsonb)
+        WHERE id = ${canonicalId}
+      `;
+    }
   } else {
     const [created] = await sql`
-      INSERT INTO service_areas_canonical (name, slug, kind, parent_region_id, place_id)
-      VALUES (${name.trim()}, ${slug}, ${k}, ${parent_region_id || null}, ${place_id || null})
+      INSERT INTO service_areas_canonical (name, slug, kind, parent_region_id, place_id, viewport)
+      VALUES (${name.trim()}, ${slug}, ${k}, ${parent_region_id || null}, ${place_id || null}, ${viewport ? JSON.stringify(viewport) : null}::jsonb)
       RETURNING id
     `;
     canonicalId = created.id as string;

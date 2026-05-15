@@ -235,15 +235,27 @@ export async function fetchPlaceTypes(placeId: string): Promise<string[]> {
   return details?.types || [];
 }
 
+export interface ViewportBox {
+  low: { latitude: number; longitude: number };
+  high: { latitude: number; longitude: number };
+}
+
 export interface PlaceTypeDetails {
   types: string[];
   displayName: string;
+  /** Google Places API viewport (bounding box). Cached at service area
+   * creation time and used for in-memory containment matching against
+   * asset GPS coords. */
+  viewport: ViewportBox | null;
 }
 
 /**
- * Fetch types + display name in one Place Details call. Used by kind
- * derivation which needs both signals to disambiguate cases like
- * "colloquial_area" (could be neighborhood OR region — name decides).
+ * Fetch types + display name + viewport in one Place Details call.
+ * Powers two architectural pieces:
+ *   1. kind derivation (types + displayName disambiguate colloquial_area)
+ *   2. viewport-based asset matching (cache once, match in-memory forever)
+ *
+ * Single API call captures both — efficient and atomic.
  */
 export async function fetchPlaceDetails(placeId: string): Promise<PlaceTypeDetails | null> {
   const key = GOOGLE_API_KEY();
@@ -256,7 +268,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceTypeDetai
         method: "GET",
         headers: {
           "X-Goog-Api-Key": key,
-          "X-Goog-FieldMask": "types,displayName",
+          "X-Goog-FieldMask": "types,displayName,viewport",
         },
         signal: AbortSignal.timeout(8000),
       },
@@ -265,12 +277,68 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceTypeDetai
     const data = await res.json();
     return {
       types: (data.types as string[]) || [],
-      // displayName is a localized object: { text: "...", languageCode: "..." }
       displayName: (data.displayName?.text as string) || "",
+      viewport: (data.viewport as ViewportBox) || null,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Viewport-based asset matching. Given an asset's GPS coordinates and a
+ * site's service area catalog (with viewports), returns matching catalog
+ * entries by in-memory bounding-box containment check.
+ *
+ * Zero API calls. Microseconds per check. The viewport cache (populated
+ * one-time at service area creation) is the only API surface this
+ * architecture touches.
+ *
+ * Match rule: catalog entry matches if asset's lat/lng falls within
+ * its viewport box. Entries without viewports are skipped (legacy
+ * service areas pre-viewport-cache; can be backfilled).
+ */
+export interface ViewportMatch {
+  overlayId: string;
+  canonicalId: string;
+  name: string;
+  catalogPlaceId: string | null;
+  kind: string;
+}
+
+export function matchAssetByViewport(
+  assetLat: number,
+  assetLng: number,
+  catalog: Array<{
+    overlay_id: string;
+    canonical_id: string;
+    name: string;
+    place_id: string | null;
+    kind: string;
+    viewport: ViewportBox | null;
+  }>,
+): ViewportMatch[] {
+  if (!isFinite(assetLat) || !isFinite(assetLng)) return [];
+  const matches: ViewportMatch[] = [];
+  for (const entry of catalog) {
+    const v = entry.viewport;
+    if (!v || !v.low || !v.high) continue;
+    if (
+      assetLat >= v.low.latitude &&
+      assetLat <= v.high.latitude &&
+      assetLng >= v.low.longitude &&
+      assetLng <= v.high.longitude
+    ) {
+      matches.push({
+        overlayId: entry.overlay_id,
+        canonicalId: entry.canonical_id,
+        name: entry.name,
+        catalogPlaceId: entry.place_id,
+        kind: entry.kind,
+      });
+    }
+  }
+  return matches;
 }
 
 export function matchHierarchyToServiceAreas(
