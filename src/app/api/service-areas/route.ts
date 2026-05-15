@@ -79,10 +79,10 @@ export async function POST(req: NextRequest) {
   let k = kind || "city";
   if (place_id) {
     try {
-      const { fetchPlaceTypes, deriveKindFromTypes } = await import("@/lib/reverse-geocode");
-      const types = await fetchPlaceTypes(place_id);
-      if (types.length > 0) {
-        k = deriveKindFromTypes(types);
+      const { fetchPlaceDetails, deriveKindFromTypes } = await import("@/lib/reverse-geocode");
+      const details = await fetchPlaceDetails(place_id);
+      if (details && details.types.length > 0) {
+        k = deriveKindFromTypes(details.types, details.displayName);
       }
     } catch { /* fall back to submitted kind */ }
   }

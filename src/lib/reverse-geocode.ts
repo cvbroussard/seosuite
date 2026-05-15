@@ -168,46 +168,108 @@ export interface ServiceAreaMatch {
 }
 
 /**
- * Derive a service-area kind value from Google place types.
+ * Derive a service-area kind value from Google place types + display name.
  *
  * The legacy schema stores `kind` (city/county/zip/region/state/metro/
  * neighborhood) as a manual subscriber selection. With Place IDs as the
  * canonical geographic identity, kind becomes derivable from the Place's
  * types — no need to ask the subscriber to redundantly classify.
  *
- * Mapping ordered most-specific first (returns first match):
+ * For unambiguous types (locality, administrative_area_level_*, etc.) the
+ * type alone determines the kind. For ambiguous types like `colloquial_area`
+ * (used for both neighborhoods like "Squirrel Hill" AND informal regions
+ * like "Northwestern Pennsylvania") OR bare `political` (used for metro
+ * areas like "Pittsburgh Metropolitan Area"), the displayName provides
+ * disambiguation hints.
  */
-export function deriveKindFromTypes(types: string[]): string {
+export function deriveKindFromTypes(types: string[], displayName?: string): string {
   const set = new Set(types);
+
+  // Unambiguous types — type alone determines kind:
   if (set.has("neighborhood") || set.has("sublocality") || set.has("sublocality_level_1")) return "neighborhood";
   if (set.has("postal_code")) return "zip";
   if (set.has("locality") || set.has("administrative_area_level_3")) return "city";
   if (set.has("administrative_area_level_2")) return "county";
   if (set.has("administrative_area_level_1")) return "state";
-  if (set.has("country")) return "region"; // closest existing kind
+  if (set.has("country")) return "region";
+
+  // Ambiguous cases — apply name-based heuristics:
+  const name = (displayName || "").toLowerCase();
+
+  if (set.has("colloquial_area")) {
+    // colloquial_area covers BOTH neighborhoods and informal regions.
+    // Heuristic: regional descriptors (directional + state name + region
+    // qualifiers) → region; otherwise → neighborhood. Catches forms like
+    // "Northwestern Pennsylvania", "Greater Boston", "Bay Area".
+    const regionPatterns = /\b(north|south|east|west|northern|southern|eastern|western|northwestern|northeastern|southwestern|southeastern|central|greater|tri-state|valley|county|region|area|coast)\b/;
+    if (regionPatterns.test(name)) {
+      return "region";
+    }
+    return "neighborhood";
+  }
+
+  if (/\b(metropolitan|metro)\b/.test(name)) return "metro";
+  if (/\btownship\b/.test(name)) return "city";
+
+  // Bare political (no specific type) — last-resort fallback.
+  // Most often metro/region for places like "Pittsburgh Metropolitan Area".
+  if (set.has("political")) return "metro";
+
   return "city"; // safe fallback
 }
 
 /**
- * Fetch the Google Places types for a Place ID via Place Details API.
+ * Fetch the Google Places types for a Place ID via Places API (New).
  * Used to derive `kind` server-side from Place ID instead of requiring
  * the subscriber to pick it manually. Returns empty array on any failure
  * (caller should fall back to the legacy kind value).
+ *
+ * NOTE: Uses Places API (New) — the legacy `maps/api/place/details/json`
+ * endpoint is no longer enabled on the Google project (caught
+ * 2026-05-15 with REQUEST_DENIED "calling a legacy API"). The new
+ * endpoint format: GET /v1/places/{placeId} with X-Goog-Api-Key +
+ * X-Goog-FieldMask headers, response uses camelCase fields.
  */
 export async function fetchPlaceTypes(placeId: string): Promise<string[]> {
+  const details = await fetchPlaceDetails(placeId);
+  return details?.types || [];
+}
+
+export interface PlaceTypeDetails {
+  types: string[];
+  displayName: string;
+}
+
+/**
+ * Fetch types + display name in one Place Details call. Used by kind
+ * derivation which needs both signals to disambiguate cases like
+ * "colloquial_area" (could be neighborhood OR region — name decides).
+ */
+export async function fetchPlaceDetails(placeId: string): Promise<PlaceTypeDetails | null> {
   const key = GOOGLE_API_KEY();
-  if (!key || !placeId) return [];
+  if (!key || !placeId) return null;
+  if (placeId.startsWith("manual_")) return null;
   try {
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=types&key=${key}`,
-      { signal: AbortSignal.timeout(8000) },
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+      {
+        method: "GET",
+        headers: {
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask": "types,displayName",
+        },
+        signal: AbortSignal.timeout(8000),
+      },
     );
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const data = await res.json();
-    if (data.status !== "OK") return [];
-    return (data.result?.types as string[]) || [];
+    return {
+      types: (data.types as string[]) || [],
+      // displayName is a localized object: { text: "...", languageCode: "..." }
+      displayName: (data.displayName?.text as string) || "",
+    };
   } catch {
-    return [];
+    return null;
   }
 }
 

@@ -1358,9 +1358,27 @@ export function TaggingManager({
 
   function renderServiceAreaList() {
     if (serviceAreas.length === 0) return <EmptyState label={currentLabel} />;
+    // Sort: ancestry-descending (broadest → narrowest) then alphabetical.
+    // Reading order matches an address: state at top, neighborhood at
+    // bottom. Subscriber sees the umbrella relationships at a glance.
+    const KIND_PRIORITY: Record<string, number> = {
+      region: 1,
+      state: 2,
+      metro: 3,
+      county: 4,
+      city: 5,
+      zip: 6,
+      neighborhood: 7,
+    };
+    const sortedServiceAreas = [...serviceAreas].sort((a, b) => {
+      const pa = KIND_PRIORITY[a.kind] ?? 99;
+      const pb = KIND_PRIORITY[b.kind] ?? 99;
+      if (pa !== pb) return pa - pb;
+      return a.name.localeCompare(b.name);
+    });
     return (
       <div className="space-y-1">
-        {serviceAreas.map((sa) => (
+        {sortedServiceAreas.map((sa) => (
           <div key={sa.overlay_id} className={`border-b border-border py-3 last:border-0 ${editing === sa.overlay_id ? "" : "flex items-center gap-4"}`}>
             {editing === sa.overlay_id ? (
               <div className="flex-1 space-y-2">
