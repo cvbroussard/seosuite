@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { PlatformIcon } from "@/components/platform-icons";
 
@@ -342,6 +342,8 @@ function ServiceAreaInput({ onAdd }: { onAdd: (place: { placeId: string; placeNa
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<{ placeId: string; placeName: string }>>([]);
   const [searching, setSearching] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   async function search(q: string) {
     setQuery(q);
@@ -357,8 +359,20 @@ function ServiceAreaInput({ onAdd }: { onAdd: (place: { placeId: string; placeNa
     setSearching(false);
   }
 
+  // Flip the dropdown above the input if there isn't room below in the
+  // viewport. Service Areas section often sits near the bottom of the
+  // GBP profile page so the default below-input dropdown gets clipped.
+  useEffect(() => {
+    if (results.length === 0 || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // Dropdown is max-h-40 (160px); add buffer for visibility/spacing.
+    setDropUp(spaceBelow < 200 && spaceAbove > spaceBelow);
+  }, [results]);
+
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <input
         value={query}
         onChange={(e) => search(e.target.value)}
@@ -367,7 +381,7 @@ function ServiceAreaInput({ onAdd }: { onAdd: (place: { placeId: string; placeNa
       />
       {searching && <p className="mt-1 text-[9px] text-muted">Searching...</p>}
       {results.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full rounded border border-border bg-surface shadow-lg max-h-40 overflow-y-auto">
+        <div className={`absolute z-10 w-full rounded border border-border bg-surface shadow-lg max-h-40 overflow-y-auto ${dropUp ? "bottom-full mb-1" : "mt-1"}`}>
           {results.map((r) => (
             <button
               key={r.placeId}
