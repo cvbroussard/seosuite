@@ -372,45 +372,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // AUTO-LINK existing matches to asset_*_join across all 6 groups.
-    // Subscriber's authorization of entity existence + transcript mention
-    // = implicit asset-link confirmation. Server inserts now; pre-checked
-    // pills in modal; subscriber unchecks before save if any false hits.
-    if (source_asset_id) {
-      for (const group of Object.keys(groups) as TagGroup[]) {
-        const rules = rulesFor(group);
-        if (!rules.allow_auto_link_existing) continue;
-        for (const m of groups[group].applied_matches) {
-          try {
-            switch (group) {
-              case "brand":
-                await sql`INSERT INTO asset_brands (asset_id, brand_id) VALUES (${source_asset_id}, ${m.entity_id}) ON CONFLICT DO NOTHING`;
-                break;
-              case "service":
-                await sql`INSERT INTO asset_services (asset_id, service_id) VALUES (${source_asset_id}, ${m.entity_id}) ON CONFLICT DO NOTHING`;
-                break;
-              case "project":
-                await sql`INSERT INTO asset_projects (asset_id, project_id) VALUES (${source_asset_id}, ${m.entity_id}) ON CONFLICT DO NOTHING`;
-                break;
-              case "persona":
-                await sql`INSERT INTO asset_personas (asset_id, persona_id) VALUES (${source_asset_id}, ${m.entity_id}) ON CONFLICT DO NOTHING`;
-                break;
-              case "branch":
-                await sql`INSERT INTO asset_branches (asset_id, branch_id) VALUES (${source_asset_id}, ${m.entity_id}) ON CONFLICT DO NOTHING`;
-                break;
-              case "service_area":
-                await sql`INSERT INTO asset_service_areas (asset_id, site_service_area_id) VALUES (${source_asset_id}, ${m.entity_id}) ON CONFLICT DO NOTHING`;
-                break;
-            }
-          } catch (err) {
-            console.warn(
-              `Auto-link ${group} ${m.entity_id} to asset ${source_asset_id} failed:`,
-              err,
-            );
-          }
-        }
-      }
-    }
+    // No-persist-before-save invariant (LOCKED 2026-05-15):
+    // Auto-tag-suggest is now READ-ONLY. It returns matches as suggestions
+    // for the client to display. The client merges suggested IDs into
+    // working state (preselected pills); the standard doSave flow
+    // persists them via the asset PATCH only when subscriber actually
+    // clicks Save. Cancel/close discards the working state — DB unchanged.
+    //
+    // The previous eager-INSERT block violated the locked replace policy
+    // (transcript = source of truth, no save = no persist). When the
+    // subscriber recorded then closed the modal without saving, asset_*
+    // tag rows were already in DB. Removed.
 
     return NextResponse.json({
       story_angles: tagSuggestion,
