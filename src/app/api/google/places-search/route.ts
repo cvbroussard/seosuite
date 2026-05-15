@@ -42,11 +42,17 @@ export async function GET(req: NextRequest) {
       includedRegionCodes: ["us"],
     };
     if (type !== "address") {
+      // Google Places (New) caps includedPrimaryTypes at 5. These five
+      // cover the realistic service-area shapes a subscriber declares:
+      // cities, neighborhoods, townships/CDPs, counties, states. Without
+      // administrative_area_level_3, places like Mt. Lebanon, PA (a
+      // township, not an incorporated city) silently drop from results.
       requestBody.includedPrimaryTypes = [
         "locality",
         "sublocality",
         "administrative_area_level_1",
         "administrative_area_level_2",
+        "administrative_area_level_3",
       ];
     }
 
