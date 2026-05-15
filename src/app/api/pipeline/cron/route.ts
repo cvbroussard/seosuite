@@ -84,10 +84,15 @@ async function processOneAsset(
           ...(exif.camera && { camera: exif.camera }),
         };
         const sortOrder = exif.dateTaken ? new Date(exif.dateTaken).getTime() / 1000 : null;
+        // Mirror to first-class gps_lat/gps_lng columns (migration 116)
+        // alongside the legacy metadata.geo path. Columns feed service-area
+        // auto-tagging via Place ID hierarchy matching.
         await sqlFn`
           UPDATE media_assets
           SET date_taken = ${exif.dateTaken},
               sort_order = COALESCE(${sortOrder}, sort_order),
+              gps_lat = COALESCE(${exif.lat}, gps_lat),
+              gps_lng = COALESCE(${exif.lng}, gps_lng),
               metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(exifMeta)}::jsonb
           WHERE id = ${assetId}
         `;

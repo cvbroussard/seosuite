@@ -102,12 +102,19 @@ export async function POST(req: NextRequest) {
             ...(exif.lat !== null && { geo: { lat: exif.lat, lng: exif.lng } }),
             ...(exif.camera && { camera: exif.camera }),
           };
-          // Update date_taken and recalculate sort_order from the real photo date
+          // Update date_taken and recalculate sort_order from the real photo date.
+          // Also persist GPS to first-class columns (gps_lat, gps_lng) per
+          // migration 116 — the columns are queryable / indexable and feed
+          // service-area auto-tagging (Place ID hierarchy matching). The
+          // metadata.geo path is kept for backward compat with downstream
+          // readers that haven't migrated to the columns yet.
           const sortOrder = exif.dateTaken ? new Date(exif.dateTaken).getTime() / 1000 : null;
           await sql`
             UPDATE media_assets
             SET date_taken = ${exif.dateTaken},
                 sort_order = COALESCE(${sortOrder}, sort_order),
+                gps_lat = COALESCE(${exif.lat}, gps_lat),
+                gps_lng = COALESCE(${exif.lng}, gps_lng),
                 metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(exifMeta)}::jsonb
             WHERE id = ${assetId}
           `;
