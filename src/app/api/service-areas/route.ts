@@ -71,7 +71,21 @@ export async function POST(req: NextRequest) {
   if (!site_id) {
     return NextResponse.json({ error: "site_id required" }, { status: 400 });
   }
-  const k = kind || "city";
+  // Derive kind from Place ID when present — no need for the subscriber
+  // to redundantly classify what Google already knows. Falls back to
+  // submitted `kind` (or "city") when no place_id or geocoding fails.
+  // Per 2026-05-15 architecture: Place ID IS the canonical geographic
+  // identity; kind is a derived label, not a subscriber input.
+  let k = kind || "city";
+  if (place_id) {
+    try {
+      const { fetchPlaceTypes, deriveKindFromTypes } = await import("@/lib/reverse-geocode");
+      const types = await fetchPlaceTypes(place_id);
+      if (types.length > 0) {
+        k = deriveKindFromTypes(types);
+      }
+    } catch { /* fall back to submitted kind */ }
+  }
   const validKinds = ["city", "county", "zip", "region", "state", "metro", "neighborhood"];
   if (!validKinds.includes(k)) {
     return NextResponse.json({ error: `Invalid kind. Allowed: ${validKinds.join(", ")}` }, { status: 400 });

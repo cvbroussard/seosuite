@@ -167,6 +167,50 @@ export interface ServiceAreaMatch {
   matchedHierarchyName: string;
 }
 
+/**
+ * Derive a service-area kind value from Google place types.
+ *
+ * The legacy schema stores `kind` (city/county/zip/region/state/metro/
+ * neighborhood) as a manual subscriber selection. With Place IDs as the
+ * canonical geographic identity, kind becomes derivable from the Place's
+ * types — no need to ask the subscriber to redundantly classify.
+ *
+ * Mapping ordered most-specific first (returns first match):
+ */
+export function deriveKindFromTypes(types: string[]): string {
+  const set = new Set(types);
+  if (set.has("neighborhood") || set.has("sublocality") || set.has("sublocality_level_1")) return "neighborhood";
+  if (set.has("postal_code")) return "zip";
+  if (set.has("locality") || set.has("administrative_area_level_3")) return "city";
+  if (set.has("administrative_area_level_2")) return "county";
+  if (set.has("administrative_area_level_1")) return "state";
+  if (set.has("country")) return "region"; // closest existing kind
+  return "city"; // safe fallback
+}
+
+/**
+ * Fetch the Google Places types for a Place ID via Place Details API.
+ * Used to derive `kind` server-side from Place ID instead of requiring
+ * the subscriber to pick it manually. Returns empty array on any failure
+ * (caller should fall back to the legacy kind value).
+ */
+export async function fetchPlaceTypes(placeId: string): Promise<string[]> {
+  const key = GOOGLE_API_KEY();
+  if (!key || !placeId) return [];
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=types&key=${key}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.status !== "OK") return [];
+    return (data.result?.types as string[]) || [];
+  } catch {
+    return [];
+  }
+}
+
 export function matchHierarchyToServiceAreas(
   hierarchy: PlaceHierarchyEntry[],
   catalog: Array<{

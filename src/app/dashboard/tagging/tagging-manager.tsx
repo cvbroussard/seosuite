@@ -322,12 +322,12 @@ export function TaggingManager({
   const [newBranchHero, setNewBranchHero] = useState("");
 
   // Service Area form
-  // Service area creation now uses Google Places picker. The picked place
-  // carries name + place_id + lat/lon. The subscriber still picks `kind`
-  // (city/county/state/etc) since Google's place types don't map 1:1 to
-  // our taxonomy. Keep description/notes/hero as overlay-level fields.
+  // Service area creation uses Google Places picker. The picked place
+  // carries name + place_id + lat/lon. Kind (city/county/state/etc)
+  // is now DERIVED server-side from Google's place types — subscriber
+  // doesn't need to redundantly classify what the Place ID already
+  // encodes. Description/notes/hero remain as overlay-level fields.
   const [pickedSAPlace, setPickedSAPlace] = useState<PickedPlace | null>(null);
-  const [newSAKind, setNewSAKind] = useState("city");
   const [newSADesc, setNewSADesc] = useState("");
   const [newSANotes, setNewSANotes] = useState("");
   const [newSAHero, setNewSAHero] = useState("");
@@ -543,7 +543,8 @@ export function TaggingManager({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: pickedSAPlace.placeName,
-          kind: newSAKind,
+          // No `kind` sent — server derives it from the Place ID's
+          // Google Places types (per 2026-05-15 architecture).
           place_id: pickedSAPlace.placeId,
           custom_description: newSADesc.trim() || null,
           site_notes: newSANotes.trim() || null,
@@ -554,7 +555,7 @@ export function TaggingManager({
       if (res.ok) {
         const data = await res.json();
         setServiceAreas((prev) => [...prev, data.service_area].sort((a, b) => a.name.localeCompare(b.name)));
-        setPickedSAPlace(null); setNewSAKind("city"); setNewSADesc(""); setNewSANotes(""); setNewSAHero("");
+        setPickedSAPlace(null); setNewSADesc(""); setNewSANotes(""); setNewSAHero("");
       }
     } catch { /* ignore */ }
     setAdding(false);
@@ -1039,15 +1040,6 @@ export function TaggingManager({
                   placeholder="Search for a city, neighborhood, county, or state..."
                 />
               </div>
-              <select value={newSAKind} onChange={(e) => setNewSAKind(e.target.value)} className="text-sm h-[38px]">
-                <option value="city">City</option>
-                <option value="county">County</option>
-                <option value="zip">ZIP</option>
-                <option value="region">Region</option>
-                <option value="state">State</option>
-                <option value="metro">Metro</option>
-                <option value="neighborhood">Neighborhood</option>
-              </select>
               <button onClick={addServiceArea} disabled={adding || !pickedSAPlace} className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50 h-[38px]">
                 {adding ? "..." : "Add"}
               </button>
