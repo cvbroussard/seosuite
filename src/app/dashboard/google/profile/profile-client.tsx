@@ -587,6 +587,21 @@ export function ProfileClient({ siteId }: { siteId: string }) {
     }
   }
 
+  // Persist a non-string field (object/array) to the gbp_profile cache.
+  // Caller already holds the new value in React state via setProfile;
+  // this just queues it locally so it survives reload + ends up in the
+  // dirty_fields list for the eventual push to Google. Optimistic — UI
+  // reflects the change immediately, persistence happens in background.
+  async function saveProfileField(field: string, value: unknown) {
+    try {
+      await fetch("/api/google/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: siteId, [field]: value }),
+      });
+    } catch { /* non-fatal — dirty flag stays true so retry on push */ }
+  }
+
   async function pushToGoogle() {
     setPushing(true);
     setPushStatus(null);
@@ -913,11 +928,10 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                     <button
                       onClick={() => {
                         const newType = showsAddress ? "CUSTOMER_LOCATION_ONLY" : "CUSTOMER_AND_BUSINESS_LOCATION";
-                        setProfile((prev) => prev ? {
-                          ...prev,
-                          serviceArea: { ...(prev.serviceArea || {}), businessType: newType },
-                        } : prev);
+                        const newServiceArea = { ...(profile?.serviceArea || {}), businessType: newType };
+                        setProfile((prev) => prev ? { ...prev, serviceArea: newServiceArea } : prev);
                         setDirty(true);
+                        saveProfileField("serviceArea", newServiceArea);
                       }}
                       className={`relative h-6 w-11 rounded-full transition-colors ${showsAddress ? "bg-accent" : "bg-gray-300"}`}
                     >
@@ -991,15 +1005,14 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                             <button
                               onClick={() => {
                                 const updatedPlaces = places.filter((_, j) => j !== i);
-                                setProfile((prev) => prev ? {
-                                  ...prev,
-                                  serviceArea: {
-                                    ...(prev.serviceArea || {}),
-                                    businessType: showsAddress ? "CUSTOMER_AND_BUSINESS_LOCATION" : "CUSTOMER_LOCATION_ONLY",
-                                    places: { placeInfos: updatedPlaces },
-                                  },
-                                } : prev);
+                                const newServiceArea = {
+                                  ...(profile?.serviceArea || {}),
+                                  businessType: showsAddress ? "CUSTOMER_AND_BUSINESS_LOCATION" : "CUSTOMER_LOCATION_ONLY",
+                                  places: { placeInfos: updatedPlaces },
+                                };
+                                setProfile((prev) => prev ? { ...prev, serviceArea: newServiceArea } : prev);
                                 setDirty(true);
+                                saveProfileField("serviceArea", newServiceArea);
                               }}
                               className="text-gray-400 transition-colors group-hover/place:text-muted hover:!text-danger"
                               title="Remove"
@@ -1015,16 +1028,17 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                     <ServiceAreaInput
                       onAdd={(place) => {
                         const updatedPlaces = [...places, place];
-                        setProfile((prev) => prev ? {
-                          ...prev,
-                          serviceArea: {
-                            ...(prev.serviceArea || {}),
-                            businessType: showsAddress ? "CUSTOMER_AND_BUSINESS_LOCATION" : "CUSTOMER_LOCATION_ONLY",
-                            regionCode: "US",
-                            places: { placeInfos: updatedPlaces },
-                          },
-                        } : prev);
+                        const newServiceArea = {
+                          ...(profile?.serviceArea || {}),
+                          businessType: showsAddress ? "CUSTOMER_AND_BUSINESS_LOCATION" : "CUSTOMER_LOCATION_ONLY",
+                          regionCode: "US",
+                          places: { placeInfos: updatedPlaces },
+                        };
+                        setProfile((prev) => prev ? { ...prev, serviceArea: newServiceArea } : prev);
                         setDirty(true);
+                        // Persist to the gbp_profile cache so the change
+                        // survives reload and lands on the dirty_fields list.
+                        saveProfileField("serviceArea", newServiceArea);
                         // Fire-and-forget enrichment — pulls Place details
                         // (viewport, types, kind) into service_areas_canonical
                         // so downstream readers (orchestrator, asset matcher,

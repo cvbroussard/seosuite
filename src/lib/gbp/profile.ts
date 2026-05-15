@@ -369,6 +369,8 @@ export async function updateProfile(
     websiteUri?: string;
     openingDate?: string;
     regularHours?: GbpProfile["regularHours"];
+    serviceArea?: GbpProfile["serviceArea"];
+    address?: GbpProfile["address"];
   },
 ): Promise<{ success: boolean; error?: string }> {
   // Read current cached profile
@@ -387,6 +389,8 @@ export async function updateProfile(
   if (updates.websiteUri !== undefined) { cached.websiteUri = updates.websiteUri; changedFields.push("websiteUri"); }
   if (updates.openingDate !== undefined) { cached.openingDate = updates.openingDate; changedFields.push("openInfo"); }
   if (updates.regularHours !== undefined) { cached.regularHours = updates.regularHours; changedFields.push("regularHours"); }
+  if (updates.serviceArea !== undefined) { cached.serviceArea = updates.serviceArea; changedFields.push("serviceArea"); }
+  if (updates.address !== undefined) { cached.address = updates.address; changedFields.push("storefrontAddress"); }
 
   cached.synced_at = new Date().toISOString();
 
