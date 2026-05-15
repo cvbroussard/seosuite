@@ -199,6 +199,7 @@ export async function POST(req: NextRequest) {
       suggestTags(site_id, transcript, assetImageUrl).catch(() => ({
         pillarId: "",
         tagIds: [] as string[],
+        sceneTypes: [] as string[],
       })),
       extractEntities(transcript, business_category).catch(() => ({
         brands: [] as Array<{ name: string; context: string }>,
@@ -413,6 +414,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       story_angles: tagSuggestion,
+      // Scene composition surfaces as a top-level field (separate from
+      // story_angles) since it flows into media_assets.scene_types[],
+      // not into content_tags. Same multimodal Haiku call produces both.
+      scene_types: tagSuggestion.sceneTypes || [],
       groups,
       ner_provider: ner.provider,
       ner_warnings: ner.warnings || [],

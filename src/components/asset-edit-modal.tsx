@@ -466,6 +466,9 @@ export function AssetEditModal({
   // Track WHICH tag IDs were auto-applied so the result card can render
   // them as labeled pills (not just a count). Resets per auto-tag run.
   const [autoAppliedTagIds, setAutoAppliedTagIds] = useState<string[]>([]);
+  // Same idea for scene composition — track which scene_type IDs were
+  // freshly applied by this auto-tag run so the card can surface them.
+  const [autoAppliedSceneTypeIds, setAutoAppliedSceneTypeIds] = useState<string[]>([]);
   const [nerWarnings, setNerWarnings] = useState<string[]>([]);
 
   function startReplaceTranscript() {
@@ -548,6 +551,22 @@ export function AssetEditModal({
       }
       setAutoAppliedTagCount(appliedCount);
       setAutoAppliedTagIds(appliedIds);
+
+      // Scene composition — Haiku call returns scene_type IDs that
+      // describe what's literally shown. Merge into working scene_types
+      // (additive within this run; tag UI shows the result for review).
+      const sceneTypesFromApi = Array.isArray(data.scene_types)
+        ? (data.scene_types as string[])
+        : [];
+      let appliedSceneIds: string[] = [];
+      if (sceneTypesFromApi.length > 0) {
+        setSceneTypesArr((prev) => {
+          const before = new Set(prev);
+          appliedSceneIds = sceneTypesFromApi.filter((id) => !before.has(id));
+          return Array.from(new Set([...prev, ...sceneTypesFromApi]));
+        });
+      }
+      setAutoAppliedSceneTypeIds(appliedSceneIds);
 
       const groupsResp = (data.groups || {}) as Partial<InspectorState>;
       const groups: InspectorState = {
@@ -1377,6 +1396,36 @@ export function AssetEditModal({
                     </div>
                   );
                 })()}
+                {/* Scene Composition pills — closed-enum visual depiction
+                    layer (after / wide_shot / lifestyle / etc). Same Haiku
+                    call as Story Angles produces both. */}
+                {!autoTagging && autoAppliedSceneTypeIds.length > 0 && (
+                  <div className="mb-2">
+                    <div className="mb-0.5 text-[10px] uppercase tracking-wide text-muted">Scene Composition</div>
+                    <div className="flex flex-wrap items-start gap-1.5">
+                      {autoAppliedSceneTypeIds.map((sceneId) => {
+                        const scene = SCENE_TYPES.find((s) => s.id === sceneId);
+                        const label = scene?.label || sceneId;
+                        const stillSelected = sceneTypesArr.includes(sceneId);
+                        return (
+                          <button
+                            key={`scene:${sceneId}`}
+                            type="button"
+                            onClick={() => setSceneTypesArr((prev) => stillSelected ? prev.filter((id) => id !== sceneId) : [...prev, sceneId])}
+                            title={scene?.description}
+                            className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                              stillSelected
+                                ? "bg-accent/20 text-accent ring-1 ring-accent/40"
+                                : "bg-surface-hover text-muted hover:text-foreground"
+                            }`}
+                          >
+                            ✓ {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {!autoTagging && inspectorState && groupConfig.map((g) => {
                   const groupData = inspectorState[g.key];
                   if (!groupData) return null;
