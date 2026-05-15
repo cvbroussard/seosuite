@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 interface Brand {
   id: string;
@@ -321,9 +322,12 @@ export function TaggingManager({
   const [newBranchHero, setNewBranchHero] = useState("");
 
   // Service Area form
-  const [newSAName, setNewSAName] = useState("");
+  // Service area creation now uses Google Places picker. The picked place
+  // carries name + place_id + lat/lon. The subscriber still picks `kind`
+  // (city/county/state/etc) since Google's place types don't map 1:1 to
+  // our taxonomy. Keep description/notes/hero as overlay-level fields.
+  const [pickedSAPlace, setPickedSAPlace] = useState<PickedPlace | null>(null);
   const [newSAKind, setNewSAKind] = useState("city");
-  const [newSAPlaceId, setNewSAPlaceId] = useState("");
   const [newSADesc, setNewSADesc] = useState("");
   const [newSANotes, setNewSANotes] = useState("");
   const [newSAHero, setNewSAHero] = useState("");
@@ -531,16 +535,16 @@ export function TaggingManager({
   }
 
   async function addServiceArea() {
-    if (!newSAName.trim()) return;
+    if (!pickedSAPlace) return;
     setAdding(true);
     try {
       const res = await fetch("/api/service-areas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: newSAName.trim(),
+          name: pickedSAPlace.placeName,
           kind: newSAKind,
-          place_id: newSAPlaceId.trim() || null,
+          place_id: pickedSAPlace.placeId,
           custom_description: newSADesc.trim() || null,
           site_notes: newSANotes.trim() || null,
           hero_asset_id: newSAHero.trim() || null,
@@ -550,7 +554,7 @@ export function TaggingManager({
       if (res.ok) {
         const data = await res.json();
         setServiceAreas((prev) => [...prev, data.service_area].sort((a, b) => a.name.localeCompare(b.name)));
-        setNewSAName(""); setNewSAKind("city"); setNewSAPlaceId(""); setNewSADesc(""); setNewSANotes(""); setNewSAHero("");
+        setPickedSAPlace(null); setNewSAKind("city"); setNewSADesc(""); setNewSANotes(""); setNewSAHero("");
       }
     } catch { /* ignore */ }
     setAdding(false);
@@ -1018,12 +1022,24 @@ export function TaggingManager({
       {!isReviewer && activeTab === "service_areas" && (
         <>
           <div className="mb-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-            Beta — service areas are shared across the platform. Adding a region (e.g. &ldquo;Pasadena&rdquo;) uses the same canonical entry as other businesses serving that area; your business simply attaches its own coverage to it.
+            Beta — service areas are shared across the platform. Adding a region uses the same canonical entry as other businesses serving that area; your business simply attaches its own coverage to it.
+          </div>
+          <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-foreground">
+            <p className="font-medium text-accent mb-1">💡 Add only places you actually serve</p>
+            <p className="text-muted">
+              Adding &ldquo;Pittsburgh&rdquo; claims ALL Pittsburgh — assets mentioning any neighborhood (Squirrel Hill, etc.) tag for you. Adding individual neighborhoods means assets tag only on those specific mentions, not generic &ldquo;Pittsburgh&rdquo; references. Don&rsquo;t add a state unless you serve the entire state.
+            </p>
           </div>
           <div className="mb-6 space-y-2">
-            <div className="flex gap-2">
-              <input value={newSAName} onChange={(e) => setNewSAName(e.target.value)} className="flex-1 text-sm" placeholder="Service area name (e.g. Pasadena, CA)" />
-              <select value={newSAKind} onChange={(e) => setNewSAKind(e.target.value)} className="text-sm">
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <LocationPicker
+                  value={pickedSAPlace}
+                  onChange={setPickedSAPlace}
+                  placeholder="Search for a city, neighborhood, county, or state..."
+                />
+              </div>
+              <select value={newSAKind} onChange={(e) => setNewSAKind(e.target.value)} className="text-sm h-[38px]">
                 <option value="city">City</option>
                 <option value="county">County</option>
                 <option value="zip">ZIP</option>
@@ -1032,11 +1048,17 @@ export function TaggingManager({
                 <option value="metro">Metro</option>
                 <option value="neighborhood">Neighborhood</option>
               </select>
-              <button onClick={addServiceArea} disabled={adding || !newSAName.trim()} className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50">
+              <button onClick={addServiceArea} disabled={adding || !pickedSAPlace} className="bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50 h-[38px]">
                 {adding ? "..." : "Add"}
               </button>
             </div>
-            <input value={newSAPlaceId} onChange={(e) => setNewSAPlaceId(e.target.value)} className="w-full text-sm" placeholder="Google Place ID (optional)" />
+            {pickedSAPlace && (
+              <div className="rounded bg-bg-soft px-2 py-1.5 text-[10px] text-muted">
+                <span className="font-medium text-foreground">{pickedSAPlace.placeName}</span>
+                <span className="ml-2">📍 {pickedSAPlace.formattedAddress}</span>
+                <span className="ml-2 font-mono text-dim">place_id: {pickedSAPlace.placeId}</span>
+              </div>
+            )}
             <input value={newSADesc} onChange={(e) => setNewSADesc(e.target.value)} className="w-full text-sm" placeholder="Custom description (overlay — your site only)" />
             <input value={newSANotes} onChange={(e) => setNewSANotes(e.target.value)} className="w-full text-sm" placeholder="Site notes (overlay — internal)" />
             <input value={newSAHero} onChange={(e) => setNewSAHero(e.target.value)} className="w-full text-sm" placeholder="Hero asset UUID (optional)" />
@@ -1375,7 +1397,17 @@ export function TaggingManager({
                   </div>
                   {sa.custom_description && <p className="text-xs text-muted">{sa.custom_description}</p>}
                   {sa.site_notes && <p className="text-[10px] italic text-dim">notes: {sa.site_notes}</p>}
-                  {sa.place_id && <p className="text-[10px] text-dim">place_id: {sa.place_id}</p>}
+                  {/* Read-only Place ID badge — visible during beta for monitoring.
+                      Mono font + bg block makes it scannable + easy to copy. */}
+                  {sa.place_id ? (
+                    <p className="mt-1 inline-block rounded bg-accent/10 px-1.5 py-0.5 font-mono text-[10px] text-accent" title="Google Place ID">
+                      📍 {sa.place_id}
+                    </p>
+                  ) : (
+                    <p className="mt-1 inline-block rounded bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning" title="No Google Place ID — name-only matching">
+                      ⚠ no place_id
+                    </p>
+                  )}
                 </div>
                 <span className="text-xs text-muted">{sa.slug}</span>
                 <EditDeleteRow type="service_areas" id={sa.overlay_id} onEdit={() => { setEditing(sa.overlay_id); setEditFields({ is_active: sa.is_active, custom_description: sa.custom_description || "", site_notes: sa.site_notes || "", hero_asset_id: sa.hero_asset_id || "" }); }} />
