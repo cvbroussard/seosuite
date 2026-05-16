@@ -7,6 +7,7 @@ import { FaceOverlay } from "./face-overlay";
 import { useAudioBriefing } from "@/hooks/use-audio-briefing";
 import { RecordingBar } from "@/components/recording-bar";
 import { SCENE_TYPES } from "@/lib/scene-types";
+import { AssetCategoriesSection } from "@/components/asset-categories-section";
 
 interface RecordingRow {
   id: string;
@@ -1883,6 +1884,11 @@ export function AssetEditModal({
               </span>
             </div>
           </div>
+
+        {/* Row 5.5: GBP Categories — multimodal auto-assigned at briefing complete
+            per #223. Replaces services tag group as canonical structured tag.
+            Operator/subscriber overrides preserved across auto re-categorization. */}
+        <AssetCategoriesSection assetId={assetId} />
 
         {/* Row 6: Services — hard-exposed regardless of label/empty state */}
         <div className="border-t border-border px-6 py-4">

@@ -171,6 +171,33 @@ export async function processBriefedAsset(assetId: string): Promise<{
     console.error(`Variant render failed in processBriefedAsset for ${assetId}:`, err instanceof Error ? err.message : err);
   }
 
+  // ── 5b. Auto-categorize against site's 10 GBP categories ─────────
+  // Multimodal LLM call (image + transcript + 10 categories → ranked
+  // gcids) writes to asset_categories. Replaces the services tag group
+  // per #223. Non-fatal — if categorization fails, the rest of the
+  // briefing pipeline still succeeds; categorization can be retried
+  // independently. Skip outcomes (no_transcript / no_site_categories
+  // / no_image) are expected paths, not errors.
+  try {
+    const { categorizeAsset, persistCategorization } = await import("@/lib/categorization/asset-categorizer");
+    const outcome = await categorizeAsset(assetId);
+    if (outcome.status === "success") {
+      const { inserted, preservedOverrides } = await persistCategorization(assetId, outcome.result);
+      console.log(
+        `Auto-categorized ${assetId}: primary=${outcome.result.primary.gcid} ` +
+          `(${(outcome.result.primary.confidence * 100).toFixed(0)}%), ` +
+          `${outcome.result.secondaries.length} secondaries, ` +
+          `${inserted} inserted, ${preservedOverrides} overrides preserved`,
+      );
+    } else if (outcome.status === "skipped") {
+      console.log(`Auto-categorization skipped for ${assetId}: ${outcome.reason}`);
+    } else {
+      console.warn(`Auto-categorization error for ${assetId}: ${outcome.error}`);
+    }
+  } catch (err) {
+    console.error(`Auto-categorization threw for ${assetId}:`, err instanceof Error ? err.message : err);
+  }
+
   // ── 6. Mark asset migrated + briefable ───────────────────────────
   // briefable_at coalesce — a briefed-on-upload asset that came in via
   // this orchestrator skipped the convert/poster waitUntils that normally
