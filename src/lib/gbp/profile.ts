@@ -607,10 +607,11 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
   }
 
   // Push social profiles (separate /attributes endpoint).
-  // updateMask lists ALL platforms we support so removed entries get
-  // cleared on Google's side too. Body only contains entries the
-  // subscriber currently has — Google interprets "in mask, not in body"
-  // as deletion.
+  // Note: this endpoint uses `attributeMask` as the query param — NOT
+  // `updateMask` (the Location endpoint's name). attributeMask lists
+  // ALL platforms we support so removed entries get cleared on Google's
+  // side too. Body only contains entries the subscriber currently has —
+  // Google interprets "in mask, not in body" as deletion.
   if (dirtyFields.has("socialProfiles")) {
     const socialProfiles = (profile.socialProfiles as GbpProfile["socialProfiles"]) || [];
     const allMaskNames = SOCIAL_PLATFORMS.map((p) => `attributes/url_${p}`).join(",");
@@ -623,7 +624,7 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
       })),
     };
     const attrRes = await fetch(
-      `${BIZ_INFO_API}/${creds.locationPath}/attributes?updateMask=${encodeURIComponent(allMaskNames)}`,
+      `${BIZ_INFO_API}/${creds.locationPath}/attributes?attributeMask=${encodeURIComponent(allMaskNames)}`,
       {
         method: "PATCH",
         headers: { Authorization: `Bearer ${creds.accessToken}`, "Content-Type": "application/json" },
@@ -634,6 +635,21 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
       const err = await attrRes.text();
       console.error("GBP attributes push failed:", err.slice(0, 300));
       return { success: false, error: `Social profiles push failed (${attrRes.status}). Google: ${err.slice(0, 100)}` };
+    }
+
+    // Pull-after-push for socialProfiles: parse Google's response and
+    // sync the cache. Google echoes the full updated attributes set,
+    // so this captures any server-side normalization.
+    try {
+      const attrPatched = await attrRes.json();
+      const refreshedSocial = parseAttributesResponse(attrPatched);
+      await sql`
+        UPDATE sites
+        SET gbp_profile = jsonb_set(COALESCE(gbp_profile, '{}'::jsonb), '{socialProfiles}', ${JSON.stringify(refreshedSocial)}::jsonb)
+        WHERE id = ${siteId}
+      `;
+    } catch (err) {
+      console.warn("GBP attributes push: failed to parse response:", err instanceof Error ? err.message : err);
     }
   }
 
