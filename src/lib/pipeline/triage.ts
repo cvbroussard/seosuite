@@ -37,12 +37,38 @@ function sanitizeSlug(raw: unknown): string | null {
 }
 
 /**
- * Triage a media asset — evaluate quality, assign pillar, determine
- * platform fit, and set triage status.
+ * DEPRECATED 2026-05-16 — RETIRED, throws on call.
  *
- * Uses Claude Vision for images and heuristic fallback for video.
+ * Legacy briefing-time triage. Replaced by the two-stage cascade
+ * (src/lib/categorization/stage1-extract.ts + stage2-multimodal.ts)
+ * invoked via POST /api/assets/[id]/categorize/preview + commit.
+ *
+ * Specifically retired because this function fed the brand catalog into
+ * the vision prompt and asked for `detected_vendors` — pattern that
+ * hallucinated brand matches ("Montigo 12%" canary on B² Shadyside
+ * parlor, 2026-05-16). Brand attribution now lives in cascade-commit
+ * via brand-match.ts (NER → Levenshtein → catalog, no vision priming).
+ *
+ * Body throws so any caller that still slips in fails loudly. The rest
+ * of the file (sanitizeSlug, visionTriage, heuristic helpers) stays as
+ * archive material — DO NOT call from new code.
+ *
+ * Known callers when retired:
+ *   - src/app/api/pipeline/cron/route.ts.disabled (route already 404)
+ *   - any operator ad-hoc invocation via the same disabled route
  */
-export async function triageAsset(assetId: string): Promise<TriageResult> {
+export async function triageAsset(_assetId: string): Promise<TriageResult> {
+  throw new Error(
+    "DEPRECATED 2026-05-16: triageAsset is retired. Use the cascade " +
+      "(POST /api/assets/[id]/categorize/preview + commit). The old vision " +
+      "prompt fed the brand catalog into the LLM and produced hallucinated " +
+      "vendor matches. brand-match.ts owns brand attribution now via Stage 1 NER. " +
+      "Old implementation is in git history (pre-2026-05-16).",
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> {
   const [asset] = await sql`
     SELECT id, site_id, storage_url, media_type, context_note, transcription, metadata, poster_asset_id
     FROM media_assets

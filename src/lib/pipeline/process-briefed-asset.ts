@@ -1,58 +1,35 @@
-import { sql } from "@/lib/db";
-
 /**
- * Lightweight briefing-complete handler.
+ * DEPRECATED 2026-05-16 — RETIRED, throws on call.
  *
- * Per the consumption-gated architecture (LOCKED 2026-05-16 via
- * project_tracpost_asset_analysis_cascade memory):
+ * Per project_tracpost_asset_analysis_cascade memory, ALL briefing-time
+ * heavy work (vision triage, R2 source rename, variant cascade-delete,
+ * video poster regen, variant render) moved to the cascade commit
+ * orchestrator (src/lib/categorization/cascade-commit.ts). That fires
+ * via POST /api/assets/[id]/categorize/commit when the subscriber
+ * explicitly auto-tags an asset.
  *
- *   "Nothing can consume an unbriefed asset — not an orchestrator,
- *    not a website page, not an article, not a post. So ugly URLs
- *    prior to briefing are fine. Absence of variants prior to briefing
- *    is fine. All consumable work fires at cascade commit, not save."
+ * This function was kept temporarily as a no-op `briefable_at` stamp,
+ * which caused a silent regression: three callers (briefing-flip PATCH,
+ * upload-as-briefed POST, backfill route) still invoked it, so save
+ * appeared to succeed while producing assets with no asset_analysis,
+ * no slug, and no variants. The audit caught this 2026-05-16.
  *
- * This handler USED TO do six expensive things (vision triage, R2 source
- * rename, variant cascade-delete, video poster regen, variant render,
- * cascade auto-fire). All of that moved to the cascade commit orchestrator
- * (src/lib/categorization/cascade-commit.ts) which fires when the
- * subscriber explicitly auto-tags an asset.
+ * Throwing is intentional — surfaces "what still calls this" at runtime
+ * so each call site can be repointed at commitCascade (or removed if
+ * briefing is now strictly manual). Do not restore a silent no-op.
  *
- * What survives here:
- *   - Asset existence check
- *   - briefable_at stamp (state machine bookkeeping — the asset has
- *     received human input, even if cascade hasn't run yet)
- *   - metadata.last_briefed_at timestamp for audit
- *
- * Variant render, slug-based R2 rename, video poster regen — all live
- * in cascade-commit.ts now. Save-without-auto-tag produces an asset
- * with: transcript persisted, UUID-prefix R2 key, no variants, no
- * asset_analysis. Consumers (orchestrator, generators, etc.) gate on
- * `asset_analysis IS NOT NULL`, so they correctly ignore unbriefed assets.
+ * Known callers needing migration:
+ *   - src/app/api/assets/[id]/route.ts  (briefing-flip PATCH)
+ *   - src/app/api/assets/route.ts        (upload-as-briefed POST)
+ *   - src/app/api/admin/backfill-pretty-urls/route.ts.disabled (already disabled)
  */
-export async function processBriefedAsset(assetId: string): Promise<{
+export async function processBriefedAsset(_assetId: string): Promise<{
   ok: boolean;
 }> {
-  const [asset] = await sql`
-    SELECT id FROM media_assets WHERE id = ${assetId}
-  `;
-  if (!asset) {
-    console.warn(`processBriefedAsset: asset ${assetId} not found`);
-    return { ok: false };
-  }
-
-  // Lightweight metadata stamp — marks that this asset has had a save
-  // (subscriber clicked save with substantive content). Does NOT imply
-  // the cascade has run; that's tracked separately via asset_analysis
-  // IS NOT NULL.
-  await sql`
-    UPDATE media_assets
-    SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-      last_briefed_at: new Date().toISOString(),
-    })}::jsonb,
-    briefable_at = COALESCE(briefable_at, NOW()),
-    updated_at = NOW()
-    WHERE id = ${assetId}
-  `;
-
-  return { ok: true };
+  throw new Error(
+    "DEPRECATED 2026-05-16: processBriefedAsset is retired. Briefing-time work " +
+      "moved to commitCascade (src/lib/categorization/cascade-commit.ts). " +
+      "Repoint this caller to POST /api/assets/[id]/categorize/preview + commit, " +
+      "or remove the call if the caller is now part of the manual-first flow.",
+  );
 }

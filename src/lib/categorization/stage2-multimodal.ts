@@ -19,12 +19,11 @@
  * Position [0] is the top. No separate primary_X fields except for
  * asset_categories.primary which has special DB semantics.
  *
- * Replaces (and merges) the responsibilities of:
+ * Replaces (and absorbs) the responsibilities of:
  * - Legacy triage.ts vision call (scene_types, suggested_tags,
- *   url_slug, story_angles, suggested_pillar)
- * - asset-categorizer.ts (asset_categories)
- *
- * Both fold into this single Stage 2 call.
+ *   url_slug, story_angles, suggested_pillar) — triage.ts itself
+ *   now throws on call (DEPRECATED 2026-05-16)
+ * - asset-categorizer.ts (asset_categories) — DELETED 2026-05-16
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
