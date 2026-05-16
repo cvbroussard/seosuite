@@ -478,6 +478,14 @@ export async function pushProfileToGoogle(siteId: string): Promise<{ success: bo
     }
   }
 
+  if (dirtyFields.has("serviceArea") && profile.serviceArea) {
+    // Push the serviceArea object as-is — the shape we cache locally
+    // (places.placeInfos[], regionCode, businessType) matches Google's
+    // Business Information API contract.
+    updateMask.push("serviceArea");
+    body.serviceArea = profile.serviceArea;
+  }
+
   // Also check if categories are dirty
   if (dirtyFields.has("categories")) {
     // Categories pushed separately via pushCategoriesToGoogle

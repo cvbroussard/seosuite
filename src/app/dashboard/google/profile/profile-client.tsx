@@ -951,6 +951,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                           } : prev);
                           setDirty(true);
                         }}
+                        onBlur={() => { if (profile?.address) saveProfileField("address", profile.address); }}
                         placeholder="Street address"
                         className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
                       />
@@ -964,6 +965,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                             } : prev);
                             setDirty(true);
                           }}
+                          onBlur={() => { if (profile?.address) saveProfileField("address", profile.address); }}
                           placeholder="City"
                           className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
                         />
@@ -976,6 +978,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                             } : prev);
                             setDirty(true);
                           }}
+                          onBlur={() => { if (profile?.address) saveProfileField("address", profile.address); }}
                           placeholder="State"
                           className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
                         />
@@ -988,6 +991,7 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                             } : prev);
                             setDirty(true);
                           }}
+                          onBlur={() => { if (profile?.address) saveProfileField("address", profile.address); }}
                           placeholder="Zip"
                           className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
                         />
@@ -1072,24 +1076,25 @@ export function ProfileClient({ siteId }: { siteId: string }) {
                 const closeTime = hours[0]?.closeTime || "17:00";
 
                 function updateHours(open: string, close: string) {
-                  setProfile((prev) => {
-                    if (!prev) return prev;
-                    const updated = prev.regularHours.filter((h) => h.day !== day);
-                    updated.push({ day, openTime: open, closeTime: close });
-                    return { ...prev, regularHours: updated };
-                  });
+                  if (!profile) return;
+                  const newHours = [
+                    ...profile.regularHours.filter((h) => h.day !== day),
+                    { day, openTime: open, closeTime: close },
+                  ];
+                  setProfile((prev) => prev ? { ...prev, regularHours: newHours } : prev);
                   setDirty(true);
+                  saveProfileField("regularHours", newHours);
                 }
 
                 function toggleClosed() {
                   if (isClosed) {
                     updateHours("09:00", "17:00");
                   } else {
-                    setProfile((prev) => {
-                      if (!prev) return prev;
-                      return { ...prev, regularHours: prev.regularHours.filter((h) => h.day !== day) };
-                    });
+                    if (!profile) return;
+                    const newHours = profile.regularHours.filter((h) => h.day !== day);
+                    setProfile((prev) => prev ? { ...prev, regularHours: newHours } : prev);
                     setDirty(true);
+                    saveProfileField("regularHours", newHours);
                   }
                 }
 
