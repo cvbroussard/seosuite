@@ -296,11 +296,17 @@ export async function syncProfileFromGoogle(siteId: string): Promise<GbpProfile 
     `;
   }
 
-  // Categories sync: align site_gbp_categories with Google's snapshot.
-  // The page reads from this relational store, not from gbp_profile.categories
-  // JSONB. Google is canonical on each sync; replaces existing rows for
-  // this site (including the primary flag). Subscriber-side edits push to
-  // Google via pushCategoriesToGoogle and survive the next round-trip.
+  // Categories sync: TracPost is canonical (per #225 strategic posture).
+  // Google is the destination, not the source — we PUSH the coached
+  // category set to Google and don't let inbound syncs overwrite it.
+  //
+  // Two cases:
+  //   1. Initial seed — site_gbp_categories is empty. Populate from
+  //      Google so subsequent coaching has a baseline to compare against.
+  //   2. Drift detection — site_gbp_categories non-empty. Compare local
+  //      set against Google's snapshot. Log drift if different. Never
+  //      overwrite. Operator dashboard surfacing of drift events is
+  //      a future task.
   type RawCategory = { name?: string; displayName?: string };
   const rawCats: Array<{ raw: RawCategory; isPrimary: boolean }> = [];
   if (data.categories?.primaryCategory) {
@@ -320,7 +326,8 @@ export async function syncProfileFromGoogle(siteId: string): Promise<GbpProfile 
     .filter((c): c is { gcid: string; displayName: string; isPrimary: boolean } => c !== null);
 
   if (parsedCats.length > 0) {
-    // Ensure each gcid exists in gbp_categories (FK requirement)
+    // Always ensure gcids exist in the catalog so downstream code (coaching,
+    // operator UI, CMA) can FK them. Cheap; ON CONFLICT no-op when present.
     for (const c of parsedCats) {
       await sql`
         INSERT INTO gbp_categories (gcid, name)
@@ -328,13 +335,41 @@ export async function syncProfileFromGoogle(siteId: string): Promise<GbpProfile 
         ON CONFLICT (gcid) DO UPDATE SET name = EXCLUDED.name
       `;
     }
-    // Replace site_gbp_categories rows — Google's snapshot wins on sync
-    await sql`DELETE FROM site_gbp_categories WHERE site_id = ${siteId}`;
-    for (const c of parsedCats) {
-      await sql`
-        INSERT INTO site_gbp_categories (site_id, gcid, is_primary, chosen_at, chosen_by)
-        VALUES (${siteId}, ${c.gcid}, ${c.isPrimary}, NOW(), 'gbp_sync')
-      `;
+
+    const localCats = await sql`
+      SELECT gcid, is_primary FROM site_gbp_categories WHERE site_id = ${siteId}
+    `;
+
+    if (localCats.length === 0) {
+      // Initial seed — populate from Google so coaching has a baseline.
+      // chosen_by='gbp_sync_seed' distinguishes Google-pulled rows from
+      // coaching-applied rows ('coaching') and operator-edited rows ('operator').
+      for (const c of parsedCats) {
+        await sql`
+          INSERT INTO site_gbp_categories (site_id, gcid, is_primary, chosen_at, chosen_by)
+          VALUES (${siteId}, ${c.gcid}, ${c.isPrimary}, NOW(), 'gbp_sync_seed')
+        `;
+      }
+    } else {
+      // Drift detection: compare sets + primary. NEVER overwrite.
+      const localGcids = new Set(localCats.map((r) => r.gcid as string));
+      const googleGcids = new Set(parsedCats.map((c) => c.gcid));
+      const localPrimary = (localCats.find((r) => r.is_primary)?.gcid as string) || null;
+      const googlePrimary = parsedCats.find((c) => c.isPrimary)?.gcid || null;
+
+      const addedOnGoogle = [...googleGcids].filter((g) => !localGcids.has(g));
+      const removedOnGoogle = [...localGcids].filter((g) => !googleGcids.has(g));
+      const primaryShifted = localPrimary !== googlePrimary;
+
+      if (addedOnGoogle.length || removedOnGoogle.length || primaryShifted) {
+        console.warn(
+          `[GBP drift] site=${siteId} ` +
+            `+google[${addedOnGoogle.join(",")}] ` +
+            `-google[${removedOnGoogle.join(",")}] ` +
+            (primaryShifted ? `primary[${localPrimary} → ${googlePrimary}] ` : "") +
+            `(local site_gbp_categories preserved; TracPost is canonical)`,
+        );
+      }
     }
   }
 
