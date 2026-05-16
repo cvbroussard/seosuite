@@ -84,8 +84,15 @@ export async function POST(
     );
   }
 
-  const pillarConfig = (siteRow[0]?.pillar_config || []) as Array<{ id: string }>;
-  const pillarOptions = pillarConfig.map((p) => p.id);
+  // Full pillar+tag taxonomy — story_angles output is constrained to
+  // tag IDs from this config (Option C per project_tracpost_asset
+  // _analysis_cascade memory). suggested_pillar is a pillar ID from it.
+  const pillarConfig = (siteRow[0]?.pillar_config || []) as Array<{
+    id: string;
+    label: string;
+    description?: string;
+    tags: Array<{ id: string; label: string; description?: string }>;
+  }>;
   const brandDna = siteRow[0]?.brand_dna as Record<string, unknown> | null;
   const brandDnaDigest = brandDna
     ? "Site brand DNA available — voice + positioning signals present"
@@ -114,7 +121,7 @@ export async function POST(
     siteCategories: siteCategories as Array<{ gcid: string; name: string }>,
     siteBrands: siteBrands as Array<{ id: string; slug: string; name: string }>,
     brandDnaDigest,
-    pillarOptions,
+    pillarConfig,
   });
 
   if (s2.status === "error") {

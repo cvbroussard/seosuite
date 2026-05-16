@@ -71,6 +71,13 @@ export type Stage2Outcome =
   | { status: "skipped"; reason: "no_site_categories" | "no_image" }
   | { status: "error"; error: string };
 
+export interface PillarConfigEntry {
+  id: string;
+  label: string;
+  description?: string;
+  tags: Array<{ id: string; label: string; description?: string }>;
+}
+
 interface Stage2Input {
   assetId: string;
   imageUrl: string;
@@ -79,7 +86,11 @@ interface Stage2Input {
   siteCategories: Array<{ gcid: string; name: string }>;
   siteBrands: Array<{ id: string; slug: string; name: string }>;
   brandDnaDigest: string | null;
-  pillarOptions: string[];
+  /** Site's full pillar taxonomy: pillars + nested tags. story_angles
+   * output is constrained to tag IDs drawn from these pillars (Option C
+   * per project_tracpost_asset_analysis_cascade memory). suggested_pillar
+   * is the pillar ID (one of these). */
+  pillarConfig: PillarConfigEntry[];
 }
 
 function buildSystemPrompt(): string {
@@ -107,9 +118,9 @@ OUTPUTS (all required):
 
 4. **url_slug** — SEO-friendly kebab-case slug (~6-10 words) anchored in the most distinctive content of the asset. Include project name if present, primary visual feature, location if relevant. Example: "shadyside-parlor-walnut-cabinetry-restoration".
 
-5. **story_angles** — Narrative angles the asset supports. Salience-ranked. Use lowercase snake_case. Examples: transformation, craftsmanship_detail, client_lifestyle, process_showcase, before_after, problem_solving.
+5. **story_angles** — Tag IDs drawn from the site's pillar_config taxonomy (provided in user message). These are the per-asset labels that say "this asset expresses these specific angles within these pillars." NEVER invent tag IDs — only use exact IDs from the pillar_config provided. NEVER use a free-form snake_case string the LLM made up. Salience-ranked (position [0] = strongest fit). Cap at 3-5 tags max. Each chosen tag must have evidence in transcript OR specific visual feature — don't add tags that don't have direct support. Tags can span multiple pillars (asset can express both PROOF and EDUCATION angles, for instance). Return empty array if no tags fit confidently.
 
-6. **suggested_pillar** — Single content pillar from the site's pillar options provided. If none clearly applies, return null.
+6. **suggested_pillar** — Single pillar ID from the site's pillar_config (the PRIMARY strategic grouping this asset slots into). If story_angles span multiple pillars, pick the pillar with the most/strongest matched tags. If none clearly applies, return null.
 
 7. **caption_hints** — Guidance for downstream caption generator (NOT the caption itself):
    - tone: short phrase describing voice ("confident, technical, craftsmanship-forward")
@@ -170,10 +181,21 @@ function buildUserMessage(input: Stage2Input): string {
   }
   lines.push("");
 
-  if (input.pillarOptions.length > 0) {
-    lines.push("=== SITE'S PILLAR OPTIONS (suggested_pillar must be one of these or null) ===\n");
-    lines.push(input.pillarOptions.join(", "));
-    lines.push("");
+  if (input.pillarConfig.length > 0) {
+    lines.push("=== SITE'S PILLAR_CONFIG (suggested_pillar = ONE pillar id; story_angles = tag IDs from these pillars) ===\n");
+    lines.push("Pillars are strategic content groupings (PROOF, EDUCATION, etc. — what content DOES rhetorically).");
+    lines.push("Tags within each pillar are the specific angles. story_angles output MUST be tag IDs drawn from this list (NEVER invented).\n");
+    for (const p of input.pillarConfig) {
+      lines.push(`PILLAR: ${p.id}${p.label ? `  (${p.label})` : ""}${p.description ? ` — ${p.description}` : ""}`);
+      if (p.tags && p.tags.length > 0) {
+        for (const t of p.tags) {
+          lines.push(`  ${t.id}${t.label ? `  →  ${t.label}` : ""}${t.description ? ` — ${t.description}` : ""}`);
+        }
+      } else {
+        lines.push(`  (no tags configured for this pillar)`);
+      }
+      lines.push("");
+    }
   }
 
   if (input.brandDnaDigest) {
@@ -283,11 +305,18 @@ export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
         confidence: v.confidence,
       }));
 
-    // Validate pillar
-    const validPillars = new Set(input.pillarOptions);
+    // Validate pillar (against pillar IDs)
+    const validPillars = new Set(input.pillarConfig.map((p) => p.id));
     const suggestedPillar = parsed.suggested_pillar && validPillars.has(parsed.suggested_pillar)
       ? parsed.suggested_pillar
       : null;
+
+    // Validate story_angles (against pillar tag IDs — Option C constraint)
+    const validTagIds = new Set<string>();
+    for (const p of input.pillarConfig) {
+      for (const t of p.tags || []) validTagIds.add(t.id);
+    }
+    const validStoryAngles = (parsed.story_angles || []).filter((t) => validTagIds.has(t));
 
     const result: Stage2Result = {
       asset_categories: {
@@ -303,7 +332,7 @@ export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
       scene_types: sceneTypes,
       detected_vendors: detectedVendors,
       url_slug: parsed.url_slug || "",
-      story_angles: parsed.story_angles || [],
+      story_angles: validStoryAngles,
       suggested_pillar: suggestedPillar,
       caption_hints: {
         tone: parsed.caption_hints?.tone || "",
