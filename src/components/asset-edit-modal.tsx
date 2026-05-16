@@ -1265,9 +1265,10 @@ export function AssetEditModal({
                 Panel renders even when zero matches surfaced so
                 subscriber can tell the system ran. */}
             {(autoTagging || lastSuggestRunAt !== null) && (() => {
+              // Services group dropped 2026-05-16 — categories now own
+              // the structured-tag role (cascade asset_categories table).
               const groupConfig: Array<{ key: InspectorTagGroup; label: string; toggleSet: (fn: (prev: string[]) => string[]) => void; selectedSet: string[]; savedSet: string[] }> = [
                 { key: "brand", label: brandLabel || "Brands", toggleSet: setBrandIds, selectedSet: brandIds, savedSet: savedBrandIds },
-                { key: "service", label: serviceLabel || "Services", toggleSet: setServiceIds, selectedSet: serviceIds, savedSet: savedServiceIds },
                 { key: "project", label: projectLabel || "Projects", toggleSet: setProjectIds, selectedSet: projectIds, savedSet: savedProjectIds },
                 { key: "persona", label: personaLabel || "People", toggleSet: setPersonaIds, selectedSet: personaIds, savedSet: savedPersonaIds },
                 { key: "branch", label: branchLabel || "Locations", toggleSet: setBranchIds, selectedSet: branchIds, savedSet: savedBranchIds },
@@ -1870,55 +1871,11 @@ export function AssetEditModal({
         {/* Auto-tag section moved to the top of the modal (just below
             RecordingBar) on 2026-05-16. See block above. */}
 
-        {/* Row 6: Services — hard-exposed regardless of label/empty state */}
-        <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{serviceLabel || "Services"}</label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {localServices.map((s) => {
-                const selected = serviceIds.includes(s.id);
-                const confirmed = selected && savedServiceIds.includes(s.id);
-                const preselected = selected && !confirmed;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() =>
-                      setServiceIds((prev) =>
-                        selected ? prev.filter((id) => id !== s.id) : [...prev, s.id]
-                      )
-                    }
-                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
-                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      confirmed
-                        ? "bg-accent text-white"
-                        : preselected
-                          ? "bg-accent/20 text-accent ring-1 ring-accent/40"
-                          : "bg-surface-hover text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {s.name}
-                  </button>
-                );
-              })}
-              <span className="flex items-center gap-1">
-                <input
-                  value={newServiceName}
-                  onChange={(e) => setNewServiceName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && quickCreateService()}
-                  placeholder={`+ ${serviceLabel || "Service"}`}
-                  className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
-                />
-                {newServiceName.trim() && (
-                  <button
-                    onClick={quickCreateService}
-                    disabled={creatingService}
-                    className="text-[10px] text-accent hover:underline"
-                  >
-                    {creatingService ? "..." : "Add"}
-                  </button>
-                )}
-              </span>
-            </div>
-          </div>
+        {/* Services section retired 2026-05-16 — categories (gcid-tagged
+            at briefing complete by the cascade) are the canonical
+            structured tag per #223. Service state + payload field left
+            in place as no-op for one cycle; full removal in a follow-up
+            once the cascade is alpha-grade across more sites. */}
 
         {/* Row 7: Branches — hard-exposed regardless of label/empty state */}
         <div className="border-t border-border px-6 py-4">
