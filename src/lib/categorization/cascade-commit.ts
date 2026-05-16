@@ -8,13 +8,14 @@
  *    All consumable work fires at cascade commit, not save."
  *
  * This is the ONE place where everything consumable gets produced:
- *   1. Persist asset_analysis JSONB + asset_categories rows + asset_brands rows
- *   2. Derive slug from cascade output
- *   3. Rename source R2 key to slug-derived (if differs)
- *   4. Rename video poster (if asset has one)
- *   5. Cascade-delete existing variants + their R2 objects
- *   6. Render all variants with slug-derived keys
- *   7. Purge CDN cache for old URLs
+ *   1. Persist asset_analysis JSONB + asset_categories rows
+ *   2. Brand match (NER → catalog) + asset_brands rows
+ *   3. Derive slug from cascade output
+ *   4. Rename source R2 key to slug-derived (if differs)
+ *   5. Rename video poster (if asset has one)
+ *   6. Cascade-delete existing variants + their R2 objects
+ *   7. Render all variants with slug-derived keys
+ *   8. Purge CDN cache for old URLs
  *
  * Fires from POST /api/assets/[id]/categorize/commit when subscriber/
  * operator confirms a cascade preview. Idempotent: re-firing with the
@@ -32,21 +33,18 @@ import { renameR2Object, keyFromStorageUrl, R2_PUBLIC_DOMAIN, deleteObjectFromR2
 import { deriveSourceKey } from "@/lib/pipeline/asset-keys";
 import { renderAllVariantsForAsset } from "@/lib/pipeline/variant-render";
 import { purgeCdnCache } from "@/lib/cdn";
-import { persistStage2 } from "./stage2-multimodal";
 import { matchBrandsFromNer } from "./brand-match";
-import type { Stage1Result } from "./stage1-extract";
-import type { Stage2Result } from "./stage2-multimodal";
+import type { CascadeAnalysis } from "./cascade-analyze";
 
 export interface CommitCascadeInput {
   assetId: string;
-  stage1: Stage1Result | null;
-  stage2: Stage2Result;
+  analysis: CascadeAnalysis;
 }
 
 export interface CommitCascadeResult {
   ok: boolean;
   categoryRows: number;
-  /** Catalog brands linked from Stage 1 NER hits. */
+  /** Catalog brands linked from NER hits. */
   brandRows: number;
   /** NER brand candidates that didn't match the catalog — caller can
    * surface for promote-to-catalog. */
@@ -58,8 +56,55 @@ export interface CommitCascadeResult {
   warnings: string[];
 }
 
+/**
+ * Persist the cascade artifact to JSONB + asset_categories rows.
+ * Preserves operator/subscriber overrides on asset_categories.
+ */
+async function persistCascadeArtifact(
+  assetId: string,
+  analysis: CascadeAnalysis,
+): Promise<{ categoryRows: number }> {
+  await sql`
+    UPDATE media_assets
+    SET asset_analysis = ${JSON.stringify(analysis)}::jsonb, updated_at = NOW()
+    WHERE id = ${assetId}
+  `;
+
+  const overrides = await sql`
+    SELECT gcid, is_primary FROM asset_categories
+    WHERE asset_id = ${assetId} AND assigned_by != 'auto'
+  `;
+  const overrideGcids = new Set(overrides.map((r) => r.gcid as string));
+  const hasOverridePrimary = overrides.some((r) => r.is_primary === true);
+
+  await sql`DELETE FROM asset_categories WHERE asset_id = ${assetId} AND assigned_by = 'auto'`;
+
+  let categoryRows = 0;
+  const primary = analysis.asset_categories.primary;
+  if (!overrideGcids.has(primary.gcid)) {
+    await sql`
+      INSERT INTO asset_categories (asset_id, gcid, is_primary, confidence, assigned_by, reasoning)
+      VALUES (${assetId}, ${primary.gcid}, ${!hasOverridePrimary},
+              ${primary.confidence}, 'auto', ${primary.reasoning})
+      ON CONFLICT (asset_id, gcid) DO NOTHING
+    `;
+    categoryRows++;
+  }
+  for (const s of analysis.asset_categories.secondaries) {
+    if (overrideGcids.has(s.gcid)) continue;
+    await sql`
+      INSERT INTO asset_categories (asset_id, gcid, is_primary, confidence, assigned_by, reasoning)
+      VALUES (${assetId}, ${s.gcid}, false, ${s.confidence}, 'auto', ${s.reasoning})
+      ON CONFLICT (asset_id, gcid) DO NOTHING
+    `;
+    categoryRows++;
+  }
+
+  return { categoryRows };
+}
+
 export async function commitCascade(input: CommitCascadeInput): Promise<CommitCascadeResult> {
-  const { assetId, stage1, stage2 } = input;
+  const { assetId, analysis } = input;
   const warnings: string[] = [];
 
   // ── 1. Load asset state ──────────────────────────────────────────
@@ -71,20 +116,19 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
 
   const siteId = asset.site_id as string;
   const oldSourceUrl = asset.storage_url as string;
-  const mediaType = (asset.media_type as string) || "";
 
   // ── 2. Persist cascade artifact + structured tags ────────────────
-  const { categoryRows } = await persistStage2(assetId, stage1, stage2);
+  const { categoryRows } = await persistCascadeArtifact(assetId, analysis);
 
-  // ── 2b. Brand matching from Stage 1 NER ──────────────────────────
+  // ── 2b. Brand matching from NER hits ─────────────────────────────
   // Vision-based brand detection was retired (hallucinated from catalog
   // payload). NER → fuzzy catalog match is the proven path. Subscriber
   // can promote suggested_new entries to catalog from the asset modal;
   // that triggers enrichBrand() via the standard POST /api/brands path.
-  const nerBrandCandidates = stage1?.entities.brands.map((b) => ({
+  const nerBrandCandidates = analysis.entities.brands.map((b) => ({
     name: b.text,
     context: b.context_excerpt,
-  })) ?? [];
+  }));
   const brandMatch = await matchBrandsFromNer(siteId, nerBrandCandidates);
   let brandRows = 0;
   for (const m of brandMatch.matched) {
@@ -97,9 +141,7 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
   }
 
   // ── 3. Derive slug + new R2 key from cascade output ──────────────
-  // Fallback to UUID-prefix slug if cascade somehow didn't produce one
-  // (defensive — should never happen since stage2 always populates url_slug)
-  const slug = stage2.url_slug?.trim() || `asset-${assetId.replace(/-/g, "").slice(0, 8)}`;
+  const slug = analysis.url_slug?.trim() || `asset-${assetId.replace(/-/g, "").slice(0, 8)}`;
   const oldKey = keyFromStorageUrl(oldSourceUrl);
   const ext = oldSourceUrl.split(".").pop()?.split("?")[0] || "bin";
   const newKey = deriveSourceKey(siteId, slug, assetId, ext);
@@ -126,7 +168,6 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
       const msg = `R2 source rename failed: ${err instanceof Error ? err.message : err}`;
       warnings.push(msg);
       console.error(`commitCascade ${assetId}: ${msg}`);
-      // Continue — we'll still render variants with the old source URL
     }
   }
 
@@ -183,8 +224,6 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
   }
 
   // ── 7. Render all variants with slug-derived keys ────────────────
-  // renderAllVariantsForAsset picks up the (now-renamed) source URL and
-  // derives variant keys from it via extractSlugFromSourceUrl.
   let variantCount = 0;
   try {
     const variantResults = await renderAllVariantsForAsset(assetId);
@@ -213,8 +252,6 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
       `variants=${variantCount} warnings=${warnings.length}`,
   );
 
-  // Suppress unused-var warning on currentSourceUrl in case we don't
-  // use it further (kept for potential future use)
   void currentSourceUrl;
 
   return {

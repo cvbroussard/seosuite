@@ -39,9 +39,10 @@ function sanitizeSlug(raw: unknown): string | null {
 /**
  * DEPRECATED 2026-05-16 — RETIRED, throws on call.
  *
- * Legacy briefing-time triage. Replaced by the two-stage cascade
- * (src/lib/categorization/stage1-extract.ts + stage2-multimodal.ts)
- * invoked via POST /api/assets/[id]/categorize/preview + commit.
+ * Legacy briefing-time triage. Replaced by the merged cascade
+ * (src/lib/categorization/cascade-analyze.ts orchestrating ner-extract
+ * + vision-analyze) invoked via POST /api/assets/[id]/categorize/preview
+ * + commit.
  *
  * Specifically retired because this function fed the brand catalog into
  * the vision prompt and asked for `detected_vendors` — pattern that

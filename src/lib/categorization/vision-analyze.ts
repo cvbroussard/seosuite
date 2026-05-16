@@ -1,35 +1,26 @@
 /**
- * Stage 2 of the briefing-complete cascade — multimodal asset analysis.
+ * Vision analysis pass — multimodal Sonnet call. Internal helper called
+ * by cascade-analyze.ts.
  *
- * Per project_tracpost_asset_analysis_cascade memory:
- * - Sonnet 4.6 vision call (~$0.02, ~3-5s)
- * - Input: image + transcript + Stage 1 entities + site categories + brand DNA digest
- * - Output: ONE canonical artifact (asset_categories, scene_types,
- *   url_slug, story_angles, suggested_pillar, caption_hints)
- * - Persists to asset_analysis JSONB column + asset_categories table
+ * Sonnet 4.6 vision (~$0.02, ~3-5s). Receives the image + transcript +
+ * NER entities (pre-extracted by the prior NER pass) + the site's
+ * declared GBP categories + pillar config. Produces the multimodal
+ * artifact: categories, scene types, slug, story angles, suggested
+ * pillar, caption hints.
  *
- * Brand vendor detection was REMOVED from Stage 2 vision because feeding
- * the brand catalog into the prompt caused hallucinations ("Montigo 12%"
- * was the canary — LLM reaching to justify a brand because it was on the
- * menu). Brand attribution moved to cascade-commit via brand-match.ts,
- * which fuzzy-matches Stage 1 NER hits against the catalog and writes
- * asset_brands only when the subscriber actually said the name.
+ * Brand vendor detection was REMOVED 2026-05-16 because feeding the
+ * brand catalog into the prompt caused hallucinations ("Montigo 12%"
+ * canary). Brand attribution lives in cascade-commit via brand-match.ts
+ * (NER → Levenshtein → catalog).
  *
  * Universal rule: array outputs are salience/confidence-ranked.
  * Position [0] is the top. No separate primary_X fields except for
  * asset_categories.primary which has special DB semantics.
- *
- * Replaces (and absorbs) the responsibilities of:
- * - Legacy triage.ts vision call (scene_types, suggested_tags,
- *   url_slug, story_angles, suggested_pillar) — triage.ts itself
- *   now throws on call (DEPRECATED 2026-05-16)
- * - asset-categorizer.ts (asset_categories) — DELETED 2026-05-16
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { sql } from "@/lib/db";
 import { SCENE_TYPES, SCENE_TYPE_IDS } from "@/lib/scene-types";
-import type { Stage1Result } from "./stage1-extract";
+import type { NerResult } from "./ner-extract";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -40,29 +31,33 @@ export interface AssetCategoryAssignment {
   reasoning: string;
 }
 
-export interface Stage2Result {
-  asset_categories: {
-    primary: AssetCategoryAssignment;
-    secondaries: AssetCategoryAssignment[];
-    allRanked: AssetCategoryAssignment[];
-  };
+export interface AssetCategoryCollection {
+  primary: AssetCategoryAssignment;
+  secondaries: AssetCategoryAssignment[];
+  allRanked: AssetCategoryAssignment[];
+}
+
+export interface CaptionHints {
+  tone: string;
+  voice_anchor: string;
+  key_phrases_to_use: string[];
+  phrases_to_avoid: string[];
+  audience: string;
+  lead_with: string;
+}
+
+export interface VisionResult {
+  asset_categories: AssetCategoryCollection;
   scene_types: string[];
   url_slug: string;
   story_angles: string[];
   suggested_pillar: string | null;
-  caption_hints: {
-    tone: string;
-    voice_anchor: string;
-    key_phrases_to_use: string[];
-    phrases_to_avoid: string[];
-    audience: string;
-    lead_with: string;
-  };
+  caption_hints: CaptionHints;
   cost: { input_tokens: number; output_tokens: number };
 }
 
-export type Stage2Outcome =
-  | { status: "success"; result: Stage2Result }
+export type VisionOutcome =
+  | { status: "success"; result: VisionResult }
   | { status: "skipped"; reason: "no_site_categories" | "no_image" }
   | { status: "error"; error: string };
 
@@ -73,26 +68,24 @@ export interface PillarConfigEntry {
   tags: Array<{ id: string; label: string; description?: string }>;
 }
 
-interface Stage2Input {
+export interface VisionInput {
   assetId: string;
   imageUrl: string;
   transcript: string;
-  stage1: Stage1Result | null;
+  ner: NerResult | null;
   siteCategories: Array<{ gcid: string; name: string }>;
   brandDnaDigest: string | null;
-  /** Site's full pillar taxonomy: pillars + nested tags. story_angles
-   * output is constrained to tag IDs drawn from these pillars (Option C
-   * per project_tracpost_asset_analysis_cascade memory). suggested_pillar
-   * is the pillar ID (one of these). */
   pillarConfig: PillarConfigEntry[];
 }
+
+export const VISION_MODEL = "claude-sonnet-4-6";
 
 function buildSystemPrompt(): string {
   return `You are TracPost's multimodal asset analyzer. Given an asset image (or video poster) + the subscriber's transcript + pre-extracted entities + the site's declared GBP categories + brand DNA hints, produce ONE canonical analysis artifact in strict JSON.
 
-You are the SECOND stage of a two-stage cascade. Stage 1 already extracted entities (brands, projects, specialties, locations, materials) and suggested tags from the transcript text. Your job is to add the visual + multimodal reasoning that text alone can't provide.
+The pre-extracted entities (brands, projects, specialties, locations, materials) were already pulled from the transcript by a prior NER pass. Your job is to add the visual + multimodal reasoning that text alone can't provide.
 
-You are NOT responsible for detecting brands or vendors. Stage 1's transcript-based NER is the canonical brand signal; the cascade-commit step matches those NER hits against the site's brand catalog. Do not output brand information.
+You are NOT responsible for detecting brands or vendors. The transcript-based NER is the canonical brand signal; the commit step matches those NER hits against the site's brand catalog. Do not output brand information.
 
 OUTPUTS (all required):
 
@@ -129,22 +122,22 @@ CRITICAL RULES:
 OUTPUT: Return ONLY a JSON object matching the spec. No prose, no markdown code fences. Strict JSON.`;
 }
 
-function buildUserMessage(input: Stage2Input): string {
+function buildUserMessage(input: VisionInput): string {
   const lines: string[] = [];
 
   lines.push("=== ASSET TRANSCRIPT ===\n");
   lines.push(input.transcript.trim());
   lines.push("");
 
-  if (input.stage1) {
-    lines.push("=== STAGE 1 ENTITIES (pre-extracted from transcript) ===\n");
-    const e = input.stage1.entities;
+  if (input.ner) {
+    lines.push("=== PRE-EXTRACTED ENTITIES (from prior NER pass) ===\n");
+    const e = input.ner.entities;
     if (e.brands.length) lines.push(`Brands mentioned: ${e.brands.map((b) => b.text).join(", ")}`);
     if (e.projects.length) lines.push(`Projects mentioned: ${e.projects.map((p) => p.text).join(", ")}`);
     if (e.specialties.length) lines.push(`Specialties / work themes: ${e.specialties.map((s) => s.text).join(", ")}`);
     if (e.locations.length) lines.push(`Locations: ${e.locations.map((l) => `${l.text} (${l.type})`).join(", ")}`);
     if (e.materials.length) lines.push(`Materials: ${e.materials.map((m) => m.text).join(", ")}`);
-    if (input.stage1.suggested_tags.length) lines.push(`Stage 1 suggested tags: ${input.stage1.suggested_tags.join(", ")}`);
+    if (input.ner.suggested_tags.length) lines.push(`NER suggested tags: ${input.ner.suggested_tags.join(", ")}`);
     lines.push("");
   }
 
@@ -203,7 +196,7 @@ async function fetchImageBase64(
   return { data: buf.toString("base64"), mediaType };
 }
 
-export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
+export async function analyzeVision(input: VisionInput): Promise<VisionOutcome> {
   if (input.siteCategories.length === 0) return { status: "skipped", reason: "no_site_categories" };
   if (!input.imageUrl) return { status: "skipped", reason: "no_image" };
 
@@ -211,7 +204,7 @@ export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
     const { data, mediaType } = await fetchImageBase64(input.imageUrl);
 
     const res = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: VISION_MODEL,
       max_tokens: 3000,
       system: buildSystemPrompt(),
       messages: [
@@ -248,7 +241,7 @@ export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
       };
     };
 
-    // Validate gcids against site catalog (anti-hallucination)
+    // Validate gcids against site catalog
     const validGcids = new Set(input.siteCategories.map((c) => c.gcid));
     const nameByGcid = new Map(input.siteCategories.map((c) => [c.gcid, c.name]));
     if (!parsed.asset_categories?.primary?.gcid || !validGcids.has(parsed.asset_categories.primary.gcid)) {
@@ -262,24 +255,21 @@ export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
       reasoning: c.reasoning,
     });
 
-    // Validate scene_types against fixed taxonomy
     const validScenes = new Set(SCENE_TYPE_IDS);
     const sceneTypes = (parsed.scene_types || []).filter((s) => validScenes.has(s));
 
-    // Validate pillar (against pillar IDs)
     const validPillars = new Set(input.pillarConfig.map((p) => p.id));
     const suggestedPillar = parsed.suggested_pillar && validPillars.has(parsed.suggested_pillar)
       ? parsed.suggested_pillar
       : null;
 
-    // Validate story_angles (against pillar tag IDs — Option C constraint)
     const validTagIds = new Set<string>();
     for (const p of input.pillarConfig) {
       for (const t of p.tags || []) validTagIds.add(t.id);
     }
     const validStoryAngles = (parsed.story_angles || []).filter((t) => validTagIds.has(t));
 
-    const result: Stage2Result = {
+    const result: VisionResult = {
       asset_categories: {
         primary: enrichCat(parsed.asset_categories.primary),
         secondaries: (parsed.asset_categories.secondaries || [])
@@ -312,76 +302,4 @@ export async function runStage2(input: Stage2Input): Promise<Stage2Outcome> {
   } catch (err) {
     return { status: "error", error: err instanceof Error ? err.message : String(err) };
   }
-}
-
-/**
- * Persist Stage 2 result to:
- *   - media_assets.asset_analysis JSONB (the full artifact including Stage 1)
- *   - asset_categories table (the structured tag store)
- *
- * Brands are NOT persisted here — cascade-commit calls the brand matcher
- * separately against Stage 1 NER (see brand-match.ts).
- *
- * Strategy: wipes auto rows in asset_categories, preserves
- * operator/subscriber overrides.
- */
-export async function persistStage2(
-  assetId: string,
-  stage1: Stage1Result | null,
-  stage2: Stage2Result,
-): Promise<{ categoryRows: number }> {
-  // Persist the full artifact to asset_analysis JSONB
-  const artifact = {
-    stage1,
-    stage2,
-    generated_at: new Date().toISOString(),
-    model_versions: {
-      stage1: "claude-haiku-4-5-20251001",
-      stage2: "claude-sonnet-4-6",
-    },
-    cost_estimate: {
-      stage1_input_tokens: stage1?.cost.input_tokens ?? 0,
-      stage1_output_tokens: stage1?.cost.output_tokens ?? 0,
-      stage2_input_tokens: stage2.cost.input_tokens,
-      stage2_output_tokens: stage2.cost.output_tokens,
-    },
-  };
-  await sql`
-    UPDATE media_assets
-    SET asset_analysis = ${JSON.stringify(artifact)}::jsonb, updated_at = NOW()
-    WHERE id = ${assetId}
-  `;
-
-  // Persist asset_categories — preserve operator/subscriber overrides
-  const overrides = await sql`
-    SELECT gcid, is_primary FROM asset_categories
-    WHERE asset_id = ${assetId} AND assigned_by != 'auto'
-  `;
-  const overrideGcids = new Set(overrides.map((r) => r.gcid as string));
-  const hasOverridePrimary = overrides.some((r) => r.is_primary === true);
-
-  await sql`DELETE FROM asset_categories WHERE asset_id = ${assetId} AND assigned_by = 'auto'`;
-
-  let categoryRows = 0;
-  if (!overrideGcids.has(stage2.asset_categories.primary.gcid)) {
-    await sql`
-      INSERT INTO asset_categories (asset_id, gcid, is_primary, confidence, assigned_by, reasoning)
-      VALUES (${assetId}, ${stage2.asset_categories.primary.gcid}, ${!hasOverridePrimary},
-              ${stage2.asset_categories.primary.confidence}, 'auto',
-              ${stage2.asset_categories.primary.reasoning})
-      ON CONFLICT (asset_id, gcid) DO NOTHING
-    `;
-    categoryRows++;
-  }
-  for (const s of stage2.asset_categories.secondaries) {
-    if (overrideGcids.has(s.gcid)) continue;
-    await sql`
-      INSERT INTO asset_categories (asset_id, gcid, is_primary, confidence, assigned_by, reasoning)
-      VALUES (${assetId}, ${s.gcid}, false, ${s.confidence}, 'auto', ${s.reasoning})
-      ON CONFLICT (asset_id, gcid) DO NOTHING
-    `;
-    categoryRows++;
-  }
-
-  return { categoryRows };
 }

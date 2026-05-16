@@ -1,49 +1,52 @@
 /**
- * Stage 1 of the briefing-complete cascade — text-only NER + tag
- * suggestion from the asset's transcript.
+ * NER extraction pass — text-only entity recognition on the asset's
+ * transcript. Internal helper called by cascade-analyze.ts.
  *
- * Per project_tracpost_asset_analysis_cascade memory:
- * - Cheap text Haiku call (~$0.005, ~1s)
- * - Output structures the input to Stage 2 (multimodal)
- * - Quality compounds: Stage 2 receives pre-extracted entities to
- *   ground its analysis in known nouns
+ * Single-purpose: cheap Haiku call (~$0.005, ~1s) extracts structured
+ * entities + tag suggestions from the transcript. Its output anchors
+ * the multimodal vision pass that follows, reducing hallucination by
+ * giving the vision model pre-resolved nouns to reason about.
  *
- * HARD CONTRACT — transcript required. Refuses to run without one.
+ * HARD CONTRACT — transcript required. Refuses without one.
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-interface EntityRecord {
+export interface EntityRecord {
   text: string;
   context_excerpt: string;
   char_start: number;
   char_end: number;
 }
 
-interface LocationRecord extends EntityRecord {
+export interface LocationRecord extends EntityRecord {
   type: "city" | "neighborhood" | "street_address" | "landmark" | "state" | "region" | "unknown";
   geocodable: boolean;
   privacy_sensitive: boolean;
 }
 
-export interface Stage1Result {
-  entities: {
-    brands: EntityRecord[];
-    projects: EntityRecord[];
-    specialties: EntityRecord[];
-    locations: LocationRecord[];
-    materials: EntityRecord[];
-  };
+export interface NerEntities {
+  brands: EntityRecord[];
+  projects: EntityRecord[];
+  specialties: EntityRecord[];
+  locations: LocationRecord[];
+  materials: EntityRecord[];
+}
+
+export interface NerResult {
+  entities: NerEntities;
   suggested_tags: string[];
   cost: { input_tokens: number; output_tokens: number };
 }
 
-export type Stage1Outcome =
-  | { status: "success"; result: Stage1Result }
+export type NerOutcome =
+  | { status: "success"; result: NerResult }
   | { status: "skipped"; reason: "no_transcript" }
   | { status: "error"; error: string };
+
+export const NER_MODEL = "claude-haiku-4-5-20251001";
 
 const SYSTEM_PROMPT = `You extract structured entities and tag suggestions from a media asset's transcript (operator/subscriber narration during briefing).
 
@@ -88,7 +91,7 @@ CRITICAL RULES:
 
 OUTPUT: Return ONLY a JSON object matching the shape. No prose, no markdown code fences. Strict JSON.`;
 
-export async function runStage1(transcript: string): Promise<Stage1Outcome> {
+export async function extractNer(transcript: string): Promise<NerOutcome> {
   if (!transcript || !transcript.trim()) {
     return { status: "skipped", reason: "no_transcript" };
   }
@@ -97,7 +100,7 @@ export async function runStage1(transcript: string): Promise<Stage1Outcome> {
     const userMessage = `=== TRANSCRIPT (${transcript.length} chars) ===\n\n${transcript}\n\n=== ASK ===\nExtract entities and suggested tags per the system prompt. Return the JSON object.`;
 
     const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: NER_MODEL,
       max_tokens: 2000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
@@ -107,12 +110,11 @@ export async function runStage1(transcript: string): Promise<Stage1Outcome> {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("LLM returned no JSON object");
     const parsed = JSON.parse(match[0]) as {
-      entities?: Partial<Stage1Result["entities"]>;
+      entities?: Partial<NerEntities>;
       suggested_tags?: string[];
     };
 
-    // Defensive normalization — LLM may omit empty arrays
-    const result: Stage1Result = {
+    const result: NerResult = {
       entities: {
         brands: parsed.entities?.brands ?? [],
         projects: parsed.entities?.projects ?? [],

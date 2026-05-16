@@ -44,8 +44,7 @@ interface CategoriesResponse {
  *   - "Set as primary" + "Remove" actions per existing pill
  */
 interface CascadePreview {
-  stage1: unknown | null;
-  stage2: {
+  analysis: {
     asset_categories: {
       primary: { gcid: string; name: string; confidence: number; reasoning: string };
       secondaries: Array<{ gcid: string; name: string; confidence: number; reasoning: string }>;
@@ -109,7 +108,7 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
       if (!res.ok || !d.ok) {
         throw new Error(d.error || `Preview failed (${res.status})`);
       }
-      setPreview({ stage1: d.stage1, stage2: d.stage2, brand_match: d.brand_match });
+      setPreview({ analysis: d.analysis, brand_match: d.brand_match });
     } catch (e) {
       setCascadeError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -125,7 +124,7 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
       const res = await fetch(`/api/assets/${assetId}/categorize/commit`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stage1: preview.stage1, stage2: preview.stage2 }),
+        body: JSON.stringify({ analysis: preview.analysis }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || `Commit failed (${res.status})`);
@@ -256,18 +255,18 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
             <div className="rounded border border-accent/30 bg-background px-2.5 py-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold">
-                  ★ {preview.stage2.asset_categories.primary.name}
+                  ★ {preview.analysis.asset_categories.primary.name}
                 </span>
                 <span className="text-[9px] tabular-nums text-muted">
-                  {(preview.stage2.asset_categories.primary.confidence * 100).toFixed(0)}%
+                  {(preview.analysis.asset_categories.primary.confidence * 100).toFixed(0)}%
                 </span>
               </div>
               <p className="mt-1 text-[10px] leading-relaxed text-muted">
-                {preview.stage2.asset_categories.primary.reasoning}
+                {preview.analysis.asset_categories.primary.reasoning}
               </p>
             </div>
             {/* Secondaries preview */}
-            {preview.stage2.asset_categories.secondaries.map((s) => (
+            {preview.analysis.asset_categories.secondaries.map((s) => (
               <div key={s.gcid} className="rounded border border-border bg-background px-2.5 py-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs">{s.name}</span>
@@ -280,11 +279,11 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
             ))}
             {/* Brief glimpse of other cascade outputs */}
             <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px] text-muted">
-              {preview.stage2.scene_types.length > 0 && (
-                <div>Scene: {preview.stage2.scene_types.join(", ")}</div>
+              {preview.analysis.scene_types.length > 0 && (
+                <div>Scene: {preview.analysis.scene_types.join(", ")}</div>
               )}
-              {preview.stage2.story_angles.length > 0 && (
-                <div>Angles: {preview.stage2.story_angles.join(", ")}</div>
+              {preview.analysis.story_angles.length > 0 && (
+                <div>Angles: {preview.analysis.story_angles.join(", ")}</div>
               )}
               {preview.brand_match.matched.length > 0 && (
                 <div className="col-span-2">
@@ -296,8 +295,8 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
                   New brand candidates: {preview.brand_match.suggested_new.map((s) => s.name).join(", ")}
                 </div>
               )}
-              {preview.stage2.url_slug && (
-                <div className="col-span-2">Slug: <code className="text-[9px]">{preview.stage2.url_slug}</code></div>
+              {preview.analysis.url_slug && (
+                <div className="col-span-2">Slug: <code className="text-[9px]">{preview.analysis.url_slug}</code></div>
               )}
             </div>
           </div>
