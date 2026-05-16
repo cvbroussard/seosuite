@@ -1246,6 +1246,15 @@ export function AssetEditModal({
               />
             </div>
 
+            {/* AUTO-TAG (cascade) — promoted to top of modal 2026-05-16.
+                Sits directly under RecordingBar so the cascade preview /
+                Apply flow is the first thing subscriber sees after the
+                transcript lands. Was previously buried at row 5.5 below
+                Scene/Story Angle sections. */}
+            <div className="-mx-6 mb-3">
+              <AssetCategoriesSection assetId={assetId} />
+            </div>
+
             {/* AUTO-TAG INSPECTOR — surfaces after audio.commit().
                 Per project_tracpost_auto_tag_inspector_design.md
                 (LOCKED 2026-05-10): cross-group catalog scan + NER
@@ -1487,24 +1496,9 @@ export function AssetEditModal({
                     {recordings[0].transcript}
                   </div>
                   <div className="mt-1.5 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Manual auto-tag trigger. Fires NER+catalog scan
-                        // on the staged or saved transcript so subscriber
-                        // can review results BEFORE committing the modal.
-                        // Idempotent — same transcript twice is a no-op.
-                        const transcript = audio.previewTranscript || recordings[0]?.transcript || "";
-                        if (transcript.trim().length >= 5) {
-                          void runAutoTagSuggest("", transcript);
-                        }
-                      }}
-                      disabled={autoTagging || (audio.state !== "staged" && !recordings[0]?.transcript)}
-                      className="text-[10px] text-accent underline hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      title="Run auto-tag suggestions on the current transcript. Cheaper than waiting for Save — lets you re-record if you want before spending the AI call."
-                    >
-                      ✨ Suggest tags
-                    </button>
+                    {/* "✨ Suggest tags" legacy action removed 2026-05-16.
+                        The cascade Auto-tag section at the top of the modal
+                        now owns this surface (one preview → Apply flow). */}
                     <button
                       type="button"
                       onClick={startReplaceTranscript}
@@ -1873,10 +1867,8 @@ export function AssetEditModal({
             </div>
           </div>
 
-        {/* Row 5.5: GBP Categories — multimodal auto-assigned at briefing complete
-            per #223. Replaces services tag group as canonical structured tag.
-            Operator/subscriber overrides preserved across auto re-categorization. */}
-        <AssetCategoriesSection assetId={assetId} />
+        {/* Auto-tag section moved to the top of the modal (just below
+            RecordingBar) on 2026-05-16. See block above. */}
 
         {/* Row 6: Services — hard-exposed regardless of label/empty state */}
         <div className="border-t border-border px-6 py-4">

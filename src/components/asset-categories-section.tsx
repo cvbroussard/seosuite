@@ -164,7 +164,7 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
   if (loading) {
     return (
       <div className="border-t border-border px-6 py-4">
-        <label className="mb-1.5 block text-xs text-muted">Category</label>
+        <label className="mb-1.5 block text-xs text-muted">Auto-tag</label>
         <p className="text-[11px] text-muted">Loading…</p>
       </div>
     );
@@ -173,7 +173,7 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
   if (!data) {
     return (
       <div className="border-t border-border px-6 py-4">
-        <label className="mb-1.5 block text-xs text-muted">Category</label>
+        <label className="mb-1.5 block text-xs text-muted">Auto-tag</label>
         <p className="text-[11px] text-danger">{error || "Failed to load"}</p>
       </div>
     );
@@ -188,7 +188,7 @@ export function AssetCategoriesSection({ assetId }: { assetId: string }) {
   return (
     <div className="border-t border-border px-6 py-4">
       <div className="mb-1.5 flex items-center justify-between">
-        <label className="text-xs text-muted">Category</label>
+        <label className="text-xs text-muted">Auto-tag</label>
         {assignments.length > 0 && primary?.assigned_by === "auto" && primary.confidence !== null && (
           <span className="text-[9px] text-muted">
             auto · {(Number(primary.confidence) * 100).toFixed(0)}% confidence
