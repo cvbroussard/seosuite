@@ -19,6 +19,7 @@ interface CoachingData {
     keep: number;
     add: number;
     drop: number;
+    implicitlyDropped?: Array<{ gcid: string; name: string; wasPrimary: boolean }>;
     primaryChanged: boolean;
     currentPrimaryGcid: string | null;
     proposedPrimaryGcid: string | null;
@@ -228,7 +229,14 @@ function CoachingDisplay({
           <div className="flex flex-wrap gap-3 text-xs">
             <span className="rounded bg-background px-2 py-1">Keep: <b>{data.summary.keep}</b></span>
             <span className="rounded bg-success/10 px-2 py-1 text-success">Add: <b>{data.summary.add}</b></span>
-            <span className="rounded bg-danger/10 px-2 py-1 text-danger">Drop: <b>{data.summary.drop}</b></span>
+            <span className="rounded bg-danger/10 px-2 py-1 text-danger">
+              Drop: <b>{data.summary.drop + (data.summary.implicitlyDropped?.length || 0)}</b>
+              {(data.summary.implicitlyDropped?.length || 0) > 0 && (
+                <span className="ml-1 opacity-75">
+                  ({data.summary.drop} explicit + {data.summary.implicitlyDropped!.length} implicit)
+                </span>
+              )}
+            </span>
             {data.summary.primaryChanged ? (
               <span className="rounded bg-warning/10 px-2 py-1 text-warning">
                 Primary: <b>{(data.summary.currentPrimaryGcid || "(none)").replace("gcid:", "")}</b> → <b>{(data.summary.proposedPrimaryGcid || "(none)").replace("gcid:", "")}</b>
@@ -264,6 +272,31 @@ function CoachingDisplay({
           ))}
         </div>
       </div>
+
+      {/* Will-remove section: categories absent from the new 10 that will be dropped on apply */}
+      {data.summary.implicitlyDropped && data.summary.implicitlyDropped.length > 0 && (
+        <div className="rounded-xl border border-danger/30 bg-danger/5 p-4 shadow-card">
+          <h3 className="mb-1 text-sm font-medium text-danger">
+            Will be removed on apply ({data.summary.implicitlyDropped.length})
+          </h3>
+          <p className="mb-3 text-[11px] text-muted">
+            These categories are currently on the site but were not included in the new 10-best plan.
+            Applying replaces site_gbp_categories with the plan, which removes them.
+          </p>
+          <div className="space-y-1">
+            {data.summary.implicitlyDropped.map((c) => (
+              <div key={c.gcid} className="flex items-center gap-2 text-xs">
+                <span className="text-danger">✗</span>
+                <span className="font-medium">{c.name}</span>
+                <code className="text-[9px] text-muted">{c.gcid}</code>
+                {c.wasPrimary && (
+                  <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[9px] text-warning">★ was PRIMARY</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metadata footer */}
       <div className="rounded-xl border border-border bg-surface p-3 text-[10px] text-muted shadow-card">

@@ -5,6 +5,7 @@ import { SiteDeactivation } from "./site-deactivation";
 import { EditExistingAccounts } from "./edit-existing-accounts";
 import { BlogSettings } from "../blog/blog-settings";
 import { BusinessInfo } from "./business-info";
+import { CommercialTierPicker } from "./commercial-tier-picker";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,11 @@ export default async function SettingsPage() {
           <span className="text-sm text-muted">Website URL</span>
           <span className="text-sm">{site?.url || <span className="text-dim">— not set</span>}</span>
         </div>
+      </section>
+
+      {/* Commercial tier — subscriber-declared (per project_tracpost_tier_model) */}
+      <section className="mb-8">
+        <CommercialTierPicker siteId={siteId} siteName={(site?.name as string) || "your business"} />
       </section>
 
       {/* Autopilot */}

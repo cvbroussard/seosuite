@@ -599,6 +599,10 @@ export function ProfileClient({ siteId }: { siteId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [dirtyFields, setDirtyFields] = useState<string[]>([]);
+  const [categoriesProvenance, setCategoriesProvenance] = useState<
+    Array<{ source: string; count: number; latestAt: string | null }>
+  >([]);
   const [pushing, setPushing] = useState(false);
   const [pushStatus, setPushStatus] = useState<string | null>(null);
   const [editingHeroName, setEditingHeroName] = useState(false);
@@ -619,9 +623,58 @@ export function ProfileClient({ siteId }: { siteId: string }) {
       .then(([profileData, dirtyData]) => {
         setProfile(profileData);
         if (dirtyData?.dirty) setDirty(true);
+        if (Array.isArray(dirtyData?.dirtyFields)) setDirtyFields(dirtyData.dirtyFields);
+        if (Array.isArray(dirtyData?.categoriesProvenance)) setCategoriesProvenance(dirtyData.categoriesProvenance);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  }, [siteId]);
+
+  // Revalidate dirty state when the tab regains focus or becomes visible.
+  // Without this, a /manage/* apply (e.g. coaching) that flips
+  // gbp_sync_dirty to true is invisible to a subscriber tab already open
+  // on this page — they'd never see the "Unsaved changes" pill or the
+  // Push button. Pair with lightweight 60s polling while visible so a
+  // background tab eventually catches up too.
+  useEffect(() => {
+    if (!siteId) return;
+    let cancelled = false;
+
+    async function recheck() {
+      try {
+        const r = await fetch(`/api/google/profile?site_id=${siteId}&check_dirty=1`);
+        if (!r.ok || cancelled) return;
+        const d = await r.json();
+        // Honor server state in both directions — flip on if server says
+        // dirty, flip off only if we have no in-flight local edits. Local
+        // saveField calls set dirty=true optimistically; pushToGoogle on
+        // success sets dirty=false. We don't want a focus poll to clobber
+        // either of those, so only sync from server when local is currently
+        // false-but-server-says-true.
+        setDirty((prev) => (prev ? prev : Boolean(d?.dirty)));
+        if (Array.isArray(d?.dirtyFields)) setDirtyFields(d.dirtyFields);
+        if (Array.isArray(d?.categoriesProvenance)) setCategoriesProvenance(d.categoriesProvenance);
+      } catch {
+        // Non-fatal — next tick will retry
+      }
+    }
+
+    function onVisible() {
+      if (document.visibilityState === "visible") recheck();
+    }
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", recheck);
+    const pollId = window.setInterval(() => {
+      if (document.visibilityState === "visible") recheck();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", recheck);
+      window.clearInterval(pollId);
+    };
   }, [siteId]);
 
   async function saveField(field: string, value: string) {
@@ -907,9 +960,10 @@ export function ProfileClient({ siteId }: { siteId: string }) {
             <span className="text-xs text-accent">{pushStatus}</span>
           )}
           {dirty && (
-            <span className="rounded-full bg-warning/10 px-2.5 py-1 text-[10px] font-medium text-warning">
-              Unsaved changes
-            </span>
+            <DirtyChangesBadge
+              fields={dirtyFields}
+              categoriesProvenance={categoriesProvenance}
+            />
           )}
           <button
             onClick={pushToGoogle}
@@ -1221,6 +1275,97 @@ export function ProfileClient({ siteId }: { siteId: string }) {
           </Section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Per-field dirty changes badge with hover/click-expanded detail.
+ * Replaces the opaque "Unsaved changes" pill with a breakdown of
+ * what specifically changed since the last push to Google + (for
+ * categories) who/what made the change.
+ *
+ * Provenance values map to chosen_by in site_gbp_categories:
+ *   - coaching         → TracPost coaching ceremony applied a 10-best plan
+ *   - operator         → operator manually edited
+ *   - subscriber       → subscriber manually edited
+ *   - gbp_sync_seed    → initial seed from Google pull
+ *   - gbp_sync         → legacy pre-2F sync rows
+ */
+function DirtyChangesBadge({
+  fields,
+  categoriesProvenance,
+}: {
+  fields: string[];
+  categoriesProvenance: Array<{ source: string; count: number; latestAt: string | null }>;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const fieldLabel = (f: string) => {
+    switch (f) {
+      case "categories": return "Categories";
+      case "websiteUri": return "Website";
+      case "phoneNumbers": return "Phone";
+      case "regularHours": return "Hours";
+      case "address": return "Address";
+      case "serviceArea": return "Service area";
+      case "profile": return "Description";
+      case "socialProfiles": return "Social profiles";
+      default: return f;
+    }
+  };
+
+  const sourceLabel = (s: string) => {
+    switch (s) {
+      case "coaching":      return "TracPost coaching ceremony";
+      case "operator":      return "Operator (TracPost team)";
+      case "subscriber":    return "You";
+      case "gbp_sync_seed": return "Initial Google sync";
+      case "gbp_sync":      return "Google sync";
+      default:              return s;
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-1 text-[10px] font-medium text-warning hover:bg-warning/15"
+      >
+        <span>{fields.length > 0 ? `${fields.length} change${fields.length === 1 ? "" : "s"} pending` : "Unsaved changes"}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${open ? "rotate-180" : ""}`}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-10 mt-1.5 w-72 rounded-lg border border-border bg-surface p-3 text-xs shadow-lg">
+          <p className="mb-2 font-semibold">Pending push to Google:</p>
+          {fields.length === 0 ? (
+            <p className="text-muted">No specific fields tracked. The push will sync any local changes.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {fields.map((f) => (
+                <li key={f} className="flex items-start gap-2">
+                  <span className="mt-0.5 text-warning">•</span>
+                  <div className="flex-1">
+                    <span className="font-medium">{fieldLabel(f)}</span>
+                    {f === "categories" && categoriesProvenance.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 text-[10px] text-muted">
+                        {categoriesProvenance.map((p) => (
+                          <li key={p.source}>
+                            {p.count} from {sourceLabel(p.source)}
+                            {p.latestAt && ` · ${new Date(p.latestAt).toLocaleDateString()}`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

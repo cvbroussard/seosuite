@@ -303,8 +303,15 @@ async function run() {
 
   const currentPrimary = currentCategories.find((c) => c.isPrimary)?.gcid || null;
   const proposedPrimary = categories.find((c) => c.proposedPrimary)?.gcid || null;
+  const plannedGcids = new Set(categories.map((c) => c.gcid));
+  const implicitlyDropped = currentCategories.filter((c) => !plannedGcids.has(c.gcid));
+
   console.log(`=== SUMMARY ===`);
-  console.log(`Keep: ${categories.filter((c) => c.action === "keep").length} | Add: ${categories.filter((c) => c.action === "add").length} | Drop: ${categories.filter((c) => c.action === "drop").length}`);
+  console.log(`Keep: ${categories.filter((c) => c.action === "keep").length} | Add: ${categories.filter((c) => c.action === "add").length} | Drop (explicit): ${categories.filter((c) => c.action === "drop").length}`);
+  if (implicitlyDropped.length > 0) {
+    console.log(`Implicitly dropped (${implicitlyDropped.length}) — currently held but absent from new plan:`);
+    implicitlyDropped.forEach((c) => console.log(`  ✗ ${c.name}  [${c.gcid}]${c.isPrimary ? "  ★ was PRIMARY" : ""}`));
+  }
   console.log(`Primary: ${currentPrimary || "(none)"} → ${proposedPrimary || "(none)"}${currentPrimary !== proposedPrimary ? "  *** CHANGED ***" : ""}`);
 }
 

@@ -53,7 +53,16 @@ export interface CoachingResult {
   summary: {
     keep: number;
     add: number;
+    /** Categories the LLM explicitly marked with action='drop'. */
     drop: number;
+    /**
+     * Categories the subscriber currently declares that are ABSENT from
+     * the proposed 10-best list (and therefore removed on apply, even
+     * though the LLM didn't tag them with action='drop'). Surfaced
+     * separately so the operator/subscriber sees the full removal set,
+     * not just the LLM's explicit drops. (Bug fix per #231.)
+     */
+    implicitlyDropped: Array<{ gcid: string; name: string; wasPrimary: boolean }>;
     primaryChanged: boolean;
     currentPrimaryGcid: string | null;
     proposedPrimaryGcid: string | null;
@@ -298,12 +307,22 @@ export async function generateCategoryCoaching(inputs: CoachingInputs): Promise<
   const currentPrimary = currentCategories.find((c) => c.isPrimary)?.gcid || null;
   const proposedPrimary = primaries[0]?.gcid || null;
 
+  // Implicit drops — categories currently held by the subscriber that
+  // didn't make the new 10-best list. Apply removes these even though
+  // the LLM didn't mark them with action='drop'. Surface explicitly so
+  // operator/subscriber see the full removal set before confirming.
+  const plannedGcids = new Set(categories.map((c) => c.gcid));
+  const implicitlyDropped = currentCategories
+    .filter((c) => !plannedGcids.has(c.gcid))
+    .map((c) => ({ gcid: c.gcid, name: c.name, wasPrimary: c.isPrimary }));
+
   return {
     categories,
     summary: {
       keep: categories.filter((c) => c.action === "keep").length,
       add: categories.filter((c) => c.action === "add").length,
       drop: categories.filter((c) => c.action === "drop").length,
+      implicitlyDropped,
       primaryChanged: currentPrimary !== proposedPrimary,
       currentPrimaryGcid: currentPrimary,
       proposedPrimaryGcid: proposedPrimary,

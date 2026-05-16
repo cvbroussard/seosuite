@@ -17,11 +17,40 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "site_id required" }, { status: 400 });
   }
 
-  // Quick dirty check — no profile fetch needed
+  // Quick dirty check — no profile fetch needed.
+  // Returns per-field breakdown so the UI can surface which sections
+  // changed since last push. For categories specifically, also returns
+  // a provenance digest (chosen_by tally) so the UI can render
+  // "Updated by TracPost coaching" vs "Updated by you" vs "Pulled from Google".
   if (params.get("check_dirty")) {
     const { sql } = await import("@/lib/db");
-    const [site] = await sql`SELECT gbp_sync_dirty FROM sites WHERE id = ${siteId}`;
-    return NextResponse.json({ dirty: site?.gbp_sync_dirty || false });
+    const [site] = await sql`
+      SELECT gbp_sync_dirty, gbp_dirty_fields
+      FROM sites WHERE id = ${siteId}
+    `;
+    const dirtyFields = (site?.gbp_dirty_fields as string[] | null) || [];
+
+    // If categories is dirty, gather provenance from site_gbp_categories
+    let categoriesProvenance: { source: string; count: number; latestAt: string | null }[] = [];
+    if (dirtyFields.includes("categories")) {
+      const rows = await sql`
+        SELECT chosen_by AS source, COUNT(*)::int AS count, MAX(chosen_at) AS latest_at
+        FROM site_gbp_categories WHERE site_id = ${siteId}
+        GROUP BY chosen_by
+        ORDER BY MAX(chosen_at) DESC NULLS LAST
+      `;
+      categoriesProvenance = rows.map((r) => ({
+        source: r.source as string,
+        count: r.count as number,
+        latestAt: r.latest_at ? new Date(r.latest_at as string).toISOString() : null,
+      }));
+    }
+
+    return NextResponse.json({
+      dirty: site?.gbp_sync_dirty || false,
+      dirtyFields,
+      categoriesProvenance,
+    });
   }
 
   const { fetchProfile, syncProfileFromGoogle } = await import("@/lib/gbp/profile");
