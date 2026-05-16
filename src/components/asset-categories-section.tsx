@@ -9,8 +9,12 @@ import { useEffect, useState, useCallback, forwardRef, useImperativeHandle } fro
  */
 export interface AutoTagSectionHandle {
   triggerPreview: () => void;
-  /** True when a preview is in flight or already loaded. Bar uses this
-   * to enable/disable its trigger button + adjust its label. */
+  /** Commits the currently-loaded preview (writes asset_analysis,
+   * asset_categories, asset_brands, R2 rename, variant render).
+   * No-op if no preview is loaded. Used by the modal-level Save to
+   * unify the two-step Apply+Save ceremony into one. */
+  commitPreview: () => Promise<void>;
+  /** True when a preview is loaded (cascade ran, awaiting commit). */
   hasPreview: boolean;
   /** True during the preview LLM call. */
   isPreviewing: boolean;
@@ -131,6 +135,9 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
     ref,
     () => ({
       triggerPreview: () => { void runPreview(); },
+      commitPreview: async () => {
+        if (preview) await commitPreview();
+      },
       hasPreview: preview !== null,
       isPreviewing: previewing,
     }),
@@ -282,19 +289,27 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
         </div>
       )}
 
-      {/* Cascade preview — primary + secondaries + confidence + reasoning + Apply/Discard */}
+      {/* Cascade preview — primary + secondaries + confidence + reasoning.
+          When hideTrigger=true (Auto-tag bar mode, 2026-05-16) the
+          Apply button is suppressed; the modal-level Save commits the
+          preview via the imperative handle's commitPreview(). Discard
+          stays so subscriber can clear preview before Save fires. */}
       {preview && (
         <div className="mb-3 rounded-lg border border-accent/40 bg-accent/5 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-accent">Preview — not yet saved</span>
+            <span className="text-[11px] font-semibold text-accent">
+              {hideTrigger ? "Preview — Save above to commit" : "Preview — not yet saved"}
+            </span>
             <div className="flex gap-1.5">
-              <button
-                onClick={commitPreview}
-                disabled={committing}
-                className="rounded bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-              >
-                {committing ? "Applying…" : "✓ Apply"}
-              </button>
+              {!hideTrigger && (
+                <button
+                  onClick={commitPreview}
+                  disabled={committing}
+                  className="rounded bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                >
+                  {committing ? "Applying…" : "✓ Apply"}
+                </button>
+              )}
               <button
                 onClick={discardPreview}
                 disabled={committing}

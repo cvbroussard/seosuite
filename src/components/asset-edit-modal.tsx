@@ -1002,7 +1002,25 @@ export function AssetEditModal({
       await voiceOver.commit();
     }
 
-    // Second: typed-input path. If the subscriber typed in the
+    // Second: if a cascade preview is loaded, commit it. The modal
+    // Save unifies the prior two-step Apply+Save ceremony (LOCKED
+    // 2026-05-16): a loaded preview is a dirty region, Save persists
+    // it the same way Save persists a staged recording. No-op when no
+    // preview is loaded. Ordering: AFTER recording commit so the
+    // transcript-DB row exists before cascade-commit's
+    // asset_analysis write (defensive, the cascade artifact already
+    // contains the transcript text so this is for downstream readers).
+    if (cascadeRef.current?.hasPreview) {
+      try {
+        await cascadeRef.current.commitPreview();
+      } catch (err) {
+        console.error("Cascade commit failed during Save:", err);
+        // Non-fatal — the asset PATCH below still runs, subscriber
+        // can re-trigger Auto-tag from the bar to retry.
+      }
+    }
+
+    // Third: typed-input path. If the subscriber typed in the
     // "Type instead" textarea and the text differs from the current
     // narrative, persist as a typed-input recording.
     if (typedMode && typedDraft.trim()) {
@@ -1026,7 +1044,7 @@ export function AssetEditModal({
       }
     }
 
-    // Third: the asset PATCH for tags / scene types / brands / etc.
+    // Fourth: the asset PATCH for tags / scene types / brands / etc.
     const body: Record<string, unknown> = {};
     // pillar / pillars no longer sent on save. Pillar membership derives
     // from content_tags at read time.
