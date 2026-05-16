@@ -81,13 +81,20 @@ export async function POST(req: NextRequest) {
   for (const asset of candidates) {
     const assetId = asset.id as string;
     try {
+      // DEPRECATED: processBriefedAsset no longer does R2 rename or
+      // variant render (those moved to the cascade commit orchestrator
+      // per project_tracpost_asset_analysis_cascade memory, 2026-05-16).
+      // This backfill route is now effectively a no-op for pretty URLs —
+      // the route needs to be repointed to commitCascade once the
+      // operator triggers cascade preview+commit for each asset. Leaving
+      // the call here just stamps briefable_at for assets that lacked it.
       const r = await processBriefedAsset(assetId);
       results.push({
         asset_id: assetId,
         ok: r.ok,
-        slug: r.slug,
-        renamed: r.renamed,
-        variant_count: r.variantCount,
+        slug: null,
+        renamed: false,
+        variant_count: 0,
       });
     } catch (err) {
       results.push({
