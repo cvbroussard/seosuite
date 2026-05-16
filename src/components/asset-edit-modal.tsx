@@ -1259,7 +1259,15 @@ export function AssetEditModal({
                 voiceOver={voiceOver}
                 isVideo={mediaType?.startsWith("video") || mediaType === "video"}
                 onAutoTag={() => cascadeRef.current?.triggerPreview()}
-                autoTagDisabled={cascadeBusy}
+                autoTagDisabled={
+                  cascadeBusy ||
+                  // Gate on transcript existence — the cascade is
+                  // transcript-first (Stage 1 NER hard-requires it).
+                  // Subscriber must record (or type) before auto-tag is
+                  // available.
+                  !(recordings.some((r) => (r.transcript || "").trim().length > 0) ||
+                    audio.state === "staged")
+                }
                 autoTagLabel={
                   cascadeBusy
                     ? "Analyzing…"
@@ -1592,84 +1600,51 @@ export function AssetEditModal({
               )}
             </div>
 
-            {/* SCENE SECTION — image LEFT, Scene Composition RIGHT, 2-col.
-                Image container uses position:relative + absolute children
-                so the media never exceeds the SC card's height. Grid's
-                items-stretch makes both columns the same row height; the
-                absolute media + object-contain confines the visual to that. */}
-            <div className="mb-3 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-              <div className="relative min-h-[200px] overflow-hidden bg-background">
-                {mediaType?.startsWith("video") || mediaType === "video" ? (
-                  <video
-                    ref={videoRef}
-                    src={imageUrl}
-                    controls
-                    className="absolute inset-0 h-full w-full object-contain"
-                  />
-                ) : faceData && faceData.length > 0 ? (
-                  <FaceOverlay
-                    imageUrl={imageUrl}
-                    faces={faceData}
-                    detectionWidth={faceDetectionWidth}
-                    detectionHeight={faceDetectionHeight}
-                    personas={personaList}
-                    assetId={assetId}
-                    onFaceNamed={(faceIndex, personaId, personaName) => {
-                      setFaceData((prev) =>
-                        prev ? prev.map((f, i) =>
-                          i === faceIndex ? { ...f, personaId, personaName } : f
-                        ) : prev
-                      );
-                    }}
-                  />
-                ) : (
-                  <img
-                    src={imageUrl}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-contain"
-                  />
-                )}
-              </div>
-              <div>
-                {SCENE_TYPES.length > 0 && (
-                  <div className="rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
-                    <div className="mb-2 flex items-baseline justify-between gap-3">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[11px] font-medium text-accent">Scene Composition</span>
-                        <span className="text-[10px] text-muted">— What&apos;s actually shown.</span>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {SCENE_TYPES.map((s) => {
-                        const checked = sceneTypesArr.includes(s.id);
-                        return (
-                          <label
-                            key={s.id}
-                            className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 hover:bg-accent/5"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSceneTypesArr((prev) => [...prev, s.id]);
-                                } else {
-                                  setSceneTypesArr((prev) => prev.filter((id) => id !== s.id));
-                                }
-                              }}
-                              className="mt-0.5 shrink-0"
-                            />
-                            <span className="flex-1 text-[11px]">
-                              <span className="font-medium text-foreground">{s.label}</span>
-                              <span className="ml-1 text-muted">— {s.description}</span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+            {/* MEDIA RENDER — full-width, sits below Auto-tag bar +
+                Transcription card. Was previously paired with Scene
+                Composition in a 2-col grid; restructured 2026-05-16 so
+                media stands alone and Scene Composition becomes a
+                legacy stub below. */}
+            <div className="mb-3 relative overflow-hidden bg-background min-h-[200px]">
+              {mediaType?.startsWith("video") || mediaType === "video" ? (
+                <video
+                  ref={videoRef}
+                  src={imageUrl}
+                  controls
+                  className="w-full max-h-[60vh] object-contain"
+                />
+              ) : faceData && faceData.length > 0 ? (
+                <FaceOverlay
+                  imageUrl={imageUrl}
+                  faces={faceData}
+                  detectionWidth={faceDetectionWidth}
+                  detectionHeight={faceDetectionHeight}
+                  personas={personaList}
+                  assetId={assetId}
+                  onFaceNamed={(faceIndex, personaId, personaName) => {
+                    setFaceData((prev) =>
+                      prev ? prev.map((f, i) =>
+                        i === faceIndex ? { ...f, personaId, personaName } : f
+                      ) : prev
+                    );
+                  }}
+                />
+              ) : (
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="w-full max-h-[60vh] object-contain"
+                />
+              )}
+            </div>
+
+            {/* Scene Composition — LEGACY STUB. Values display retired
+                2026-05-16; cascade owns scene_types now (in Auto-tag
+                card). Section kept as placeholder during debug +
+                cascade-rollout testing. */}
+            <div className="mb-3 rounded border border-border bg-background/40 px-3 py-2 text-[11px] text-muted">
+              <span>Scene Composition</span>
+              <span className="ml-2 text-[10px] text-muted/60">— legacy (read-only stub during debug)</span>
             </div>
 
             {/* Legacy Context Note card retired 2026-05-16 — new recording
@@ -1678,292 +1653,42 @@ export function AssetEditModal({
                 #195 backfills + drops it; getAssetNarrative continues to
                 read it as a fallback in the meantime. */}
 
-            {/* STORY ANGLE SECTION — moved BELOW Transcription (2026-05-11) */}
-            {pillarConfig.length > 0 && (
-              <div className="mb-3 rounded border border-accent/30 bg-accent/5 px-3 py-2.5">
-                <div className="mb-3 flex items-baseline justify-between gap-3">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[11px] font-medium text-accent">Story Angle</span>
-                    <span className="text-[10px] text-muted">
-                      — What this asset is meant to say. Pick the tags that fit; pillar membership follows automatically.
-                    </span>
-                  </div>
-                  <a
-                    href="/help/asset-tagging"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 text-[10px] text-muted underline hover:text-foreground"
-                  >
-                    Learn more
-                  </a>
-                </div>
-                <div className="space-y-3">
-                  {pillarConfig.map((p) => (
-                    <div key={p.id} className="rounded px-2 py-1.5">
-                      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-[11px] font-semibold text-foreground">{p.label}</span>
-                        {p.description && (
-                          <span className="text-[10px] text-muted">— {p.description}</span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.tags.map((t) => {
-                          const checked = tags.includes(t.id);
-                          const confirmed = checked && savedTags.includes(t.id);
-                          const preselected = checked && !confirmed;
-                          return (
-                            <button
-                              key={t.id}
-                              onClick={() => {
-                                if (checked) {
-                                  setTags((prev) => prev.filter((id) => id !== t.id));
-                                } else {
-                                  setTags((prev) => [...prev, t.id]);
-                                }
-                              }}
-                              title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
-                              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
-                                confirmed
-                                  ? "bg-accent text-white"
-                                  : preselected
-                                    ? "bg-accent/20 text-accent ring-1 ring-accent/40"
-                                    : "bg-surface-hover text-muted hover:text-foreground"
-                              }`}
-                            >
-                              {t.label}
-                            </button>
-                          );
-                        })}
-                        {p.tags.length === 0 && (
-                          <span className="text-[10px] italic text-muted">
-                            No tags configured — edit in Business settings
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Story Angle — LEGACY STUB. Values display retired
+                2026-05-16; cascade owns story_angles now (in Auto-tag
+                card). Section kept as placeholder during debug. */}
+            <div className="mb-3 rounded border border-border bg-background/40 px-3 py-2 text-[11px] text-muted">
+              <span>Story Angle</span>
+              <span className="ml-2 text-[10px] text-muted/60">— legacy (read-only stub during debug)</span>
+            </div>
         </div>
 
         {/* Bottom Tags section retired 2026-05-09 — Story Angle card above
             owns all pillar tag selection. Selected pills are visible inline
             on each pillar row; no need for a separate chip strip. */}
 
-        {/* Row 3: Brands — hard-exposed regardless of label/empty state */}
-        <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{brandLabel || "Brands"}</label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {localBrands.map((b) => {
-                const selected = brandIds.includes(b.id);
-                const confirmed = selected && savedBrandIds.includes(b.id);
-                const preselected = selected && !confirmed;
-                return (
-                  <button
-                    key={b.id}
-                    onClick={() =>
-                      setBrandIds((prev) =>
-                        selected ? prev.filter((id) => id !== b.id) : [...prev, b.id]
-                      )
-                    }
-                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
-                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      confirmed
-                        ? "bg-accent text-white"
-                        : preselected
-                          ? "bg-accent/20 text-accent ring-1 ring-accent/40"
-                          : "bg-surface-hover text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {b.name}
-                    {b.url && selected && (
-                      <span className={`ml-1 ${confirmed ? "text-white/60" : "text-accent/50"}`}>↗</span>
-                    )}
-                  </button>
-                );
-              })}
-              <span className="flex items-center gap-1">
-                <input
-                  value={newBrandName}
-                  onChange={(e) => setNewBrandName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && quickCreateBrand()}
-                  placeholder={`+ ${brandLabel || "Brand"}`}
-                  className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
-                />
-                {newBrandName.trim() && (
-                  <button
-                    onClick={quickCreateBrand}
-                    disabled={creatingBrand}
-                    className="text-[10px] text-accent hover:underline"
-                  >
-                    {creatingBrand ? "..." : "Add"}
-                  </button>
-                )}
-              </span>
-            </div>
+        {/* LEGACY STUBS — Brands / Projects / People / Locations.
+            Values display + pill toggles + quick-create inputs retired
+            2026-05-16. Cards kept as placeholders during debug; cascade
+            (Auto-tag card above) owns brand attribution via NER. State
+            vars + PATCH payload left in place as no-ops for one cycle. */}
+        <div className="border-t border-border px-6 py-4 space-y-2">
+          <div className="rounded border border-border bg-background/40 px-3 py-2 text-[11px] text-muted">
+            <span>{brandLabel || "Brands"}</span>
+            <span className="ml-2 text-[10px] text-muted/60">— legacy (read-only stub during debug)</span>
           </div>
-
-        {/* Row 4: Projects — hard-exposed regardless of label/empty state */}
-        <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{projectLabel || "Projects"}</label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {localProjects.map((p) => {
-                const selected = projectIds.includes(p.id);
-                const confirmed = selected && savedProjectIds.includes(p.id);
-                const preselected = selected && !confirmed;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() =>
-                      setProjectIds((prev) =>
-                        selected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
-                      )
-                    }
-                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
-                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      confirmed
-                        ? "bg-accent text-white"
-                        : preselected
-                          ? "bg-accent/20 text-accent ring-1 ring-accent/40"
-                          : "bg-surface-hover text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
-              <span className="flex items-center gap-1">
-                <input
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && quickCreateProject()}
-                  placeholder={`+ ${projectLabel || "Project"}`}
-                  className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
-                />
-                {newProjectName.trim() && (
-                  <button
-                    onClick={quickCreateProject}
-                    disabled={creatingProject}
-                    className="text-[10px] text-accent hover:underline"
-                  >
-                    {creatingProject ? "..." : "Add"}
-                  </button>
-                )}
-              </span>
-            </div>
+          <div className="rounded border border-border bg-background/40 px-3 py-2 text-[11px] text-muted">
+            <span>{projectLabel || "Projects"}</span>
+            <span className="ml-2 text-[10px] text-muted/60">— legacy (read-only stub during debug)</span>
           </div>
-
-        {/* Row 5: Personas — hard-exposed regardless of label/empty state.
-            Quick-create flow uses /api/personas with type=person + consent
-            unset (subscriber refines in /dashboard/tagging). */}
-        <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{personaLabel || "People"}</label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {localPersonas.map((p) => {
-                const selected = personaIds.includes(p.id);
-                const confirmed = selected && savedPersonaIds.includes(p.id);
-                const preselected = selected && !confirmed;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() =>
-                      setPersonaIds((prev) =>
-                        selected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
-                      )
-                    }
-                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
-                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      confirmed
-                        ? "bg-purple-500 text-white"
-                        : preselected
-                          ? "bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/40"
-                          : "bg-surface-hover text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
-              <span className="flex items-center gap-1">
-                <input
-                  value={newPersonaName}
-                  onChange={(e) => setNewPersonaName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && quickCreatePersona()}
-                  placeholder={`+ ${personaLabel || "Person"}`}
-                  className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
-                />
-                {newPersonaName.trim() && (
-                  <button
-                    onClick={quickCreatePersona}
-                    disabled={creatingPersona}
-                    className="text-[10px] text-accent hover:underline"
-                  >
-                    {creatingPersona ? "..." : "Add"}
-                  </button>
-                )}
-              </span>
-            </div>
+          <div className="rounded border border-border bg-background/40 px-3 py-2 text-[11px] text-muted">
+            <span>{personaLabel || "People"}</span>
+            <span className="ml-2 text-[10px] text-muted/60">— legacy (read-only stub during debug)</span>
           </div>
-
-        {/* Auto-tag section moved to the top of the modal (just below
-            RecordingBar) on 2026-05-16. See block above. */}
-
-        {/* Services section retired 2026-05-16 — categories (gcid-tagged
-            at briefing complete by the cascade) are the canonical
-            structured tag per #223. Service state + payload field left
-            in place as no-op for one cycle; full removal in a follow-up
-            once the cascade is alpha-grade across more sites. */}
-
-        {/* Row 7: Branches — hard-exposed regardless of label/empty state */}
-        <div className="border-t border-border px-6 py-4">
-            <label className="mb-1.5 block text-xs text-muted">{branchLabel || "Locations"}</label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {localBranches.map((b) => {
-                const selected = branchIds.includes(b.id);
-                const confirmed = selected && savedBranchIds.includes(b.id);
-                const preselected = selected && !confirmed;
-                return (
-                  <button
-                    key={b.id}
-                    onClick={() =>
-                      setBranchIds((prev) =>
-                        selected ? prev.filter((id) => id !== b.id) : [...prev, b.id]
-                      )
-                    }
-                    title={preselected ? "Auto-tag preselect — uncheck to skip, or Save to confirm" : undefined}
-                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      confirmed
-                        ? "bg-accent text-white"
-                        : preselected
-                          ? "bg-accent/20 text-accent ring-1 ring-accent/40"
-                          : "bg-surface-hover text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {b.name}
-                  </button>
-                );
-              })}
-              <span className="flex items-center gap-1">
-                <input
-                  value={newBranchName}
-                  onChange={(e) => setNewBranchName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && quickCreateBranch()}
-                  placeholder={`+ ${branchLabel || "Location"}`}
-                  className="w-28 rounded bg-transparent px-2 py-0.5 text-xs text-muted outline-none placeholder:text-muted/50 focus:bg-surface-hover"
-                />
-                {newBranchName.trim() && (
-                  <button
-                    onClick={quickCreateBranch}
-                    disabled={creatingBranch}
-                    className="text-[10px] text-accent hover:underline"
-                  >
-                    {creatingBranch ? "..." : "Add"}
-                  </button>
-                )}
-              </span>
-            </div>
+          <div className="rounded border border-border bg-background/40 px-3 py-2 text-[11px] text-muted">
+            <span>{branchLabel || "Locations"}</span>
+            <span className="ml-2 text-[10px] text-muted/60">— legacy (read-only stub during debug)</span>
           </div>
+        </div>
 
         {/* Asset Studio enhancement tools removed from the source-asset modal
             (2026-05-09). Per the apprentice→master architecture lock: tools
