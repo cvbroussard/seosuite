@@ -20,20 +20,35 @@ export interface LocalPackResult {
   position: number;
   /** Business title as displayed */
   title: string;
-  /** Google Place ID — primary join key downstream */
+  /**
+   * SerpAPI's `place_id` field — Google Maps CID (numeric Customer ID like
+   * "14198205168375289065"), NOT the "ChIJ..." Place ID that Places API
+   * (New) expects. CIDs are stable identifiers for the same business but
+   * require a separate lookup if we want full GBP profile via Places API.
+   * For V1 we use CID as the join key for dedup across queries; Places
+   * enrichment deferred to V2.
+   */
   placeId: string;
+  /** Knowledge Graph ID from SerpAPI (e.g. "/g/11ltg_20q5") — alternate identifier */
+  knowledgeGraphId?: string;
   /** Star rating, 0-5 */
   rating?: number;
   /** Total review count */
   reviewsCount?: number;
-  /** Business type label (e.g., "General contractor") */
+  /** Business type label (e.g., "General contractor") — SerpAPI's primary type */
   type?: string;
   /** Formatted address */
   address?: string;
   /** Phone number if surfaced */
   phone?: string;
-  /** Website URL if surfaced */
+  /** Website URL if surfaced (extracted from links.website) */
   website?: string;
+  /** Years in business if surfaced (e.g., "3+ years in business") */
+  yearsInBusiness?: string;
+  /** Single-sentence description SerpAPI surfaces (often pulled from reviews) */
+  description?: string;
+  /** GPS lat/lng of the business location */
+  coordinates?: { latitude: number; longitude: number };
 }
 
 export interface OrganicResult {
@@ -112,20 +127,32 @@ export function parseSerpResponse(
   searchLocation: string,
   data: Record<string, unknown>,
 ): SerpResponse {
-  const localResults = (data.local_results || []) as Array<Record<string, unknown>>;
+  // SerpAPI wraps local results: data.local_results.places[] — not flat.
+  const localResultsWrapper = (data.local_results || {}) as Record<string, unknown>;
+  const localResults = (localResultsWrapper.places || []) as Array<Record<string, unknown>>;
   const organicResults = (data.organic_results || []) as Array<Record<string, unknown>>;
 
-  const localPack: LocalPackResult[] = localResults.map((r, i) => ({
-    position: (r.position as number) ?? i + 1,
-    title: (r.title as string) || "",
-    placeId: (r.place_id as string) || "",
-    rating: (r.rating as number) ?? undefined,
-    reviewsCount: (r.reviews as number) ?? undefined,
-    type: (r.type as string) ?? undefined,
-    address: (r.address as string) ?? undefined,
-    phone: (r.phone as string) ?? undefined,
-    website: (r.website as string) ?? undefined,
-  })).filter((r) => r.placeId); // Drop rows with no place_id — can't use them
+  const localPack: LocalPackResult[] = localResults.map((r, i) => {
+    const links = (r.links || {}) as Record<string, unknown>;
+    const coords = (r.gps_coordinates || {}) as Record<string, unknown>;
+    return {
+      position: (r.position as number) ?? i + 1,
+      title: (r.title as string) || "",
+      placeId: String(r.place_id || ""),
+      knowledgeGraphId: (r.provider_id as string) ?? undefined,
+      rating: (r.rating as number) ?? undefined,
+      reviewsCount: (r.reviews as number) ?? undefined,
+      type: (r.type as string) ?? undefined,
+      address: (r.address as string) ?? undefined,
+      phone: (r.phone as string) ?? undefined,
+      website: (links.website as string) ?? undefined,
+      yearsInBusiness: (r.years_in_business as string) ?? undefined,
+      description: (r.description as string) ?? undefined,
+      coordinates: typeof coords.latitude === "number" && typeof coords.longitude === "number"
+        ? { latitude: coords.latitude, longitude: coords.longitude }
+        : undefined,
+    };
+  }).filter((r) => r.placeId); // Drop rows with no CID — can't dedup them
 
   const organic: OrganicResult[] = organicResults.map((r, i) => ({
     position: (r.position as number) ?? i + 1,

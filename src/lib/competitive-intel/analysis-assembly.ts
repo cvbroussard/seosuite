@@ -24,10 +24,61 @@ import {
   type RankingCompetitor,
   type ExtractionResult,
 } from "./competitor-extraction";
-import {
-  fetchCompetitorProfiles,
-  type CompetitorProfile,
-} from "./competitor-profile";
+
+/**
+ * US state abbreviation expansion for SerpAPI location parameter.
+ * SerpAPI's location DB uses full names ("Pennsylvania" not "PA").
+ */
+const STATE_ABBREV_TO_FULL: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+  MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+  OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+  DC: "District of Columbia",
+};
+
+/**
+ * Convert a place name (from GBP service area data) into a SerpAPI-
+ * acceptable location string. SerpAPI doesn't accept neighborhood-level
+ * locations; we level up to city/state and let the QUERY carry the
+ * neighborhood specificity.
+ *
+ *   "Squirrel Hill, Pittsburgh, PA, USA"     → "Pittsburgh, Pennsylvania, United States"
+ *   "Pittsburgh, PA, USA"                    → "Pittsburgh, Pennsylvania, United States"
+ *   "Mount Lebanon Township, PA, USA"        → "Mount Lebanon Township, Pennsylvania, United States"
+ *   "Pennsylvania, USA"                      → "Pennsylvania, United States"
+ *   "Pittsburgh Metropolitan Area, PA, USA"  → "Pittsburgh, Pennsylvania, United States" (best-effort)
+ */
+export function serpLocationFromPlaceName(placeName: string): string {
+  const parts = placeName.split(",").map((p) => p.trim()).filter(Boolean);
+
+  // Strip trailing "USA" if present — we'll add "United States" back
+  const hasUsa = parts[parts.length - 1] === "USA";
+  if (hasUsa) parts.pop();
+
+  // Expand state abbreviation in penultimate position (if it looks like one)
+  if (parts.length >= 2 && parts[parts.length - 1].length === 2) {
+    const abbrev = parts[parts.length - 1].toUpperCase();
+    if (STATE_ABBREV_TO_FULL[abbrev]) {
+      parts[parts.length - 1] = STATE_ABBREV_TO_FULL[abbrev];
+    }
+  }
+
+  // Drop the first part if there are 3+ remaining (neighborhood prefix)
+  // e.g., "Squirrel Hill, Pittsburgh, Pennsylvania" → "Pittsburgh, Pennsylvania"
+  if (parts.length >= 3) {
+    parts.shift();
+  }
+
+  parts.push("United States");
+  return parts.join(", ");
+}
 
 export interface AnalysisPayload {
   /** When the analysis was generated */
@@ -50,8 +101,12 @@ export interface AnalysisPayload {
 }
 
 export interface EnrichedCompetitor extends RankingCompetitor {
-  /** Places API profile data merged in */
-  profile?: CompetitorProfile;
+  // V1: no Places API enrichment because SerpAPI returns Google CID
+  // (numeric), not a Places API "ChIJ..." Place ID. SerpAPI's local
+  // pack already gives us primary type + rating + reviews + address +
+  // website — sufficient for the V1 comparison. V2 may add a
+  // CID→PlaceID resolver (via Find Place call with title + address)
+  // for additional categories.
 }
 
 export interface AssemblyResult {
@@ -118,12 +173,20 @@ export async function runAnalysisForSite(
     // Future improvement: store subscriber's Place ID separately.
     const subscriberPlaceId = undefined as string | undefined;
 
-    // 3) Fetch SERPs for all queries (parallel — SerpAPI is rate-limit tolerant)
+    // 3) Fetch SERPs for all queries
+    // Location parameter must be city/state level (SerpAPI rejects
+    // neighborhood-level locations). Use a single coarse location for
+    // the entire site, derived from the most-specific declared service
+    // area via serpLocationFromPlaceName. Query string itself carries
+    // any finer-grained geographic targeting (e.g., "Squirrel Hill").
+    const primaryPlaceName = (subscriberServiceAreas[0]?.placeName as string) || "";
+    const serpLocation = serpLocationFromPlaceName(primaryPlaceName);
+
     const serps: SerpResponse[] = [];
     let serpQueriesRun = 0;
     for (const q of queries) {
       try {
-        const serp = await fetchSerp(q.query, q.placeName);
+        const serp = await fetchSerp(q.query, serpLocation);
         serps.push(serp);
         serpQueriesRun++;
       } catch (err) {
@@ -138,15 +201,9 @@ export async function runAnalysisForSite(
       excludePlaceId: subscriberPlaceId,
     });
 
-    // 5) Fetch Places profile for each top competitor (in parallel)
-    const competitorPlaceIds = extraction.topCompetitors.map((c) => c.placeId);
-    const profiles = await fetchCompetitorProfiles(competitorPlaceIds);
-    const profileById = new Map(profiles.map((p) => [p.placeId, p]));
-
-    const topCompetitors: EnrichedCompetitor[] = extraction.topCompetitors.map((c) => ({
-      ...c,
-      profile: profileById.get(c.placeId),
-    }));
+    // 5) V1: no separate Places enrichment (CID ≠ Place ID — see
+    // EnrichedCompetitor note). SerpAPI local pack data is sufficient.
+    const topCompetitors: EnrichedCompetitor[] = extraction.topCompetitors;
 
     // 6) Assemble payload
     const payload: AnalysisPayload = {
@@ -157,7 +214,7 @@ export async function runAnalysisForSite(
       topCompetitors,
       totalCompetitorsObserved: extraction.totalBusinessesObserved,
       serpQueriesRun,
-      competitorProfilesFetched: profiles.filter((p) => p.status === "ok").length,
+      competitorProfilesFetched: 0, // V1: no separate Places enrichment
     };
 
     // 7) Persist + mark complete
