@@ -24,6 +24,7 @@ import {
   type RankingCompetitor,
   type ExtractionResult,
 } from "./competitor-extraction";
+import { fetchCompetitorProfile } from "./competitor-profile";
 import { generateRecommendations, type Recommendation } from "./recommendations";
 
 /**
@@ -81,6 +82,28 @@ export function serpLocationFromPlaceName(placeName: string): string {
   return parts.join(", ");
 }
 
+export interface SubscriberMetrics {
+  /** Subscriber's Google Place ID (for context + future exclusion) */
+  placeId: string | null;
+  /** Live Google rating (1-5) — pulled via Places API at analysis time */
+  rating: number | null;
+  /** Live review count — pulled via Places API at analysis time */
+  reviewCount: number | null;
+  /** GBP profile completeness score 0-100 */
+  completenessScore: number | null;
+  /** Specific fields GBP flagged as missing */
+  completenessMissing: string[];
+  /** Phone, website, address, social profile presence — yes/no signals */
+  hasPhone: boolean;
+  hasWebsite: boolean;
+  hasAddress: boolean;
+  socialProfileCount: number;
+  /** Count of declared GBP categories (subscriber's set) */
+  categoryCount: number;
+  /** Count of declared service areas */
+  serviceAreaCount: number;
+}
+
 export interface AnalysisPayload {
   /** When the analysis was generated */
   generatedAt: string;
@@ -88,6 +111,8 @@ export interface AnalysisPayload {
   subscriberCategories: Array<{ gcid: string; name: string; isPrimary: boolean }>;
   /** Site's service areas at time of analysis */
   subscriberServiceAreas: Array<{ placeId: string; placeName: string }>;
+  /** Subscriber's own competitive metrics (rating, reviews, completeness, etc.) */
+  subscriberMetrics: SubscriberMetrics;
   /** All target queries we ran */
   targetQueries: TargetQuery[];
   /** Top N ranking competitors with merged SERP signal + Places profile */
@@ -151,28 +176,58 @@ export async function runAnalysisForSite(
       throw new Error("No queries derived — site needs GBP categories AND service areas before analysis can run");
     }
 
-    // 2) Load subscriber's site context for comparison
+    // 2) Load subscriber's site context for comparison + competitive metrics
     const [siteRow] = await sql`
       SELECT
+        gbp_profile,
         gbp_profile->'serviceArea'->'places'->'placeInfos' AS place_infos,
         (SELECT JSON_AGG(JSON_BUILD_OBJECT('gcid', gc.gcid, 'name', gc.name, 'isPrimary', sgc.is_primary))
          FROM site_gbp_categories sgc JOIN gbp_categories gc ON gc.gcid = sgc.gcid
-         WHERE sgc.site_id = ${siteId}) AS categories,
-        (SELECT pa.asset_id FROM platform_assets pa
-         JOIN site_platform_assets spa ON spa.platform_asset_id = pa.id
-         WHERE spa.site_id = ${siteId} AND pa.platform = 'gbp' AND pa.asset_type = 'gbp_location'
-         LIMIT 1) AS gbp_location_path
+         WHERE sgc.site_id = ${siteId}) AS categories
       FROM sites WHERE id = ${siteId}
     `;
     const subscriberCategories = (siteRow?.categories || []) as AnalysisPayload["subscriberCategories"];
     const subscriberServiceAreas = (siteRow?.place_infos || []) as AnalysisPayload["subscriberServiceAreas"];
+    const profile = (siteRow?.gbp_profile || {}) as Record<string, unknown>;
+    const profileMetadata = (profile.metadata || {}) as Record<string, unknown>;
+    const profileCompleteness = (profile.completeness || {}) as { score?: number; missing?: string[] };
+    const profileAddress = (profile.address || {}) as { addressLines?: string[] };
 
-    // Extract subscriber's own place_id from their gbp_location_path
-    // ("locations/9263949534206718382" → the location ID itself is not
-    // a Google Place ID; we'd need a separate lookup. For now, scan SERPs
-    // for the subscriber's business name and exclude by display match.)
-    // Future improvement: store subscriber's Place ID separately.
-    const subscriberPlaceId = undefined as string | undefined;
+    // Subscriber's Google Place ID from the synced GBP profile. Real
+    // Place ID format (ChIJ...), usable with Places API for live
+    // metrics. (SerpAPI's local pack returns CIDs not Place IDs, so
+    // can't use this for SERP exclusion directly — exclusion happens
+    // by business-name match if needed.)
+    const subscriberPlaceId = (profileMetadata.placeId as string) || null;
+
+    // Fetch live Google rating + review count for the subscriber so the
+    // LLM can cite REAL numbers in recommendations (preventing the
+    // "your N reviews" hallucination from example-as-data interpretation).
+    let subscriberRating: number | null = null;
+    let subscriberReviewCount: number | null = null;
+    if (subscriberPlaceId) {
+      try {
+        const ownProfile = await fetchCompetitorProfile(subscriberPlaceId);
+        subscriberRating = ownProfile.rating;
+        subscriberReviewCount = ownProfile.reviewCount;
+      } catch (err) {
+        console.warn("Failed to fetch subscriber's own GBP metrics:", err instanceof Error ? err.message : err);
+      }
+    }
+
+    const subscriberMetrics: SubscriberMetrics = {
+      placeId: subscriberPlaceId,
+      rating: subscriberRating,
+      reviewCount: subscriberReviewCount,
+      completenessScore: typeof profileCompleteness.score === "number" ? profileCompleteness.score : null,
+      completenessMissing: profileCompleteness.missing || [],
+      hasPhone: Boolean(profile.phoneNumber),
+      hasWebsite: Boolean(profile.websiteUri),
+      hasAddress: (profileAddress.addressLines?.length || 0) > 0,
+      socialProfileCount: ((profile.socialProfiles as unknown[]) || []).length,
+      categoryCount: subscriberCategories.length,
+      serviceAreaCount: subscriberServiceAreas.length,
+    };
 
     // 3) Fetch SERPs for all queries
     // Location parameter must be city/state level (SerpAPI rejects
@@ -196,10 +251,17 @@ export async function runAnalysisForSite(
       }
     }
 
-    // 4) Extract ranking competitors from accumulated SERPs
+    // 4) Extract ranking competitors from accumulated SERPs.
+    // Note: subscriberPlaceId is a real Google Place ID (ChIJ...) while
+    // SerpAPI's local pack returns CIDs (numeric). Exclusion-by-PlaceId
+    // won't fire today; if the subscriber's own business appears in a
+    // SERP result it'll still surface as a "competitor." Mitigation
+    // deferred — typically the subscriber's own listing isn't ranking
+    // strongly for the same queries the analysis runs, so this rarely
+    // matters in practice. Future: CID→PlaceID resolver via Find Place.
     const extraction: ExtractionResult = extractRankingCompetitors(serps, queries, {
       topN: opts.topN ?? 10,
-      excludePlaceId: subscriberPlaceId,
+      excludePlaceId: subscriberPlaceId || undefined,
     });
 
     // 5) V1: no separate Places enrichment (CID ≠ Place ID — see
@@ -211,11 +273,12 @@ export async function runAnalysisForSite(
       generatedAt: new Date().toISOString(),
       subscriberCategories,
       subscriberServiceAreas,
+      subscriberMetrics,
       targetQueries: queries,
       topCompetitors,
       totalCompetitorsObserved: extraction.totalBusinessesObserved,
       serpQueriesRun,
-      competitorProfilesFetched: 0, // V1: no separate Places enrichment
+      competitorProfilesFetched: subscriberPlaceId ? 1 : 0, // own profile fetch
     };
 
     // 7) Generate LLM recommendations (Phase 1E). Non-fatal — analysis

@@ -49,14 +49,23 @@ const SYSTEM_PROMPT = `You are TracPost's competitive market analyst. You produc
 
 The subscriber has just connected their Google Business Profile. You've run real Google searches against the queries that matter to them and identified who actually outranks them. Your job: surface the 3-5 highest-impact, most ACTIONABLE recommendations.
 
-CRITICAL RULES:
-1. Be SPECIFIC — cite competitor names, review counts, query positions, exact category names. Generic advice ("get more reviews") is worthless. Specific advice ("L&C Builders has 26 reviews and dominates 9 of your 15 queries — your 12 reviews are the #1 SEO lever to fix") earns trust.
-2. Flag CATEGORY MISMATCHES — sometimes a ranked competitor isn't actually a competitor (e.g., an entertainment-painting studio ranking for "painting contractor" searches). Surface these as "non_competitor_filter" recommendations so the subscriber knows we're not blindly counting noise.
-3. Prioritize by IMPACT, not difficulty — a "high" priority recommendation should be one that, if acted on, would meaningfully close the rank gap.
-4. Recommendations must be subscriber-readable, NOT engineering jargon. Write like a strategist talking to a business owner.
-5. ALWAYS include a "what to do" — every recommendation has an actionability field with a concrete next action.
-6. Cite the DATA explicitly in the reasoning — "3 of 10 top competitors are tagged as 'X', you're tagged as 'Y'" earns trust by being verifiable.
-7. Avoid filler. If only 3 strong recommendations exist, return 3 — don't pad to hit the count.
+CRITICAL RULES (read carefully — violations destroy trust):
+
+1. **NEVER INVENT NUMBERS.** Use ONLY data present in the analysis snapshot below. If a metric is missing (rating, review count, etc.), say "unknown" or omit the recommendation. Better to skip a recommendation than fabricate a value.
+
+2. **Be SPECIFIC** — when data is present, cite real values: competitor names from the snapshot, exact review counts shown, exact query positions, exact category names. Generic advice ("get more reviews") is worthless without supporting data; specific advice citing snapshot values earns trust.
+
+3. **Flag CATEGORY MISMATCHES** — sometimes a ranked competitor isn't actually a competitor (e.g., an entertainment business ranking for a contractor search). Surface these as "non_competitor_filter" recommendations so the subscriber knows we're not blindly counting noise.
+
+4. **Prioritize by IMPACT, not difficulty** — a "high" priority recommendation should be one that, if acted on, would meaningfully close the rank gap.
+
+5. **Subscriber-readable voice** — write like a strategist talking to a business owner, NOT engineering jargon.
+
+6. **ALWAYS include "what to do"** — every recommendation has an actionability field with a concrete next action.
+
+7. **Cite the DATA explicitly in the reasoning** — patterns like "X of N top competitors are tagged as <category>, you're tagged as <other>" earn trust by being verifiable against the snapshot.
+
+8. **Avoid filler** — if only 3 strong recommendations exist, return 3. Don't pad.
 
 OUTPUT: Return ONLY a JSON array of recommendation objects. No prose preamble, no markdown code fences. Strict JSON.`;
 
@@ -96,6 +105,26 @@ function buildAnalysisSnapshot(payload: AnalysisPayload, count: number): string 
   const lines: string[] = [];
 
   lines.push("=== SUBSCRIBER PROFILE ===\n");
+
+  // Subscriber metrics block — REAL data the LLM can cite. If a field
+  // is null, that's a fact too ("unknown") and the LLM should NOT
+  // invent a value.
+  const m = payload.subscriberMetrics;
+  lines.push("Subscriber's own GBP metrics (real data — cite these, never invent):");
+  lines.push(`  - Google rating: ${m.rating !== null ? m.rating.toFixed(1) : "unknown"}`);
+  lines.push(`  - Google review count: ${m.reviewCount !== null ? m.reviewCount : "unknown"}`);
+  lines.push(`  - GBP completeness score: ${m.completenessScore !== null ? `${m.completenessScore}/100` : "unknown"}`);
+  if (m.completenessMissing.length > 0) {
+    lines.push(`  - GBP fields missing: ${m.completenessMissing.join(", ")}`);
+  }
+  lines.push(`  - Has website: ${m.hasWebsite ? "yes" : "no"}`);
+  lines.push(`  - Has phone: ${m.hasPhone ? "yes" : "no"}`);
+  lines.push(`  - Has street address on GBP: ${m.hasAddress ? "yes" : "no (service-area business)"}`);
+  lines.push(`  - Social profile URLs declared: ${m.socialProfileCount}`);
+  lines.push(`  - GBP categories declared: ${m.categoryCount}`);
+  lines.push(`  - Service areas declared: ${m.serviceAreaCount}`);
+  lines.push("");
+
   lines.push("GBP Categories (subscriber's declared service taxonomy):");
   for (const c of payload.subscriberCategories) {
     lines.push(`  - ${c.name}${c.isPrimary ? " [PRIMARY]" : ""}`);
