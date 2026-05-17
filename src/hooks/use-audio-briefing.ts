@@ -236,6 +236,10 @@ export function useAudioBriefing(opts: UseAudioBriefingOpts): UseAudioBriefingRe
     try {
       const form = new FormData();
       form.append("file", finalBlob, "audio.webm");
+      // Site context lets the server build a Whisper prompt biased
+      // toward this site's catalog (brands, projects, neighborhoods).
+      // Dramatically improves proper-noun recognition.
+      form.append("site_id", siteId);
       const res = await fetch("/api/recordings/transcribe-preview", {
         method: "POST",
         body: form,

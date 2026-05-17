@@ -46,7 +46,11 @@ export interface TranscribeResult {
  *
  * Requires OPENAI_API_KEY in env. Throws if missing or API fails.
  */
-async function whisperFromBlob(audioBlob: Blob, filename: string): Promise<TranscribeResult> {
+async function whisperFromBlob(
+  audioBlob: Blob,
+  filename: string,
+  prompt?: string,
+): Promise<TranscribeResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not set — cannot transcribe");
@@ -56,6 +60,13 @@ async function whisperFromBlob(audioBlob: Blob, filename: string): Promise<Trans
   form.append("file", audioBlob, filename);
   form.append("model", "whisper-1");
   form.append("response_format", "verbose_json");
+  // Vocabulary priming — biases recognition toward proper nouns from
+  // the site's catalog (brands, projects, neighborhoods, etc). Built
+  // by buildWhisperPromptForSite() in transcribe-prompt.ts. Empty
+  // string is fine (Whisper handles it). See that file for budget.
+  if (prompt && prompt.length > 0) {
+    form.append("prompt", prompt);
+  }
 
   const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -110,19 +121,30 @@ function pickFilenameFromMime(mime: string | null | undefined, fallback = "audio
  * Transcribe a Blob directly (no R2 fetch). Used by the
  * /api/recordings/transcribe-preview endpoint so subscribers can validate
  * a staged recording before committing — bytes never touch storage.
+ *
+ * Pass `prompt` to bias recognition toward catalog vocabulary — build
+ * via buildWhisperPromptForSite(siteId).
  */
-export async function transcribeBlob(audioBlob: Blob, mimeHint?: string): Promise<TranscribeResult> {
+export async function transcribeBlob(
+  audioBlob: Blob,
+  mimeHint?: string,
+  prompt?: string,
+): Promise<TranscribeResult> {
   const filename = pickFilenameFromMime(mimeHint || audioBlob.type);
-  return whisperFromBlob(audioBlob, filename);
+  return whisperFromBlob(audioBlob, filename, prompt);
 }
 
 /**
  * Transcribe audio from a URL — fetches from R2, then runs Whisper.
  *
  * Used by the legacy spoken-recording path on /api/recordings POST when
- * no precomputed transcript is provided.
+ * no precomputed transcript is provided. Pass `prompt` to bias
+ * recognition toward catalog vocabulary.
  */
-export async function transcribe(audioUrl: string): Promise<TranscribeResult> {
+export async function transcribe(
+  audioUrl: string,
+  prompt?: string,
+): Promise<TranscribeResult> {
   const audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(30000) });
   if (!audioRes.ok) {
     throw new Error(`Failed to fetch audio from R2: ${audioRes.status}`);
@@ -138,5 +160,5 @@ export async function transcribe(audioUrl: string): Promise<TranscribeResult> {
     ? tail
     : pickFilenameFromMime(contentType);
 
-  return whisperFromBlob(audioBlob, filename);
+  return whisperFromBlob(audioBlob, filename, prompt);
 }

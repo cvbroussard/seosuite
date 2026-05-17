@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { transcribeBlob } from "@/lib/transcribe";
+import { buildWhisperPromptForSite } from "@/lib/transcribe-prompt";
 
 const MAX_BLOB_BYTES = 25 * 1024 * 1024; // Whisper's per-file ceiling
 
@@ -44,7 +45,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await transcribeBlob(file, file.type);
+    // site_id is optional — falls back to unprimed Whisper if absent.
+    // When present, builds a vocabulary prompt from the site catalog.
+    const siteId = typeof form.get("site_id") === "string" ? (form.get("site_id") as string) : "";
+    const prompt = siteId ? await buildWhisperPromptForSite(siteId) : "";
+
+    const result = await transcribeBlob(file, file.type, prompt);
     return NextResponse.json({
       transcript: result.text,
       segments: result.segments || [],

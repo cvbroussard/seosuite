@@ -152,7 +152,9 @@ export async function POST(req: NextRequest) {
         (async () => {
           try {
             const { transcribe } = await import("@/lib/transcribe");
-            const result = await transcribe(storage_url as string);
+            const { buildWhisperPromptForSite } = await import("@/lib/transcribe-prompt");
+            const prompt = await buildWhisperPromptForSite(site_id as string);
+            const result = await transcribe(storage_url as string, prompt);
             const segmentsJson =
               result.segments && result.segments.length > 0
                 ? JSON.stringify({
