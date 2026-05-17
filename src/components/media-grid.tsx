@@ -21,6 +21,10 @@ interface Asset {
   content_tags: string[] | null;
   source: string | null;
   ai_analysis: Record<string, unknown> | null;
+  /** Cascade artifact (asset_analysis JSONB). Presence means the
+      asset has been analyzed; absence means brief saved but not yet
+      analyzed. Drives the 3-state tile badge. */
+  asset_analysis: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   flag_reason: string | null;
   render_status: string | null;
@@ -31,16 +35,20 @@ interface Asset {
   scene_types: string[] | null;
 }
 
-// Subscriber-facing badge: briefed vs needs-briefing. Internal triage
-// states (scheduled / consumed / shelved / flagged / quarantined /
-// rejected) collapse into "briefed" — once an asset has cleared
-// pending_briefing it's fair game for the platform; the lifecycle
-// detail only matters in the modal/admin views.
-function briefBadge(triageStatus: string) {
-  if (triageStatus === "pending_briefing") {
-    return { label: "needs briefing", className: "bg-amber-500/80 text-white" };
+// Subscriber-facing badge collapses the internal triage_status enum
+// + cascade-presence into a 3-state lifecycle (2026-05-18 reframe):
+//   needs brief  — pending_briefing (no transcript saved)
+//   briefed      — transcript saved but cascade hasn't run / committed
+//   analyzed     — asset_analysis present (cascade committed)
+// Derived from data; no DB enum migration required.
+function lifecycleBadge(a: { triage_status: string; asset_analysis: Record<string, unknown> | null }) {
+  if (a.triage_status === "pending_briefing") {
+    return { label: "needs brief", className: "bg-amber-500/80 text-white" };
   }
-  return { label: "briefed", className: "bg-success/70 text-white" };
+  if (a.asset_analysis) {
+    return { label: "analyzed", className: "bg-success/70 text-white" };
+  }
+  return { label: "briefed", className: "bg-accent/70 text-white" };
 }
 
 interface Brand {
@@ -221,7 +229,7 @@ export function MediaGrid({
                 />
               )}
               {(() => {
-                const b = briefBadge(a.triage_status);
+                const b = lifecycleBadge(a);
                 return (
                   <span
                     className={`absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${b.className}`}

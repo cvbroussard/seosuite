@@ -64,7 +64,7 @@ export default async function MediaPage({ searchParams }: Props) {
     ? await sql`
         SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
                ma.quality_score, ma.content_tags,
-               ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
+               ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
                ma.render_status, ma.archived_at, ma.briefable_at, ma.scene_types,
                (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
@@ -82,7 +82,7 @@ export default async function MediaPage({ searchParams }: Props) {
     ? await sql`
         SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
                ma.quality_score, ma.content_tags,
-               ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
+               ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
                ma.render_status, ma.archived_at, ma.briefable_at, ma.scene_types,
                (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
@@ -100,7 +100,7 @@ export default async function MediaPage({ searchParams }: Props) {
     ? await sql`
         SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
                ma.quality_score, ma.content_tags,
-               ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
+               ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
                ma.render_status, ma.archived_at, ma.briefable_at, ma.scene_types,
                (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count
@@ -117,7 +117,7 @@ export default async function MediaPage({ searchParams }: Props) {
     : await sql`
         SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
                ma.quality_score, ma.content_tags,
-               ma.source, ma.ai_analysis, ma.metadata, ma.date_taken, ma.sort_order,
+               ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
                ma.render_status, ma.archived_at, ma.briefable_at, ma.scene_types,
                (SELECT COUNT(*)::int FROM jsonb_object_keys(ma.variants)) AS variant_count

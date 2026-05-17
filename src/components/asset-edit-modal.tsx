@@ -1313,8 +1313,8 @@ export function AssetEditModal({
                   cascadeBusy
                     ? "Analyzing…"
                     : cascadeHasPreview
-                    ? "⚡ Re-tag"
-                    : "⚡ Auto-tag"
+                    ? "⚡ Re-analyze"
+                    : "⚡ Analyze"
                 }
                 onCancel={handleCancel}
                 onSave={handleSaveStay}
@@ -1363,7 +1363,7 @@ export function AssetEditModal({
               <div className="mb-3 rounded border border-accent/40 bg-accent/5 px-3 py-2.5">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-[11px] font-medium text-accent">
-                    {autoTagging ? "✨ Analyzing your recording…" : "✨ Auto-tag results"}
+                    {autoTagging ? "✨ Analyzing your recording…" : "✨ Analyze results"}
                   </span>
                   {!autoTagging && (
                     <button
@@ -1534,7 +1534,7 @@ export function AssetEditModal({
             <div className="mb-3 rounded border border-border bg-surface px-3 py-2.5">
               <div className="mb-2 flex items-baseline justify-between gap-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-medium text-foreground">Transcription</span>
+                  <span className="text-[11px] font-medium text-foreground">Brief</span>
                   <span className="text-[10px] text-muted">— Recordings for this asset only (latest first).</span>
                 </div>
                 <button

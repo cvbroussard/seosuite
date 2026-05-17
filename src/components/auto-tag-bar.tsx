@@ -210,7 +210,7 @@ export function AutoTagBar({
   isVideo,
   onAutoTag,
   autoTagDisabled,
-  autoTagLabel = "⚡ Auto-tag",
+  autoTagLabel = "⚡ Analyze",
   onCancel,
   onSave,
   onSaveAndNext,
