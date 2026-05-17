@@ -81,15 +81,29 @@ LOCATION RECORD SHAPE (additional fields):
 
 SUGGESTED_TAGS — A short array of 3-8 tag candidates derived from the transcript's narrative content (themes, angles, distinctive phrases). These will inform downstream tag selection but aren't authoritative. Use lowercase snake_case.
 
+OUTPUT SHAPE (strict — entities MUST be nested under an "entities" object):
+
+{
+  "entities": {
+    "brands":      [ { "text": "...", "context_excerpt": "...", "char_start": N, "char_end": N }, ... ],
+    "projects":    [ { ... same shape ... }, ... ],
+    "specialties": [ { ... same shape ... }, ... ],
+    "locations":   [ { ..., "type": "city|...|unknown", "geocodable": true, "privacy_sensitive": false }, ... ],
+    "materials":   [ { ... same shape ... }, ... ]
+  },
+  "suggested_tags": ["tag_one", "tag_two", ...]
+}
+
 CRITICAL RULES:
 
-1. **NEVER INVENT** — only extract entities/tags genuinely present in the transcript. Empty arrays are fine.
-2. **CHAR_START/CHAR_END must be accurate integer positions** in the transcript string (0-indexed). Used downstream for highlighting.
-3. **CONTEXT_EXCERPT should include ~30 chars before and after** the match, joined with ellipses where the surrounding text exceeds that.
-4. **DON'T over-extract** — return only entities you're confident about. Quality over quantity.
-5. **LOCATIONS privacy_sensitive flag is load-bearing** — street_address must always set privacy_sensitive=true. City/neighborhood/state are NOT privacy_sensitive.
+1. **WRAP entities** — the five entity arrays MUST live inside an "entities" object as shown above. Do NOT emit them at the top level.
+2. **NEVER INVENT** — only extract entities/tags genuinely present in the transcript. Empty arrays are fine.
+3. **CHAR_START/CHAR_END must be accurate integer positions** in the transcript string (0-indexed). Used downstream for highlighting.
+4. **CONTEXT_EXCERPT should include ~30 chars before and after** the match, joined with ellipses where the surrounding text exceeds that.
+5. **DON'T over-extract** — return only entities you're confident about. Quality over quantity.
+6. **LOCATIONS privacy_sensitive flag is load-bearing** — street_address must always set privacy_sensitive=true. City/neighborhood/state are NOT privacy_sensitive.
 
-OUTPUT: Return ONLY a JSON object matching the shape. No prose, no markdown code fences. Strict JSON.`;
+OUTPUT: Return ONLY a JSON object matching the shape above. No prose, no markdown code fences. Strict JSON.`;
 
 export async function extractNer(transcript: string): Promise<NerOutcome> {
   if (!transcript || !transcript.trim()) {
@@ -109,18 +123,22 @@ export async function extractNer(transcript: string): Promise<NerOutcome> {
     const text = res.content[0].type === "text" ? res.content[0].text : "";
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("LLM returned no JSON object");
-    const parsed = JSON.parse(match[0]) as {
+    // Defensive: prompt asks for { entities: { brands, ... }, suggested_tags }
+    // but Haiku has been observed flattening to { brands, ..., suggested_tags }.
+    // Accept either shape — prefer the wrapped form, fall back to flat keys.
+    const parsed = JSON.parse(match[0]) as Partial<NerEntities> & {
       entities?: Partial<NerEntities>;
       suggested_tags?: string[];
     };
+    const e = parsed.entities ?? parsed;
 
     const result: NerResult = {
       entities: {
-        brands: parsed.entities?.brands ?? [],
-        projects: parsed.entities?.projects ?? [],
-        specialties: parsed.entities?.specialties ?? [],
-        locations: (parsed.entities?.locations ?? []) as LocationRecord[],
-        materials: parsed.entities?.materials ?? [],
+        brands: e.brands ?? [],
+        projects: e.projects ?? [],
+        specialties: e.specialties ?? [],
+        locations: (e.locations ?? []) as LocationRecord[],
+        materials: e.materials ?? [],
       },
       suggested_tags: parsed.suggested_tags ?? [],
       cost: {
