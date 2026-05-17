@@ -116,9 +116,7 @@ export async function matchServiceAreas(
   `;
   const placeInfos = (site?.place_infos || []) as Array<{ placeId?: string; placeName?: string }>;
   const placeIds = placeInfos.map((p) => p.placeId).filter((id): id is string => Boolean(id));
-  console.log(`[matchServiceAreas] siteId=${siteId} placeInfos=${placeInfos.length} placeIds=${placeIds.length} nerLocations=${nerLocations?.length ?? 0}`);
   if (placeIds.length === 0) {
-    console.log(`[matchServiceAreas] EARLY EXIT: no placeIds — returning empty suggested_new despite ${nerLocations?.length ?? 0} NER locations`);
     return { matched: [], suggested_new: [] };
   }
 
@@ -136,21 +134,24 @@ export async function matchServiceAreas(
     .filter((p): p is { placeId: string; placeName?: string } => Boolean(p.placeId))
     .map((p) => {
       const c = canonicalByPlaceId.get(p.placeId);
+      // Defensive: when canonical isn't enriched yet, GBP placeName
+      // arrives as "Shadyside, Pittsburgh, PA, USA" — a multi-token
+      // string that the fuzzy-token matcher can't satisfy from a
+      // transcript that only says "Shadyside". Strip everything after
+      // the first comma to recover the short form. Once enrichment
+      // lands (canonical.name = "Shadyside"), this fallback is unused.
+      const fallbackShort = (p.placeName || "").split(",")[0]?.trim() || "";
       return {
-        // No more overlay row — use canonical id when enriched, else
-        // place_id as a stable identifier for dedupe.
         overlay_id: (c?.id as string) || p.placeId,
         canonical_id: (c?.id as string) || "",
-        name: (c?.name as string) || p.placeName || "",
+        name: (c?.name as string) || fallbackShort,
         place_id: p.placeId,
         kind: (c?.kind as string) || "",
         viewport: (c?.viewport as ViewportBox | null) ?? null,
       };
     })
     .filter((c) => c.name.length > 0);
-  console.log(`[matchServiceAreas] catalog=${catalog.length} entries (${catalog.map((c) => c.name).join(", ")})`);
   if (catalog.length === 0) {
-    console.log(`[matchServiceAreas] EARLY EXIT: catalog empty — skipping suggested_new despite ${nerLocations?.length ?? 0} NER locations`);
     return { matched: [], suggested_new: [] };
   }
 
@@ -208,8 +209,6 @@ export async function matchServiceAreas(
     }
   }
 
-  console.log(`[matchServiceAreas] after pass 1+2: matched=${matched.length} (${matched.map((m) => m.name).join(", ")})`);
-
   // Pass 3: NER locations as suggested_new candidates. Mirrors the
   // brand-match.ts suggested_new pattern. NER caught "Shadyside" but
   // Shadyside isn't in B²'s declared GBP service areas → surface as
@@ -218,17 +217,15 @@ export async function matchServiceAreas(
   // catalog entries (NER might re-extract a location the catalog scan
   // already caught).
   const suggested_new: SuggestedNewServiceArea[] = [];
-  console.log(`[matchServiceAreas] pass 3 entry: nerLocations=${nerLocations?.length ?? "(undefined)"}`);
   if (nerLocations && nerLocations.length > 0) {
     const matchedNamesLower = new Set(matched.map((m) => m.name.toLowerCase()));
     const seenSuggestedLower = new Set<string>();
     for (const loc of nerLocations) {
-      console.log(`[matchServiceAreas] NER loc "${loc.text}" type=${loc.type} privacy_sensitive=${loc.privacy_sensitive}`);
-      if (loc.privacy_sensitive) { console.log(`  → SKIP (privacy_sensitive)`); continue; }
-      if (!SUGGESTABLE_LOCATION_TYPES.has(loc.type)) { console.log(`  → SKIP (type not suggestable)`); continue; }
+      if (loc.privacy_sensitive) continue;
+      if (!SUGGESTABLE_LOCATION_TYPES.has(loc.type)) continue;
       const textLower = loc.text.trim().toLowerCase();
-      if (textLower.length === 0) { console.log(`  → SKIP (empty text)`); continue; }
-      if (seenSuggestedLower.has(textLower)) { console.log(`  → SKIP (already seen)`); continue; }
+      if (textLower.length === 0) continue;
+      if (seenSuggestedLower.has(textLower)) continue;
 
       // Check if this NER location is already represented in matched
       // (catalog scan caught the same place via fuzzy-token match).
@@ -261,12 +258,10 @@ export async function matchServiceAreas(
         if (fwd || rev) { catalogHit = true; break; }
       }
       if (catalogHit) {
-        console.log(`  → SKIP (fuzzy-matched catalog)`);
         seenSuggestedLower.add(textLower);
         continue;
       }
 
-      console.log(`  → SUGGEST as new candidate`);
       seenSuggestedLower.add(textLower);
       suggested_new.push({
         name: loc.text,
@@ -275,7 +270,6 @@ export async function matchServiceAreas(
       });
     }
   }
-  console.log(`[matchServiceAreas] result: matched=${matched.length} suggested_new=${suggested_new.length}`);
 
   return { matched, suggested_new };
 }

@@ -34,6 +34,30 @@ export async function enrichPlace(
     .replace(/^_|_$/g, "")
     .slice(0, 60);
 
+  // Defensive UPSERT: ON CONFLICT (place_id) handles re-enrichment of
+  // a known canonical, but it does NOT handle slug collisions. Legacy
+  // orphan rows (pre-place_id-architecture) have slug='shadyside' with
+  // place_id=NULL — those trip the slug-unique constraint and silently
+  // fail (Pennsylvania bug 2026-05-17, Shadyside bug 2026-05-17 same
+  // root cause). Fix: probe by slug first. If an orphan row exists
+  // (place_id IS NULL), UPDATE it in place rather than INSERTing a
+  // dup-slug row. Preserves any FK references to the orphan's id.
+  const orphan = await sql`
+    SELECT id FROM service_areas_canonical
+    WHERE slug = ${slug} AND place_id IS NULL LIMIT 1
+  `;
+  if (orphan.length > 0) {
+    await sql`
+      UPDATE service_areas_canonical
+      SET place_id = ${placeId},
+          name = ${displayName},
+          kind = ${kind},
+          viewport = ${viewport ? JSON.stringify(viewport) : null}::jsonb
+      WHERE id = ${orphan[0].id}
+    `;
+    return true;
+  }
+
   await sql`
     INSERT INTO service_areas_canonical (name, slug, kind, place_id, viewport)
     VALUES (
