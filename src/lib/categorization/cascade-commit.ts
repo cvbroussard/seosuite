@@ -33,6 +33,7 @@ import { renameR2Object, keyFromStorageUrl, R2_PUBLIC_DOMAIN, deleteObjectFromR2
 import { deriveSourceKey } from "@/lib/pipeline/asset-keys";
 import { purgeCdnCache } from "@/lib/cdn";
 import { matchBrandsFromNer } from "./brand-match";
+import { matchProjectsFromNer } from "./project-match";
 import type { CascadeAnalysis } from "./cascade-analyze";
 
 export interface CommitCascadeInput {
@@ -137,6 +138,24 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
       ON CONFLICT DO NOTHING
     `;
     brandRows++;
+  }
+
+  // ── 2c. Project matching from NER hits ───────────────────────────
+  // Same NER-only philosophy as brands — projects only land when the
+  // subscriber actually named one in the transcript. Fuzzy-token +
+  // slug fallback against the site's projects catalog. Unmatched NER
+  // projects surface as suggested_new for promotion.
+  const nerProjectCandidates = analysis.entities.projects.map((p) => ({
+    name: p.text,
+    context: p.context_excerpt,
+  }));
+  const projectMatch = await matchProjectsFromNer(siteId, nerProjectCandidates);
+  for (const m of projectMatch.matched) {
+    await sql`
+      INSERT INTO asset_projects (asset_id, project_id)
+      VALUES (${assetId}, ${m.project_id})
+      ON CONFLICT DO NOTHING
+    `;
   }
 
   // ── 3. Derive slug + new R2 key from cascade output ──────────────

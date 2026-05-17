@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { runCascade, type PillarConfigEntry } from "@/lib/categorization/cascade-analyze";
 import { matchBrandsFromNer } from "@/lib/categorization/brand-match";
+import { matchProjectsFromNer } from "@/lib/categorization/project-match";
 import { matchServiceAreas } from "@/lib/categorization/service-area-match";
 import { getAssetNarrative } from "@/lib/asset-narrative";
 
@@ -113,19 +114,23 @@ export async function POST(
     return NextResponse.json({ ok: false, error: `Cascade skipped: ${cascade.reason}`, stage: cascade.stage }, { status: 400 });
   }
 
-  // Brand match preview — pure local, no LLM. Mirrors what commit will do.
+  // Local matchers — pure SQL + token math, no LLM. Mirror what
+  // commit will write.
+  //   brand_match    — NER brands  → brands catalog → asset_brands
+  //   project_match  — NER projects → projects catalog → asset_projects
+  //   service_area_match — NER + transcript + GPS → JIT (no persist)
   const nerBrandCandidates = cascade.result.entities.brands.map((b) => ({
     name: b.text,
     context: b.context_excerpt,
   }));
+  const nerProjectCandidates = cascade.result.entities.projects.map((p) => ({
+    name: p.text,
+    context: p.context_excerpt,
+  }));
 
-  // Service area match preview — pure local, no LLM. GBP-canonical
-  // service areas matched against transcript substring + asset GPS
-  // viewport containment (per project_tracpost_service_areas_gbp
-  // _canonical memory). No persistence; orchestrator re-computes JIT
-  // at gen time.
-  const [brandMatch, serviceAreaMatch] = await Promise.all([
+  const [brandMatch, projectMatch, serviceAreaMatch] = await Promise.all([
     matchBrandsFromNer(asset.site_id as string, nerBrandCandidates),
+    matchProjectsFromNer(asset.site_id as string, nerProjectCandidates),
     matchServiceAreas(
       asset.site_id as string,
       transcript,
@@ -139,6 +144,7 @@ export async function POST(
     ok: true,
     analysis: cascade.result,
     brand_match: brandMatch,
+    project_match: projectMatch,
     service_area_match: serviceAreaMatch,
   });
 }

@@ -81,12 +81,18 @@ export async function GET(
   if (analysis) {
     const narrative = await getAssetNarrative(assetId);
     const transcript = narrative.text.trim();
-    const [brandRows, serviceAreaMatch] = await Promise.all([
+    const [brandRows, projectRows, serviceAreaMatch] = await Promise.all([
       sql`
         SELECT b.name, b.slug
         FROM asset_brands ab JOIN brands b ON b.id = ab.brand_id
         WHERE ab.asset_id = ${assetId}
         ORDER BY b.name
+      `,
+      sql`
+        SELECT p.name, p.slug
+        FROM asset_projects ap JOIN projects p ON p.id = ap.project_id
+        WHERE ap.asset_id = ${assetId}
+        ORDER BY p.name
       `,
       transcript.length > 0
         ? matchServiceAreas(
@@ -107,6 +113,7 @@ export async function GET(
       url_slug: analysis.url_slug ?? "",
       suggested_pillar: analysis.suggested_pillar ?? null,
       brands: brandRows.map((r) => ({ name: r.name, slug: r.slug })),
+      projects: projectRows.map((r) => ({ name: r.name, slug: r.slug })),
       service_areas: serviceAreaMatch.matched.map((m) => ({
         name: m.name,
         source: m.source,
