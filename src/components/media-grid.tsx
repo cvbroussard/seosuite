@@ -35,14 +35,17 @@ interface Asset {
   scene_types: string[] | null;
 }
 
-// Subscriber-facing badge collapses the internal triage_status enum
-// + cascade-presence into a 3-state lifecycle (2026-05-18 reframe):
-//   needs brief  — pending_briefing (no transcript saved)
-//   briefed      — transcript saved but cascade hasn't run / committed
+// Subscriber-facing 3-state lifecycle badge (2026-05-18 reframe).
+// Source-of-truth fields, not triage_status:
+//   needs brief  — no transcription saved on the asset
+//   briefed      — transcription saved, cascade hasn't committed yet
 //   analyzed     — asset_analysis present (cascade committed)
-// Derived from data; no DB enum migration required.
-function lifecycleBadge(a: { triage_status: string; asset_analysis: Record<string, unknown> | null }) {
-  if (a.triage_status === "pending_briefing") {
+// Brief presence = transcript presence, period. Triage_status is an
+// internal lifecycle enum that doesn't map cleanly to the subscriber
+// mental model.
+function lifecycleBadge(a: { latest_transcript?: string | null; asset_analysis: Record<string, unknown> | null }) {
+  const hasBrief = (a.latest_transcript || "").trim().length > 0;
+  if (!hasBrief) {
     return { label: "needs brief", className: "bg-amber-500/80 text-white" };
   }
   if (a.asset_analysis) {
