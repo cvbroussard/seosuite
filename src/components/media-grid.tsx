@@ -31,22 +31,17 @@ interface Asset {
   scene_types: string[] | null;
 }
 
-const statusColors: Record<string, string> = {
-  pending_briefing: "bg-amber-500/80 text-white",
-  received: "bg-muted/70 text-white", // legacy, should not appear post-migrate-099
-  ready: "bg-success/70 text-white",
-  triaged: "bg-accent/70 text-white",
-  scheduled: "bg-success/70 text-white",
-  consumed: "bg-success/70 text-white",
-  shelved: "bg-warning/70 text-white",
-  flagged: "bg-danger/70 text-white",
-  quarantined: "bg-danger/70 text-white",
-  rejected: "bg-danger/70 text-white",
-};
-
-const statusLabels: Record<string, string> = {
-  pending_briefing: "needs briefing",
-};
+// Subscriber-facing badge: briefed vs needs-briefing. Internal triage
+// states (scheduled / consumed / shelved / flagged / quarantined /
+// rejected) collapse into "briefed" — once an asset has cleared
+// pending_briefing it's fair game for the platform; the lifecycle
+// detail only matters in the modal/admin views.
+function briefBadge(triageStatus: string) {
+  if (triageStatus === "pending_briefing") {
+    return { label: "needs briefing", className: "bg-amber-500/80 text-white" };
+  }
+  return { label: "briefed", className: "bg-success/70 text-white" };
+}
 
 interface Brand {
   id: string;
@@ -225,13 +220,16 @@ export function MediaGrid({
                   loading="lazy"
                 />
               )}
-              <span
-                className={`absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                  statusColors[a.triage_status] || "bg-muted/20 text-muted"
-                }`}
-              >
-                {statusLabels[a.triage_status] || a.triage_status}
-              </span>
+              {(() => {
+                const b = briefBadge(a.triage_status);
+                return (
+                  <span
+                    className={`absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${b.className}`}
+                  >
+                    {b.label}
+                  </span>
+                );
+              })()}
               {a.media_type === "video" && (
                 <span
                   className={`absolute top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white ${
@@ -247,28 +245,19 @@ export function MediaGrid({
                 </span>
               )}
             </div>
-            {/* Source-card minimalism (2026-05-09): the card's job in the
-                grid is fast visual identification + click. Full untruncated
-                context note so the subscriber can read what's there at a
-                glance; everything else (pillars, brands, projects, dates,
-                quality, flag reason) lives in the modal. Filtration carries
-                the navigation weight for libraries with thousands of
-                assets. Hover tooltip retains the upload date for the rare
-                "when did I upload this" question. */}
+            {/* Tile caption = recording transcript (canonical narrative).
+                Fixed-height container + line-clamp keeps every card the
+                same overall height regardless of how long the narration
+                is. Hover tooltip carries the upload date. */}
             <div
-              className="px-2.5 py-2"
+              className="h-16 px-2.5 py-2"
               title={`Uploaded ${new Date(a.created_at).toLocaleDateString()}`}
             >
-              {(() => {
-                // Recording transcript is the canonical asset narrative;
-                // legacy context_note shown for assets that pre-date the
-                // recording-as-canonical pivot.
-                const text = a.latest_transcript || a.context_note;
-                if (!text) {
-                  return <p className="text-xs italic text-muted">No caption</p>;
-                }
-                return <p className="line-clamp-6 text-xs leading-snug">{text}</p>;
-              })()}
+              {a.latest_transcript ? (
+                <p className="line-clamp-4 text-xs leading-snug">{a.latest_transcript}</p>
+              ) : (
+                <p className="text-xs italic text-muted">No transcription</p>
+              )}
             </div>
           </button>
         ))}
