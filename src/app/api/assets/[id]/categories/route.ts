@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { matchServiceAreas } from "@/lib/categorization/service-area-match";
+import { getAssetNarrative } from "@/lib/asset-narrative";
 
 export const runtime = "nodejs";
 
@@ -16,7 +18,8 @@ export const runtime = "nodejs";
  *     assignments: [{ gcid, name, is_primary, confidence, assigned_by, reasoning, assigned_at }],
  *     committed: {
  *       scene_types, story_angles, url_slug, suggested_pillar,
- *       brands: [{ name, slug }]
+ *       brands: [{ name, slug }],
+ *       service_areas: [{ name, source: "transcript"|"gps" }]
  *     } | null
  *   }
  *
@@ -24,6 +27,10 @@ export const runtime = "nodejs";
  *   fields shown in the preview) so the Auto-tag card can render the
  *   full picture after Save, not just the category pills. Null when
  *   the cascade has never committed for this asset.
+ *
+ *   Service areas are NOT persisted per-asset (per bd4a90d JIT-at-gen-
+ *   time decision); we re-compute them on each GET via matchServiceAreas
+ *   against the asset's transcript + GPS. Pure local matcher, no LLM cost.
  *
  * POST /api/assets/[id]/categories
  *   Operator/subscriber edit. Body: { action, gcid }
@@ -42,7 +49,7 @@ export async function GET(
 
   const [asset] = await sql`
     SELECT ma.id, ma.site_id,
-      ma.asset_analysis,
+      ma.asset_analysis, ma.gps_lat, ma.gps_lng,
       (EXISTS(SELECT 1 FROM recordings WHERE source_asset_id = ma.id AND transcript IS NOT NULL AND transcript <> '' AND archived_at IS NULL)
         OR (ma.context_note IS NOT NULL AND ma.context_note <> '')) AS has_transcript
     FROM media_assets ma WHERE ma.id = ${assetId}
@@ -67,23 +74,39 @@ export async function GET(
   `;
 
   // Surface the rest of the committed cascade artifact + brand links
-  // so the Auto-tag card can render the full picture (not just
-  // categories). Same fields shown during preview.
+  // + JIT-computed service area matches so the Auto-tag card can
+  // render the full picture (same fields shown during preview).
   const analysis = asset.asset_analysis as Record<string, unknown> | null;
   let committed: Record<string, unknown> | null = null;
   if (analysis) {
-    const brandRows = await sql`
-      SELECT b.name, b.slug
-      FROM asset_brands ab JOIN brands b ON b.id = ab.brand_id
-      WHERE ab.asset_id = ${assetId}
-      ORDER BY b.name
-    `;
+    const narrative = await getAssetNarrative(assetId);
+    const transcript = narrative.text.trim();
+    const [brandRows, serviceAreaMatch] = await Promise.all([
+      sql`
+        SELECT b.name, b.slug
+        FROM asset_brands ab JOIN brands b ON b.id = ab.brand_id
+        WHERE ab.asset_id = ${assetId}
+        ORDER BY b.name
+      `,
+      transcript.length > 0
+        ? matchServiceAreas(
+            asset.site_id as string,
+            transcript,
+            asset.gps_lat as number | null,
+            asset.gps_lng as number | null,
+          )
+        : Promise.resolve({ matched: [] }),
+    ]);
     committed = {
       scene_types: analysis.scene_types ?? [],
       story_angles: analysis.story_angles ?? [],
       url_slug: analysis.url_slug ?? "",
       suggested_pillar: analysis.suggested_pillar ?? null,
       brands: brandRows.map((r) => ({ name: r.name, slug: r.slug })),
+      service_areas: serviceAreaMatch.matched.map((m) => ({
+        name: m.name,
+        source: m.source,
+      })),
     };
   }
 

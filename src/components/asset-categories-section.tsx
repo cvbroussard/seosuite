@@ -41,6 +41,7 @@ interface CommittedExtras {
   url_slug: string;
   suggested_pillar: string | null;
   brands: Array<{ name: string; slug: string }>;
+  service_areas: Array<{ name: string; source: "transcript" | "gps" }>;
 }
 
 interface CategoriesResponse {
@@ -454,6 +455,16 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
             <div>
               <span className="text-muted/70">Brands: </span>
               <span className="text-foreground/90">{committed.brands.map((b) => b.name).join(", ")}</span>
+            </div>
+          )}
+          {committed.service_areas.length > 0 && (
+            <div>
+              <span className="text-muted/70">Service areas: </span>
+              <span className="text-foreground/90">
+                {committed.service_areas
+                  .map((s) => `${s.name}${s.source === "gps" ? " 📍" : ""}`)
+                  .join(", ")}
+              </span>
             </div>
           )}
           {committed.suggested_pillar && (
