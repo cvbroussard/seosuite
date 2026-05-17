@@ -118,3 +118,76 @@ export async function buildTranscriptionPromptForSite(siteId: string): Promise<s
 // Back-compat alias — existing callers may still import the old name.
 // New code should use buildTranscriptionPromptForSite directly.
 export const buildWhisperPromptForSite = buildTranscriptionPromptForSite;
+
+/**
+ * Post-transcription case normalization. Walks the site's catalog and
+ * does word-boundary case-insensitive replacement in the transcript,
+ * substituting each catalog entry's canonical casing.
+ *
+ * Solves the gpt-4o-transcribe case-drift problem: vocabulary priming
+ * fixes spelling (e.g. "infratech" with the h) but the model normalizes
+ * capitalization on its own. This layer re-asserts catalog casing
+ * deterministically — "infratech" → "Infratech", "tile and design"
+ * → "Tile and Design", etc.
+ *
+ * Properties:
+ *   - Deterministic, no LLM, runs in ~1ms
+ *   - Word-boundary safe (\b) — "brick" inside "Bricklaying" untouched
+ *     if "Brick" is a brand
+ *   - Multi-word safe — "Tile and Design" matched as a single phrase
+ *   - Idempotent — running twice produces the same result
+ *   - Conservative — only re-cases tokens we have catalog evidence for
+ *
+ * Doesn't fix: brands not yet in catalog (suggested_new lands with raw
+ * model casing), non-catalog proper nouns (e.g. architectural styles
+ * like "Tudor" — separate acoustic problem, not a casing problem).
+ */
+export async function normalizeTranscriptCase(text: string, siteId: string): Promise<string> {
+  if (!text || !siteId) return text;
+
+  const [brandRows, projectRows, siteRow, categoryRows, personaRows] = await Promise.all([
+    sql`SELECT name FROM brands WHERE site_id = ${siteId}`,
+    sql`SELECT name FROM projects WHERE site_id = ${siteId}`,
+    sql`SELECT gbp_profile->'serviceArea'->'places'->'placeInfos' AS place_infos
+        FROM sites WHERE id = ${siteId}`,
+    sql`SELECT gc.name FROM site_gbp_categories sgc
+        JOIN gbp_categories gc ON gc.gcid = sgc.gcid
+        WHERE sgc.site_id = ${siteId}`,
+    sql`SELECT name FROM personas WHERE site_id = ${siteId}`,
+  ]);
+
+  const brands = brandRows.map((r) => r.name as string).filter(Boolean);
+  const projects = projectRows.map((r) => r.name as string).filter(Boolean);
+  const placeInfos = (siteRow[0]?.place_infos || []) as Array<{ placeName?: string }>;
+  const serviceAreas = placeInfos
+    .map((p) => (p.placeName || "").split(",")[0]?.trim())
+    .filter((s): s is string => Boolean(s && s.length > 0));
+  const categories = categoryRows.map((r) => r.name as string).filter(Boolean);
+  const personas = personaRows.map((r) => r.name as string).filter(Boolean);
+
+  // Dedupe across groups (a project name might overlap with a brand).
+  // Then sort longest-first so multi-word phrases get matched before
+  // their constituent words (defensive — \b matching handles most
+  // cases but ordering removes ambiguity).
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const name of [...brands, ...projects, ...serviceAreas, ...categories, ...personas]) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    canonical.push(name);
+  }
+  canonical.sort((a, b) => b.length - a.length);
+
+  let out = text;
+  for (const name of canonical) {
+    // Escape regex special chars in the catalog name (e.g. parens,
+    // dots in "A.B. Smith Co."). Then wrap in word boundaries +
+    // case-insensitive flag. The replacement string is the catalog's
+    // canonical form.
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`\\b${escaped}\\b`, "gi");
+    out = out.replace(re, name);
+  }
+  return out;
+}

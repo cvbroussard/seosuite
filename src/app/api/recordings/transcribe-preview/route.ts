@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { transcribeBlob } from "@/lib/transcribe";
-import { buildTranscriptionPromptForSite } from "@/lib/transcribe-prompt";
+import { buildTranscriptionPromptForSite, normalizeTranscriptCase } from "@/lib/transcribe-prompt";
 
 const MAX_BLOB_BYTES = 25 * 1024 * 1024; // Whisper's per-file ceiling
 
@@ -53,8 +53,13 @@ export async function POST(req: NextRequest) {
     const prompt = siteId ? await buildTranscriptionPromptForSite(siteId) : "";
 
     const result = await transcribeBlob(file, file.type, { prompt });
+    // Catalog case normalization — re-asserts canonical casing on
+    // known proper nouns regardless of what the STT model produced.
+    const normalizedText = siteId
+      ? await normalizeTranscriptCase(result.text, siteId)
+      : result.text;
     return NextResponse.json({
-      transcript: result.text,
+      transcript: normalizedText,
       segments: result.segments || [],
       duration: result.duration ?? null,
       language: result.language ?? null,

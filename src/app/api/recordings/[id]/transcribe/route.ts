@@ -24,7 +24,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { transcribe } from "@/lib/transcribe";
-import { buildTranscriptionPromptForSite } from "@/lib/transcribe-prompt";
+import { buildTranscriptionPromptForSite, normalizeTranscriptCase } from "@/lib/transcribe-prompt";
 
 export async function POST(
   req: NextRequest,
@@ -62,6 +62,9 @@ export async function POST(
     const needsSegments = rec.source === "voice_over" || rec.source === "captured_ambient";
     const prompt = await buildTranscriptionPromptForSite(rec.site_id as string);
     const result = await transcribe(rec.storage_url as string, { prompt, needsSegments });
+    // Catalog case normalization — re-asserts canonical casing on
+    // known proper nouns regardless of what the STT model produced.
+    const normalizedText = await normalizeTranscriptCase(result.text, rec.site_id as string);
 
     // In-place replacement — overwrite transcript + bump
     // transcribed_at + record provider. Segments JSON updated when
@@ -73,7 +76,7 @@ export async function POST(
 
     const [updated] = await sql`
       UPDATE recordings
-      SET transcript = ${result.text},
+      SET transcript = ${normalizedText},
           transcribed_at = NOW(),
           transcribe_provider = ${result.provider},
           metadata = CASE

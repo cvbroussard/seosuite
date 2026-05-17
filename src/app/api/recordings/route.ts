@@ -152,14 +152,21 @@ export async function POST(req: NextRequest) {
         (async () => {
           try {
             const { transcribe } = await import("@/lib/transcribe");
-            const { buildTranscriptionPromptForSite } = await import("@/lib/transcribe-prompt");
+            const { buildTranscriptionPromptForSite, normalizeTranscriptCase } = await import("@/lib/transcribe-prompt");
             const prompt = await buildTranscriptionPromptForSite(site_id as string);
             // voice_over + captured_ambient need time-anchored segments
             // for playback sync — force whisper-1 in those cases. All
             // other sources default to gpt-4o-transcribe for better
             // proper-noun recognition.
             const needsSegments = source === "voice_over" || source === "captured_ambient";
-            const result = await transcribe(storage_url as string, { prompt, needsSegments });
+            const sttResult = await transcribe(storage_url as string, { prompt, needsSegments });
+            // Catalog case normalization — re-asserts canonical casing
+            // on known proper nouns regardless of what the STT model
+            // produced.
+            const result = {
+              ...sttResult,
+              text: await normalizeTranscriptCase(sttResult.text, site_id as string),
+            };
             const segmentsJson =
               result.segments && result.segments.length > 0
                 ? JSON.stringify({
