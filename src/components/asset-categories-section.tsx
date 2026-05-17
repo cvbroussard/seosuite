@@ -43,6 +43,12 @@ interface CommittedExtras {
   brands: Array<{ name: string; slug: string }>;
   service_areas: Array<{ name: string; source: "transcript" | "gps" }>;
   service_area_suggestions: Array<{ name: string; kind: string }>;
+  /** Full asset_analysis JSONB — what the cascade actually wrote. Used
+   * by the "View raw JSON" inspector at the bottom of the card. */
+  raw_analysis: Record<string, unknown> | null;
+  /** JIT-computed service area matcher output (matched + suggested_new).
+   * Not persisted; recomputed every read. Shown raw alongside analysis. */
+  raw_service_area_match: Record<string, unknown> | null;
 }
 
 interface CategoriesResponse {
@@ -135,6 +141,7 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
   const [preview, setPreview] = useState<CascadePreview | null>(null);
   const [committing, setCommitting] = useState(false);
   const [cascadeError, setCascadeError] = useState<string | null>(null);
+  const [rawOpen, setRawOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!assetId) return;
@@ -503,6 +510,32 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
         </div>
       )}
 
+      {/* Raw cascade JSON inspector. Toggle reveals the full artifact
+          (asset_analysis + JIT service-area match) as nicely-formatted
+          JSON. Useful for debugging and for power-users who want to
+          see exactly what the cascade produced. */}
+      {committed?.raw_analysis && (
+        <div className="mt-2 border-t border-border pt-2">
+          <button
+            onClick={() => setRawOpen((v) => !v)}
+            className="flex items-center gap-1 text-[10px] text-muted hover:text-accent"
+          >
+            <span className="inline-block w-2 text-center">{rawOpen ? "▾" : "▸"}</span>
+            <span>{rawOpen ? "Hide raw JSON" : "View raw JSON"}</span>
+          </button>
+          {rawOpen && (
+            <div className="mt-2 max-h-96 overflow-auto rounded border border-border bg-background p-3 font-mono text-[10px] leading-relaxed">
+              <JsonView
+                value={{
+                  analysis: committed.raw_analysis,
+                  service_area_match: committed.raw_service_area_match,
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Reasoning inspector (collapsible per pill) */}
       {inspectingGcid && (() => {
         const a = assignments.find((x) => x.gcid === inspectingGcid);
@@ -524,6 +557,113 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
     </div>
   );
 });
+
+/**
+ * Lightweight JSON tree viewer — recursive, syntax-colored, collapsible
+ * at each object/array level. Keeps presentation tight (text-[10px]
+ * font-mono) so big artifacts fit a max-h-96 scroll container without
+ * dominating the asset modal.
+ */
+function JsonView({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  const indent = depth * 12;
+
+  if (value === null) return <span className="text-muted">null</span>;
+  if (value === undefined) return <span className="text-muted">undefined</span>;
+  if (typeof value === "boolean") return <span className="text-amber-700">{String(value)}</span>;
+  if (typeof value === "number") return <span className="text-accent">{value}</span>;
+  if (typeof value === "string") return <span className="text-success">&quot;{value}&quot;</span>;
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-muted">[]</span>;
+    return (
+      <CollapsibleNode
+        summary={`[${value.length}]`}
+        defaultOpen={depth < 2}
+        openBrace="["
+        closeBrace="]"
+        indent={indent}
+      >
+        {value.map((item, i) => (
+          <div key={i} style={{ paddingLeft: indent + 12 }}>
+            <span className="text-muted">{i}: </span>
+            <JsonView value={item} depth={depth + 1} />
+            {i < value.length - 1 ? <span className="text-muted">,</span> : null}
+          </div>
+        ))}
+      </CollapsibleNode>
+    );
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return <span className="text-muted">{"{}"}</span>;
+    return (
+      <CollapsibleNode
+        summary={`{${entries.length}}`}
+        defaultOpen={depth < 2}
+        openBrace="{"
+        closeBrace="}"
+        indent={indent}
+      >
+        {entries.map(([k, v], i) => (
+          <div key={k} style={{ paddingLeft: indent + 12 }}>
+            <span className="text-foreground/90">&quot;{k}&quot;</span>
+            <span className="text-muted">: </span>
+            <JsonView value={v} depth={depth + 1} />
+            {i < entries.length - 1 ? <span className="text-muted">,</span> : null}
+          </div>
+        ))}
+      </CollapsibleNode>
+    );
+  }
+
+  return <span>{String(value)}</span>;
+}
+
+function CollapsibleNode({
+  summary,
+  defaultOpen,
+  openBrace,
+  closeBrace,
+  indent,
+  children,
+}: {
+  summary: string;
+  defaultOpen: boolean;
+  openBrace: string;
+  closeBrace: string;
+  indent: number;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (!open) {
+    return (
+      <span className="inline-flex items-baseline gap-1">
+        <button
+          onClick={() => setOpen(true)}
+          className="text-muted hover:text-accent"
+        >
+          ▸ {openBrace}…{closeBrace}
+        </button>
+        <span className="text-[9px] text-muted/70">{summary}</span>
+      </span>
+    );
+  }
+  return (
+    <>
+      <button
+        onClick={() => setOpen(false)}
+        className="text-muted hover:text-accent"
+      >
+        ▾ {openBrace}
+      </button>
+      {children}
+      <div style={{ paddingLeft: indent }} className="text-muted">
+        {closeBrace}
+      </div>
+    </>
+  );
+}
 
 function CategoryPill({
   assignment,

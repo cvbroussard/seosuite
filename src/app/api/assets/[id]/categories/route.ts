@@ -115,6 +115,13 @@ export async function GET(
         name: s.name,
         kind: s.kind,
       })),
+      // Raw cascade artifact — powers the "View raw JSON" inspector in
+      // the Auto-tag card. Includes everything the cascade produced:
+      // entities, asset_categories, scene_types, story_angles,
+      // caption_hints, etc. Match arrays surface alongside for a single
+      // complete view of the cascade's full output.
+      raw_analysis: analysis,
+      raw_service_area_match: serviceAreaMatch,
     };
   }
 
