@@ -22,10 +22,14 @@
 import "server-only";
 import { sql } from "@/lib/db";
 
-/** Soft budget. Both gpt-4o-transcribe and whisper-1 accept longer
- * prompts than this, but we stay tight to keep the model focused on
- * the instruction rather than drowning in catalog. */
-const PROMPT_CHAR_BUDGET = 1500;
+/** Whisper documents a 224-token prompt limit. Tokens average ~4 chars
+ * in English so ~900 chars is the effective ceiling. We aim under to
+ * leave room for the short intro phrase. gpt-4o-transcribe likely has
+ * a similar limit (undocumented). Tested 2026-05-18: a 1394-char
+ * prompt failed to bias alphabetically-late brands (e.g. "Tile and
+ * Design" lost capitalization) — strong signal that the tail was
+ * being truncated before reaching the model. */
+const PROMPT_CHAR_BUDGET = 850;
 
 /** Returns an OpenAI STT prompt biased toward the site's catalog
  * vocabulary, or empty string when the site has no catalog yet. */
@@ -74,30 +78,39 @@ export async function buildTranscriptionPromptForSite(siteId: string): Promise<s
   add(categoriesList, categories);
   add(personasList, personas);
 
-  if (brandsList.length + projectsList.length + placesList.length +
-      categoriesList.length + personasList.length === 0) {
-    return "";
-  }
-
-  // Instruction block — gpt-4o-transcribe reads this as actual
-  // guidance, not just vocabulary. whisper-1 ignores the prose and
-  // uses the proper nouns as biasing tokens. Either way useful.
-  const sections: string[] = [
-    "This is a construction industry recording. The speaker is a contractor narrating project work.",
-    "Preserve proper noun capitalization. Treat compound product names (e.g. Infratech, Limewash, Azek) as single proper nouns.",
-    "Format numerals as digits (1926, not nineteen twenty-six). Use natural punctuation and paragraph breaks.",
-    "Known proper nouns that may appear in this recording:",
+  // Priority-ordered single list (2026-05-18 retest). Earlier prompt
+  // shape had instruction sentences + per-group headers that ate
+  // ~400 chars without earning their keep — gpt-4o-transcribe ignored
+  // the instructions, and the alphabetically-late brands fell off
+  // the model's effective window. New shape: minimal intro + tight
+  // priority-ordered list, capped at PROMPT_CHAR_BUDGET.
+  //
+  // Order:
+  //   1. brands — highest stakes for attribution + most common fail
+  //   2. projects — subscriber-specific, never in model training
+  //   3. service areas — local geography, often mis-heard
+  //   4. categories — occupational jargon, mostly in model training
+  //   5. personas — people names, mostly in model training
+  // Within each group: as collected (caller order preserved).
+  const ordered = [
+    ...brandsList,
+    ...projectsList,
+    ...placesList,
+    ...categoriesList,
+    ...personasList,
   ];
+  if (ordered.length === 0) return "";
 
-  if (brandsList.length > 0) sections.push(`Brands: ${brandsList.join(", ")}`);
-  if (projectsList.length > 0) sections.push(`Projects: ${projectsList.join(", ")}`);
-  if (placesList.length > 0) sections.push(`Places: ${placesList.join(", ")}`);
-  if (categoriesList.length > 0) sections.push(`Services: ${categoriesList.join(", ")}`);
-  if (personasList.length > 0) sections.push(`People: ${personasList.join(", ")}`);
-
-  let prompt = sections.join("\n");
-  if (prompt.length > PROMPT_CHAR_BUDGET) {
-    prompt = prompt.slice(0, PROMPT_CHAR_BUDGET).replace(/,[^,]*$/, "");
+  // "Names in this audio:" is the shortest framing that signals to
+  // the model "these are vocabulary biases" without burning chars on
+  // instructions that aren't honored anyway.
+  const intro = "Names in this audio: ";
+  let prompt = intro;
+  for (const name of ordered) {
+    const sep = prompt.length === intro.length ? "" : ", ";
+    const next = `${sep}${name}`;
+    if (prompt.length + next.length > PROMPT_CHAR_BUDGET) break;
+    prompt += next;
   }
   return prompt;
 }
