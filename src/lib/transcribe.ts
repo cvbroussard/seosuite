@@ -1,23 +1,25 @@
 import "server-only";
 
 /**
- * Speech-to-text transcription, pluggable provider.
+ * Speech-to-text transcription via OpenAI.
  *
- * Phase 1 implementation (LOCKED 2026-05-09): OpenAI Whisper via fetch.
- * Future providers (Deepgram, AssemblyAI, etc.) implement the same
- * `transcribe(audioUrl)` interface and get registered here. Per task
- * #152, the bake-off evaluates alternatives against this baseline.
+ * Two models supported:
+ *   - `gpt-4o-transcribe` (DEFAULT, 2026-05-18) — newer model with a
+ *     natural-language prompt parameter. Stronger proper-noun
+ *     recognition. Returns plain JSON (no segments).
+ *   - `whisper-1` (legacy) — original model. Vocabulary-list prompt
+ *     only. Returns verbose_json with time-anchored `segments` —
+ *     required for voice-over playback synchronization.
  *
- * The provider abstraction means callers (briefing flow, future
- * re-transcription jobs) don't change when we swap.
+ * Caller picks via `needsSegments`: true forces whisper-1 (voice-over
+ * sources), false defaults to gpt-4o-transcribe for higher fidelity.
+ *
+ * Cost: roughly $0.006/min for both. Same OpenAI key.
  */
 
 /** Time-anchored segment within a transcript. Maps text to playback
- * positions for click-to-seek navigation (YouTube-style transcript view).
- * Captured for ALL transcripts even though we only DISPLAY them for
- * time-anchored sources (voice_over, captured_ambient) — see
- * project_tracpost_audio_capture_floor.md.
- */
+ * positions for click-to-seek navigation. Only produced by whisper-1
+ * (gpt-4o-transcribe doesn't expose segments). */
 export interface TranscribeSegment {
   start: number;  // seconds from audio start
   end: number;
@@ -33,67 +35,70 @@ export interface TranscribeResult {
   duration?: number;
   /** Optional language detection, if the provider returns it. */
   language?: string;
-  /** Time-anchored segments. Stored even for sources that don't display
-   * timestamps so future operator review / clip extraction can use them. */
+  /** Time-anchored segments. Only present when whisper-1 was used. */
   segments?: TranscribeSegment[];
 }
 
-/**
- * Whisper API call via OpenAI. ~$0.006/minute. Quality is excellent for
- * English with technical/branded vocabulary (kitchen design jargon,
- * vendor names, etc.) — substantially better than browser-native Web
- * Speech API for our use case.
- *
- * Requires OPENAI_API_KEY in env. Throws if missing or API fails.
- */
-async function whisperFromBlob(
+export interface TranscribeOptions {
+  /** Natural-language prompt (gpt-4o-transcribe) or vocabulary list
+   * (whisper-1). Build via buildTranscriptionPromptForSite(). */
+  prompt?: string;
+  /** Force whisper-1 instead of gpt-4o-transcribe. Required for
+   * voice-over capture where segment timestamps drive playback sync. */
+  needsSegments?: boolean;
+}
+
+const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
+
+async function transcribeFromBlob(
   audioBlob: Blob,
   filename: string,
-  prompt?: string,
+  opts: TranscribeOptions = {},
 ): Promise<TranscribeResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not set — cannot transcribe");
   }
 
+  // gpt-4o-transcribe is the default — better proper-noun recognition,
+  // natural-language prompt support. Fall back to whisper-1 only when
+  // the caller specifically needs time-anchored segments (voice-over).
+  const model = opts.needsSegments ? "whisper-1" : "gpt-4o-transcribe";
+  // gpt-4o-transcribe only supports "json" (text + minimal metadata).
+  // whisper-1 supports "verbose_json" which includes segments + duration
+  // + language detection. We pick per model.
+  const responseFormat = model === "whisper-1" ? "verbose_json" : "json";
+
   const form = new FormData();
   form.append("file", audioBlob, filename);
-  form.append("model", "whisper-1");
-  form.append("response_format", "verbose_json");
-  // Vocabulary priming — biases recognition toward proper nouns from
-  // the site's catalog (brands, projects, neighborhoods, etc). Built
-  // by buildWhisperPromptForSite() in transcribe-prompt.ts. Empty
-  // string is fine (Whisper handles it). See that file for budget.
-  if (prompt && prompt.length > 0) {
-    form.append("prompt", prompt);
+  form.append("model", model);
+  form.append("response_format", responseFormat);
+  if (opts.prompt && opts.prompt.length > 0) {
+    form.append("prompt", opts.prompt);
   }
 
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const res = await fetch(OPENAI_TRANSCRIPTION_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
-    signal: AbortSignal.timeout(120000), // up to 2 min for longer audio
+    signal: AbortSignal.timeout(120000),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`Whisper API error ${res.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`OpenAI ${model} error ${res.status}: ${errText.slice(0, 200)}`);
   }
 
   const data = (await res.json()) as {
     text: string;
     duration?: number;
     language?: string;
-    segments?: Array<{
-      start: number;
-      end: number;
-      text: string;
-    }>;
+    segments?: Array<{ start: number; end: number; text: string }>;
   };
 
   return {
     text: (data.text || "").trim(),
-    provider: "openai-whisper-1",
+    provider: `openai-${model}`,
     duration: data.duration,
     language: data.language,
     segments: Array.isArray(data.segments)
@@ -122,28 +127,28 @@ function pickFilenameFromMime(mime: string | null | undefined, fallback = "audio
  * /api/recordings/transcribe-preview endpoint so subscribers can validate
  * a staged recording before committing — bytes never touch storage.
  *
- * Pass `prompt` to bias recognition toward catalog vocabulary — build
- * via buildWhisperPromptForSite(siteId).
+ * Pass `opts.prompt` for vocabulary/instruction biasing. Pass
+ * `opts.needsSegments` only if the caller needs time-anchored segments
+ * (forces fallback to whisper-1).
  */
 export async function transcribeBlob(
   audioBlob: Blob,
   mimeHint?: string,
-  prompt?: string,
+  opts: TranscribeOptions = {},
 ): Promise<TranscribeResult> {
   const filename = pickFilenameFromMime(mimeHint || audioBlob.type);
-  return whisperFromBlob(audioBlob, filename, prompt);
+  return transcribeFromBlob(audioBlob, filename, opts);
 }
 
 /**
- * Transcribe audio from a URL — fetches from R2, then runs Whisper.
+ * Transcribe audio from a URL — fetches from R2, then runs OpenAI STT.
  *
  * Used by the legacy spoken-recording path on /api/recordings POST when
- * no precomputed transcript is provided. Pass `prompt` to bias
- * recognition toward catalog vocabulary.
+ * no precomputed transcript is provided.
  */
 export async function transcribe(
   audioUrl: string,
-  prompt?: string,
+  opts: TranscribeOptions = {},
 ): Promise<TranscribeResult> {
   const audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(30000) });
   if (!audioRes.ok) {
@@ -153,12 +158,10 @@ export async function transcribe(
   const contentType = audioRes.headers.get("content-type") || "audio/webm";
   const audioBlob = new Blob([audioBuffer], { type: contentType });
 
-  // Prefer the URL's actual extension if it looks like one Whisper handles,
-  // otherwise infer from MIME.
   const tail = audioUrl.split("/").pop() || "";
   const filename = /\.(webm|mp3|mp4|m4a|wav|ogg|opus|flac|mpeg|mpga)$/i.test(tail)
     ? tail
     : pickFilenameFromMime(contentType);
 
-  return whisperFromBlob(audioBlob, filename, prompt);
+  return transcribeFromBlob(audioBlob, filename, opts);
 }

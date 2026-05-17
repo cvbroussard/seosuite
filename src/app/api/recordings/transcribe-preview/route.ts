@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, AuthContext } from "@/lib/auth";
 import { transcribeBlob } from "@/lib/transcribe";
-import { buildWhisperPromptForSite } from "@/lib/transcribe-prompt";
+import { buildTranscriptionPromptForSite } from "@/lib/transcribe-prompt";
 
 const MAX_BLOB_BYTES = 25 * 1024 * 1024; // Whisper's per-file ceiling
 
@@ -45,12 +45,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // site_id is optional — falls back to unprimed Whisper if absent.
-    // When present, builds a vocabulary prompt from the site catalog.
+    // site_id is optional — falls back to unprimed STT if absent.
+    // When present, builds a natural-language instruction + vocabulary
+    // prompt from the site catalog. Uses gpt-4o-transcribe by default
+    // (no segments needed for preview).
     const siteId = typeof form.get("site_id") === "string" ? (form.get("site_id") as string) : "";
-    const prompt = siteId ? await buildWhisperPromptForSite(siteId) : "";
+    const prompt = siteId ? await buildTranscriptionPromptForSite(siteId) : "";
 
-    const result = await transcribeBlob(file, file.type, prompt);
+    const result = await transcribeBlob(file, file.type, { prompt });
     return NextResponse.json({
       transcript: result.text,
       segments: result.segments || [],
