@@ -42,6 +42,7 @@ interface CommittedExtras {
   suggested_pillar: string | null;
   brands: Array<{ name: string; slug: string }>;
   service_areas: Array<{ name: string; source: "transcript" | "gps" }>;
+  service_area_suggestions: Array<{ name: string; kind: string }>;
 }
 
 interface CategoriesResponse {
@@ -95,6 +96,11 @@ interface CascadePreview {
       place_id: string | null;
       kind: string;
       source: "transcript" | "gps";
+      context: string;
+    }>;
+    suggested_new: Array<{
+      name: string;
+      kind: string;
       context: string;
     }>;
   };
@@ -187,7 +193,7 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
       setPreview({
         analysis: d.analysis,
         brand_match: d.brand_match,
-        service_area_match: d.service_area_match ?? { matched: [] },
+        service_area_match: d.service_area_match ?? { matched: [], suggested_new: [] },
       });
     } catch (e) {
       setCascadeError(e instanceof Error ? e.message : String(e));
@@ -394,6 +400,11 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
                   Service areas: {preview.service_area_match.matched.map((s) => `${s.name}${s.source === "gps" ? " 📍" : ""}`).join(", ")}
                 </div>
               )}
+              {preview.service_area_match.suggested_new.length > 0 && (
+                <div className="col-span-2 text-amber-700">
+                  New area candidates: {preview.service_area_match.suggested_new.map((s) => `${s.name} (${s.kind})`).join(", ")}
+                </div>
+              )}
               {preview.analysis.url_slug && (
                 <div className="col-span-2">Slug: <code className="text-[9px]">{preview.analysis.url_slug}</code></div>
               )}
@@ -463,6 +474,16 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
               <span className="text-foreground/90">
                 {committed.service_areas
                   .map((s) => `${s.name}${s.source === "gps" ? " 📍" : ""}`)
+                  .join(", ")}
+              </span>
+            </div>
+          )}
+          {committed.service_area_suggestions.length > 0 && (
+            <div className="text-amber-700">
+              <span>New area candidates: </span>
+              <span>
+                {committed.service_area_suggestions
+                  .map((s) => `${s.name} (${s.kind})`)
                   .join(", ")}
               </span>
             </div>

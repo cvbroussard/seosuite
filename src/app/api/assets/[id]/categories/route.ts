@@ -94,8 +94,12 @@ export async function GET(
             transcript,
             asset.gps_lat as number | null,
             asset.gps_lng as number | null,
+            (analysis.entities as { locations?: Array<{
+              text: string; context_excerpt: string; type: string;
+              geocodable: boolean; privacy_sensitive: boolean;
+            }> })?.locations,
           )
-        : Promise.resolve({ matched: [] }),
+        : Promise.resolve({ matched: [], suggested_new: [] }),
     ]);
     committed = {
       scene_types: analysis.scene_types ?? [],
@@ -106,6 +110,10 @@ export async function GET(
       service_areas: serviceAreaMatch.matched.map((m) => ({
         name: m.name,
         source: m.source,
+      })),
+      service_area_suggestions: serviceAreaMatch.suggested_new.map((s) => ({
+        name: s.name,
+        kind: s.kind,
       })),
     };
   }
