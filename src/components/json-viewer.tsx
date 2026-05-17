@@ -52,9 +52,15 @@ export function JsonViewer({
   const [openDepth, setOpenDepth] = useState(defaultOpenDepth);
   const [treeKey, setTreeKey] = useState(0);
 
+  // Flex layout so the inner scroll viewport actually owns the
+  // height constraint passed in via className (e.g. `max-h-[28rem]`).
+  // Without `flex-1 min-h-0 overflow-auto` on the inner, the tree
+  // grows to fit and parent modals end up scrolling instead of the
+  // viewer's own content. `min-h-0` is required to defeat flexbox's
+  // default min-content sizing inside a constrained column.
   return (
-    <div className={className}>
-      <div className="mb-2 flex items-center justify-end gap-2 text-[11px] text-muted">
+    <div className={`flex flex-col ${className}`}>
+      <div className="mb-2 flex shrink-0 items-center justify-end gap-2 text-[11px] text-muted">
         <button
           onClick={() => {
             setOpenDepth(999);
@@ -77,7 +83,7 @@ export function JsonViewer({
       </div>
       <div
         key={treeKey}
-        className="overflow-auto rounded border border-border bg-background p-3 font-mono text-xs leading-relaxed"
+        className="min-h-0 flex-1 overflow-auto overscroll-contain rounded border border-border bg-background p-3 font-mono text-xs leading-relaxed"
       >
         <JsonNode value={value} depth={0} defaultOpenDepth={openDepth} />
       </div>
@@ -144,10 +150,25 @@ function PrimitiveSpan({
 }
 
 function Chevron({ open }: { open: boolean }) {
+  // SVG chevron — larger and crisper than inline ▸/▾ glyphs which
+  // rendered too small against text-xs body copy. Single icon
+  // rotated 90° on open keeps it cheap and avoids glyph-substitution
+  // differences across OSs.
   return (
-    <span className="inline-block w-3 select-none text-muted">
-      {open ? "▾" : "▸"}
-    </span>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`inline-block shrink-0 align-text-bottom text-muted transition-transform ${open ? "rotate-90" : ""}`}
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
   );
 }
 
