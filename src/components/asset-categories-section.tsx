@@ -35,10 +35,19 @@ interface Assignment {
   assigned_at: string;
 }
 
+interface CommittedExtras {
+  scene_types: string[];
+  story_angles: string[];
+  url_slug: string;
+  suggested_pillar: string | null;
+  brands: Array<{ name: string; slug: string }>;
+}
+
 interface CategoriesResponse {
   asset: { id: string; hasTranscript: boolean };
   siteCategories: SiteCategory[];
   assignments: Assignment[];
+  committed: CommittedExtras | null;
 }
 
 /**
@@ -251,7 +260,7 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
     );
   }
 
-  const { siteCategories, assignments, asset } = data;
+  const { siteCategories, assignments, asset, committed } = data;
   const primary = assignments.find((a) => a.is_primary);
   const secondaries = assignments.filter((a) => !a.is_primary);
   const assigned = new Set(assignments.map((a) => a.gcid));
@@ -448,6 +457,34 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Committed cascade extras — same fields the preview shows
+          (scene types, story angles, brand matches, slug). Surfaces
+          after Save so subscriber can verify what landed without
+          re-running the cascade. */}
+      {committed && (
+        <div className="mt-3 grid grid-cols-2 gap-1.5 border-t border-border pt-2 text-[10px] text-muted">
+          {committed.scene_types.length > 0 && (
+            <div>Scene: {committed.scene_types.join(", ")}</div>
+          )}
+          {committed.story_angles.length > 0 && (
+            <div>Angles: {committed.story_angles.join(", ")}</div>
+          )}
+          {committed.brands.length > 0 && (
+            <div className="col-span-2">
+              Brands: {committed.brands.map((b) => b.name).join(", ")}
+            </div>
+          )}
+          {committed.suggested_pillar && (
+            <div>Pillar: {committed.suggested_pillar}</div>
+          )}
+          {committed.url_slug && (
+            <div className="col-span-2">
+              Slug: <code className="text-[9px]">{committed.url_slug}</code>
+            </div>
+          )}
         </div>
       )}
 

@@ -13,8 +13,17 @@ export const runtime = "nodejs";
  *   Response: {
  *     asset: { id, hasTranscript },
  *     siteCategories: [{ gcid, name }],
- *     assignments: [{ gcid, name, is_primary, confidence, assigned_by, reasoning, assigned_at }]
+ *     assignments: [{ gcid, name, is_primary, confidence, assigned_by, reasoning, assigned_at }],
+ *     committed: {
+ *       scene_types, story_angles, url_slug, suggested_pillar,
+ *       brands: [{ name, slug }]
+ *     } | null
  *   }
+ *
+ *   `committed` surfaces the rest of the cascade artifact (the same
+ *   fields shown in the preview) so the Auto-tag card can render the
+ *   full picture after Save, not just the category pills. Null when
+ *   the cascade has never committed for this asset.
  *
  * POST /api/assets/[id]/categories
  *   Operator/subscriber edit. Body: { action, gcid }
@@ -33,6 +42,7 @@ export async function GET(
 
   const [asset] = await sql`
     SELECT ma.id, ma.site_id,
+      ma.asset_analysis,
       (EXISTS(SELECT 1 FROM recordings WHERE source_asset_id = ma.id AND transcript IS NOT NULL AND transcript <> '' AND archived_at IS NULL)
         OR (ma.context_note IS NOT NULL AND ma.context_note <> '')) AS has_transcript
     FROM media_assets ma WHERE ma.id = ${assetId}
@@ -56,10 +66,32 @@ export async function GET(
     ORDER BY ac.is_primary DESC, ac.confidence DESC NULLS LAST
   `;
 
+  // Surface the rest of the committed cascade artifact + brand links
+  // so the Auto-tag card can render the full picture (not just
+  // categories). Same fields shown during preview.
+  const analysis = asset.asset_analysis as Record<string, unknown> | null;
+  let committed: Record<string, unknown> | null = null;
+  if (analysis) {
+    const brandRows = await sql`
+      SELECT b.name, b.slug
+      FROM asset_brands ab JOIN brands b ON b.id = ab.brand_id
+      WHERE ab.asset_id = ${assetId}
+      ORDER BY b.name
+    `;
+    committed = {
+      scene_types: analysis.scene_types ?? [],
+      story_angles: analysis.story_angles ?? [],
+      url_slug: analysis.url_slug ?? "",
+      suggested_pillar: analysis.suggested_pillar ?? null,
+      brands: brandRows.map((r) => ({ name: r.name, slug: r.slug })),
+    };
+  }
+
   return NextResponse.json({
     asset: { id: asset.id, hasTranscript: asset.has_transcript },
     siteCategories,
     assignments,
+    committed,
   });
 }
 
