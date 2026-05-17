@@ -10,25 +10,31 @@ export const maxDuration = 60;
 /**
  * POST /api/assets/[id]/categorize/commit
  *
- * Commits a previously-generated cascade preview. The preview artifact
- * is sent in the body — server trusts it (auth-gated) and persists it
- * + runs all the heavy consumable-producing work:
- *   - asset_analysis JSONB write
- *   - asset_categories rows
- *   - asset_brands rows (from NER → catalog brand match)
- *   - R2 source rename (slug-derived)
- *   - Video poster rename (if applicable)
- *   - Variant cascade-delete + re-render with slug-derived keys
- *   - CDN purge
+ * Commits a previously-generated cascade preview. Persists the artifact
+ * + brand match + R2 rename + metadata stamp, then fires the variant
+ * render as a separate background fetch (own 60s budget).
+ *
+ * Two-function architecture (2026-05-17):
+ *   - commitCascade: ~1-2s. Persists asset_analysis, asset_categories,
+ *     asset_brands, R2 source rename, metadata stamp with
+ *     variants_pending=true.
+ *   - render-variants endpoint (separate): ~5-30s. Renders all
+ *     applicable platform variants, clears variants_pending flag.
+ *
+ * Subscriber Save is released as soon as the first function returns —
+ * typically inside 2 seconds. Background render runs independently;
+ * if it fails or times out, variants_pending stays true and the
+ * orchestrator pool query naturally skips the asset until variants
+ * are ready (can be re-triggered by re-firing the render endpoint).
  *
  * Body:
  *   { analysis: CascadeAnalysis }
  *
  * Response:
  *   { ok: true, categoryRows, brandRows, suggestedNewBrandCount,
- *     slugApplied, renamed, variantCount, warnings }
+ *     slugApplied, renamed, variantCount, warnings, variantsScheduled }
  *
- * No LLM cost (LLM already ran in preview). R2 + variant render only.
+ * No LLM cost. SQL writes + R2 rename only in this function.
  */
 export async function POST(
   req: NextRequest,
@@ -63,7 +69,34 @@ export async function POST(
       assetId,
       analysis: body.analysis,
     });
-    return NextResponse.json(result);
+
+    // Fire variant render as a separate background function. waitUntil
+    // ensures the fetch dispatches before this function exits. The
+    // render endpoint runs as its own Vercel function with its own
+    // 60s budget — subscriber's commit is decoupled from render
+    // latency. Cookies forwarded so the render endpoint passes the
+    // same session auth check.
+    let variantsScheduled = false;
+    try {
+      const { waitUntil } = await import("@vercel/functions");
+      const host = req.headers.get("host");
+      const protocol = host?.includes("localhost") || host?.includes("127.0.0.1") ? "http" : "https";
+      const cookie = req.headers.get("cookie") || "";
+      waitUntil(
+        fetch(`${protocol}://${host}/api/assets/${assetId}/render-variants`, {
+          method: "POST",
+          headers: { cookie },
+        }).catch((err) => {
+          console.error(`render-variants dispatch failed for ${assetId}:`, err);
+        }),
+      );
+      variantsScheduled = true;
+    } catch {
+      // @vercel/functions unavailable (local dev) — caller can hit the
+      // render endpoint manually or the next commit will retry.
+    }
+
+    return NextResponse.json({ ...result, variantsScheduled });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`commitCascade endpoint failed for ${assetId}:`, message);

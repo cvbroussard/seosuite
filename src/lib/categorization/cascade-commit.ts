@@ -31,7 +31,6 @@ import "server-only";
 import { sql } from "@/lib/db";
 import { renameR2Object, keyFromStorageUrl, R2_PUBLIC_DOMAIN, deleteObjectFromR2 } from "@/lib/r2";
 import { deriveSourceKey } from "@/lib/pipeline/asset-keys";
-import { renderAllVariantsForAsset } from "@/lib/pipeline/variant-render";
 import { purgeCdnCache } from "@/lib/cdn";
 import { matchBrandsFromNer } from "./brand-match";
 import type { CascadeAnalysis } from "./cascade-analyze";
@@ -223,16 +222,17 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     await sql`DELETE FROM asset_variants WHERE source_asset_id = ${assetId}`;
   }
 
-  // ── 7. Stamp metadata IMMEDIATELY (before variant render) ────────
-  // The cascade is "committed" once the artifact + categories + brands
-  // are persisted and the source rename + variants are scheduled.
-  // Stamping BEFORE the variant render means the metadata is correct
-  // even if variants are slow or fail. Subscriber's Save returns
-  // promptly; downstream consumers gate on asset_analysis IS NOT NULL,
-  // not on variant existence.
+  // ── 7. Stamp metadata + flag variants pending ────────────────────
+  // commitCascade is now purely about persisting the artifact + brand
+  // links + source rename. Variant render is a separate concern fired
+  // by the commit ENDPOINT after this function returns (decoupled so
+  // each gets its own 60s Vercel function budget). Subscriber is
+  // released as soon as this returns — typically ~1-2s.
   //
-  // variants_pending=true tells consumers that variants are being
-  // built in the background. Cleared when waitUntil block completes.
+  // variants_pending=true is set here and cleared by the separate
+  // /api/assets/[id]/render-variants endpoint once render completes.
+  // If render fails or never fires, this flag stays true and the
+  // orchestrator pool query naturally skips the asset.
   await sql`
     UPDATE media_assets
     SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
@@ -244,68 +244,11 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     WHERE id = ${assetId}
   `;
 
-  // ── 8. Render variants in background (Vercel waitUntil) ──────────
-  // Variant render is the bottleneck (~5-30s depending on template
-  // count + asset size). Moving it to waitUntil lets the commit
-  // endpoint return inside the 60s Vercel function limit even when
-  // renders run long. Background failures degrade gracefully —
-  // variants_pending=true sticks if renders never complete, signaling
-  // to the orchestrator pool query that the asset isn't ready yet.
-  let variantSchedule = "scheduled (background)";
-  try {
-    const { waitUntil } = await import("@vercel/functions");
-    waitUntil(
-      (async () => {
-        try {
-          const variantResults = await renderAllVariantsForAsset(assetId);
-          await sql`
-            UPDATE media_assets
-            SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-              variants_pending: false,
-              variants_rendered_at: new Date().toISOString(),
-              variant_count: variantResults.length,
-            })}::jsonb,
-            updated_at = NOW()
-            WHERE id = ${assetId}
-          `;
-          console.log(
-            `commitCascade waitUntil ${assetId}: variants=${variantResults.length} done`,
-          );
-        } catch (err) {
-          const msg = `Variant render failed in background: ${err instanceof Error ? err.message : err}`;
-          console.error(`commitCascade waitUntil ${assetId}: ${msg}`);
-          // Leave variants_pending=true so consumers gate correctly.
-        }
-      })(),
-    );
-  } catch {
-    // @vercel/functions unavailable (local dev). Fall back to
-    // inline render — slow but functional. Subscriber may hit the
-    // 60s limit in local dev; production has waitUntil.
-    variantSchedule = "inline (waitUntil unavailable)";
-    try {
-      const variantResults = await renderAllVariantsForAsset(assetId);
-      await sql`
-        UPDATE media_assets
-        SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-          variants_pending: false,
-          variants_rendered_at: new Date().toISOString(),
-          variant_count: variantResults.length,
-        })}::jsonb
-        WHERE id = ${assetId}
-      `;
-    } catch (err) {
-      const msg = `Variant render failed: ${err instanceof Error ? err.message : err}`;
-      warnings.push(msg);
-      console.error(`commitCascade ${assetId}: ${msg}`);
-    }
-  }
-
   console.log(
     `commitCascade ${assetId}: slug="${slug}" renamed=${renamed} ` +
       `categoryRows=${categoryRows} brandRows=${brandRows} ` +
       `suggestedNewBrands=${brandMatch.suggested_new.length} ` +
-      `variants=${variantSchedule} warnings=${warnings.length}`,
+      `warnings=${warnings.length} (variants → separate endpoint)`,
   );
 
   void currentSourceUrl;
@@ -317,7 +260,7 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     suggestedNewBrandCount: brandMatch.suggested_new.length,
     slugApplied: slug,
     renamed,
-    variantCount: 0, // Variants now render in background; count unknown at return time.
+    variantCount: 0, // Variants now render via separate endpoint; count not known at commit time.
     warnings,
   };
 }
