@@ -44,11 +44,14 @@ interface CommittedExtras {
   brands: Array<{ name: string; slug: string }>;
   service_areas: Array<{ name: string; source: "transcript" | "gps" }>;
   service_area_suggestions: Array<{ name: string; kind: string }>;
-  /** Full asset_analysis JSONB — what the cascade actually wrote. Used
-   * by the "View raw JSON" inspector at the bottom of the card. */
+  /** Full asset_analysis JSONB — what the cascade actually wrote. */
   raw_analysis: Record<string, unknown> | null;
-  /** JIT-computed service area matcher output (matched + suggested_new).
-   * Not persisted; recomputed every read. Shown raw alongside analysis. */
+  /** Matcher outputs (matched + suggested_new), recomputed at read
+   * time so preview and committed share a uniform shape. brand/project
+   * results also live in asset_brands/asset_projects but this is the
+   * inspector-friendly form. */
+  raw_brand_match: Record<string, unknown> | null;
+  raw_project_match: Record<string, unknown> | null;
   raw_service_area_match: Record<string, unknown> | null;
 }
 
@@ -359,6 +362,8 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
         <JsonViewer
           value={{
             analysis: committed.raw_analysis,
+            brand_match: committed.raw_brand_match,
+            project_match: committed.raw_project_match,
             service_area_match: committed.raw_service_area_match,
           }}
           defaultOpenDepth={1}

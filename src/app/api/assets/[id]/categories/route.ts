@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { matchServiceAreas } from "@/lib/categorization/service-area-match";
+import { matchBrandsFromNer } from "@/lib/categorization/brand-match";
+import { matchProjectsFromNer } from "@/lib/categorization/project-match";
 import { getAssetNarrative } from "@/lib/asset-narrative";
 
 export const runtime = "nodejs";
@@ -81,7 +83,30 @@ export async function GET(
   if (analysis) {
     const narrative = await getAssetNarrative(assetId);
     const transcript = narrative.text.trim();
-    const [brandRows, projectRows, serviceAreaMatch] = await Promise.all([
+    // Recompute all three matchers at read time. Same approach as the
+    // preview route — cheap (pure SQL + token math, no LLM), gives the
+    // JsonViewer a uniform shape across preview and committed states.
+    // brand/project results also live in asset_brands/asset_projects
+    // but the matcher form (matched + suggested_new) is what callers
+    // expect to inspect.
+    const nerEntities = (analysis.entities ?? {}) as {
+      brands?: Array<{ text: string; context_excerpt: string }>;
+      projects?: Array<{ text: string; context_excerpt: string }>;
+      locations?: Array<{
+        text: string; context_excerpt: string; type: string;
+        geocodable: boolean; privacy_sensitive: boolean;
+      }>;
+    };
+    const nerBrandCandidates = (nerEntities.brands ?? []).map((b) => ({
+      name: b.text,
+      context: b.context_excerpt,
+    }));
+    const nerProjectCandidates = (nerEntities.projects ?? []).map((p) => ({
+      name: p.text,
+      context: p.context_excerpt,
+    }));
+
+    const [brandRows, projectRows, brandMatch, projectMatch, serviceAreaMatch] = await Promise.all([
       sql`
         SELECT b.name, b.slug
         FROM asset_brands ab JOIN brands b ON b.id = ab.brand_id
@@ -94,16 +119,15 @@ export async function GET(
         WHERE ap.asset_id = ${assetId}
         ORDER BY p.name
       `,
+      matchBrandsFromNer(asset.site_id as string, nerBrandCandidates),
+      matchProjectsFromNer(asset.site_id as string, nerProjectCandidates),
       transcript.length > 0
         ? matchServiceAreas(
             asset.site_id as string,
             transcript,
             asset.gps_lat as number | null,
             asset.gps_lng as number | null,
-            (analysis.entities as { locations?: Array<{
-              text: string; context_excerpt: string; type: string;
-              geocodable: boolean; privacy_sensitive: boolean;
-            }> })?.locations,
+            nerEntities.locations,
           )
         : Promise.resolve({ matched: [], suggested_new: [] }),
     ]);
@@ -122,12 +146,14 @@ export async function GET(
         name: s.name,
         kind: s.kind,
       })),
-      // Raw cascade artifact — powers the "View raw JSON" inspector in
-      // the Auto-tag card. Includes everything the cascade produced:
-      // entities, asset_categories, scene_types, story_angles,
-      // caption_hints, etc. Match arrays surface alongside for a single
-      // complete view of the cascade's full output.
+      // Raw cascade artifact — powers the JsonViewer inspector. Includes
+      // everything the cascade produced (entities, asset_categories,
+      // scene_types, story_angles, caption_hints, etc.) alongside the
+      // three matcher results so callers see a uniform shape across
+      // preview and committed states.
       raw_analysis: analysis,
+      raw_brand_match: brandMatch,
+      raw_project_match: projectMatch,
       raw_service_area_match: serviceAreaMatch,
     };
   }
