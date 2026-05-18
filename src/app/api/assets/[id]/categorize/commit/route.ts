@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { commitCascade } from "@/lib/categorization/cascade-commit";
+import { commitCascade, type CommitCascadeInput } from "@/lib/categorization/cascade-commit";
 import type { CascadeAnalysis } from "@/lib/categorization/cascade-analyze";
 
 export const runtime = "nodejs";
@@ -51,7 +51,7 @@ export async function POST(
     return NextResponse.json({ error: "Asset not in your subscription" }, { status: 403 });
   }
 
-  let body: { analysis: CascadeAnalysis };
+  let body: { analysis: CascadeAnalysis; approvals?: CommitCascadeInput["approvals"] };
   try {
     body = await req.json();
   } catch {
@@ -68,6 +68,7 @@ export async function POST(
     const result = await commitCascade({
       assetId,
       analysis: body.analysis,
+      approvals: body.approvals,
     });
 
     // Fire variant render as a separate background function. waitUntil

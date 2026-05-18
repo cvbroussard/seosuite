@@ -39,6 +39,30 @@ import type { CascadeAnalysis } from "./cascade-analyze";
 export interface CommitCascadeInput {
   assetId: string;
   analysis: CascadeAnalysis;
+  /** Subscriber-approved promotions from the approval card. Optional;
+   * absent = legacy auto-binding-only path. Each list is applied AFTER
+   * the matched auto-binds run, so duplicates land in ON CONFLICT
+   * DO NOTHING / DO UPDATE branches cleanly. */
+  approvals?: {
+    /** New brands to create + link to this asset. Name comes from NER
+     * suggested_new; subscriber approved the promote. URL etc. are
+     * left blank — enrichBrand fires async to fill them. */
+    brands_to_create?: Array<{ name: string; context?: string }>;
+    /** New projects to create + link. place_id/gps come from the inline
+     * LocationPicker the subscriber used in the card row (optional). */
+    projects_to_create?: Array<{
+      name: string;
+      context?: string;
+      place_id?: string | null;
+      gps_lat?: number | null;
+      gps_lng?: number | null;
+      formatted_address?: string | null;
+    }>;
+    /** Existing project IDs the subscriber confirmed from geo_candidates
+     * (geofence-surfaced candidates that didn't get auto-bound because
+     * geo-only matches require confirmation). */
+    project_bindings?: string[];
+  };
 }
 
 export interface CommitCascadeResult {
@@ -49,6 +73,12 @@ export interface CommitCascadeResult {
   /** NER brand candidates that didn't match the catalog — caller can
    * surface for promote-to-catalog. */
   suggestedNewBrandCount: number;
+  /** Brands the subscriber promoted via the approval card. */
+  approvedBrandRows: number;
+  /** Projects the subscriber promoted via the approval card. */
+  approvedProjectRows: number;
+  /** Existing projects the subscriber bound from geo_candidates. */
+  approvedProjectBindings: number;
   slugApplied: string;
   renamed: boolean;
   variantCount: number;
@@ -104,7 +134,7 @@ async function persistCascadeArtifact(
 }
 
 export async function commitCascade(input: CommitCascadeInput): Promise<CommitCascadeResult> {
-  const { assetId, analysis } = input;
+  const { assetId, analysis, approvals } = input;
   const warnings: string[] = [];
 
   // ── 1. Load asset state ──────────────────────────────────────────
@@ -166,6 +196,121 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
       VALUES (${assetId}, ${m.project_id})
       ON CONFLICT DO NOTHING
     `;
+  }
+
+  // ── 2d. Apply subscriber approvals from the approval card ────────
+  // Three independent lists, all optional. Run AFTER auto-binds so ON
+  // CONFLICT collisions resolve naturally (approval that names an
+  // already-matched brand/project becomes a no-op insert).
+  let approvedBrandRows = 0;
+  let approvedProjectRows = 0;
+  let approvedProjectBindings = 0;
+
+  if (approvals?.brands_to_create && approvals.brands_to_create.length > 0) {
+    // Mirror POST /api/brands: name → slug, ON CONFLICT DO UPDATE so
+    // simultaneous approvals across assets converge. enrichBrand fires
+    // async to fill URL/description/logo from the web; subscriber sees
+    // the brand land immediately, enrichment polishes later.
+    const newBrandIds: Array<{ id: string; name: string }> = [];
+    for (const b of approvals.brands_to_create) {
+      const name = b.name.trim();
+      if (name.length === 0) continue;
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 40);
+      const [brand] = await sql`
+        INSERT INTO brands (
+          site_id, name, slug, seed_source, seed_asset_id, authorized_at, enrichment_status
+        )
+        VALUES (
+          ${siteId}, ${name}, ${slug},
+          'audio_transcript', ${assetId}, NOW(), 'pending'
+        )
+        ON CONFLICT (site_id, slug) DO UPDATE SET name = ${name}
+        RETURNING id
+      `;
+      await sql`
+        INSERT INTO asset_brands (asset_id, brand_id)
+        VALUES (${assetId}, ${brand.id})
+        ON CONFLICT DO NOTHING
+      `;
+      approvedBrandRows++;
+      newBrandIds.push({ id: brand.id as string, name });
+    }
+    // Fire enrichment async — same waitUntil pattern as POST /api/brands.
+    if (newBrandIds.length > 0) {
+      import("@vercel/functions").then(({ waitUntil }) => {
+        waitUntil(
+          (async () => {
+            for (const { id, name } of newBrandIds) {
+              try {
+                const { enrichBrand } = await import("@/lib/brand-enrich");
+                await enrichBrand(id, name);
+              } catch (err) {
+                console.warn(`enrichBrand failed for ${id}:`, err instanceof Error ? err.message : err);
+              }
+            }
+          })(),
+        );
+      }).catch(() => { /* @vercel/functions unavailable */ });
+    }
+  }
+
+  if (approvals?.projects_to_create && approvals.projects_to_create.length > 0) {
+    for (const p of approvals.projects_to_create) {
+      const name = p.name.trim();
+      if (name.length === 0) continue;
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 40);
+      const [project] = await sql`
+        INSERT INTO projects (
+          site_id, name, slug, status, address,
+          place_id, gps_lat, gps_lng, caption_mode
+        )
+        VALUES (
+          ${siteId}, ${name}, ${slug}, 'active',
+          ${p.formatted_address || null},
+          ${p.place_id || null}, ${p.gps_lat ?? null}, ${p.gps_lng ?? null},
+          'seeding'
+        )
+        ON CONFLICT (site_id, slug) DO UPDATE SET
+          name = ${name},
+          address = COALESCE(projects.address, ${p.formatted_address || null}),
+          place_id = COALESCE(projects.place_id, ${p.place_id || null}),
+          gps_lat = COALESCE(projects.gps_lat, ${p.gps_lat ?? null}),
+          gps_lng = COALESCE(projects.gps_lng, ${p.gps_lng ?? null})
+        RETURNING id
+      `;
+      await sql`
+        INSERT INTO asset_projects (asset_id, project_id)
+        VALUES (${assetId}, ${project.id})
+        ON CONFLICT DO NOTHING
+      `;
+      approvedProjectRows++;
+    }
+  }
+
+  if (approvals?.project_bindings && approvals.project_bindings.length > 0) {
+    for (const projectId of approvals.project_bindings) {
+      // Validate the project belongs to this site (defense against
+      // crafted IDs from an inspector-modified request).
+      const [valid] = await sql`
+        SELECT 1 FROM projects WHERE id = ${projectId} AND site_id = ${siteId}
+      `;
+      if (!valid) continue;
+      const result = await sql`
+        INSERT INTO asset_projects (asset_id, project_id)
+        VALUES (${assetId}, ${projectId})
+        ON CONFLICT DO NOTHING
+        RETURNING asset_id
+      `;
+      if (result.length > 0) approvedProjectBindings++;
+    }
   }
 
   // ── 3. Derive slug + new R2 key from cascade output ──────────────
@@ -277,6 +422,8 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     `commitCascade ${assetId}: slug="${slug}" renamed=${renamed} ` +
       `categoryRows=${categoryRows} brandRows=${brandRows} ` +
       `suggestedNewBrands=${brandMatch.suggested_new.length} ` +
+      `approvedBrands=${approvedBrandRows} approvedProjects=${approvedProjectRows} ` +
+      `approvedBindings=${approvedProjectBindings} ` +
       `warnings=${warnings.length} (variants → separate endpoint)`,
   );
 
@@ -287,6 +434,9 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     categoryRows,
     brandRows,
     suggestedNewBrandCount: brandMatch.suggested_new.length,
+    approvedBrandRows,
+    approvedProjectRows,
+    approvedProjectBindings,
     slugApplied: slug,
     renamed,
     variantCount: 0, // Variants now render via separate endpoint; count not known at commit time.

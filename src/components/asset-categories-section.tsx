@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { JsonViewer } from "./json-viewer";
+import { AssetApprovalCard, type ApprovalSelection } from "./asset-approval-card";
 
 /**
  * Imperative handle exposed via ref. The Auto-tag bar's trigger button
@@ -140,6 +141,12 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
   // Cascade preview state (decoupled auto-tag flow)
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<CascadePreview | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalSelection>({
+    brands_to_create: [],
+    projects_to_create: [],
+    project_bindings: [],
+  });
+  const [showRawJson, setShowRawJson] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [cascadeError, setCascadeError] = useState<string | null>(null);
 
@@ -197,11 +204,32 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
       if (!res.ok || !d.ok) {
         throw new Error(d.error || `Preview failed (${res.status})`);
       }
-      setPreview({
+      const nextPreview: CascadePreview = {
         analysis: d.analysis,
         brand_match: d.brand_match,
         project_match: d.project_match ?? { matched: [], suggested_new: [], geo_candidates: [] },
         service_area_match: d.service_area_match ?? { matched: [] },
+      };
+      setPreview(nextPreview);
+      // Seed approvals as all-checked. Low-friction default: subscriber
+      // unchecks rare misfires. Geo candidates that already auto-bound
+      // via matched are excluded (we filter against matched.project_id
+      // at render time too, defense in depth).
+      const matchedProjectIds = new Set(
+        nextPreview.project_match.matched.map((m) => m.project_id),
+      );
+      setApprovals({
+        brands_to_create: nextPreview.brand_match.suggested_new.map((b) => ({
+          name: b.name,
+          context: b.context,
+        })),
+        projects_to_create: nextPreview.project_match.suggested_new.map((p) => ({
+          name: p.name,
+          context: p.context,
+        })),
+        project_bindings: nextPreview.project_match.geo_candidates
+          .filter((c) => !matchedProjectIds.has(c.project_id))
+          .map((c) => c.project_id),
       });
     } catch (e) {
       setCascadeError(e instanceof Error ? e.message : String(e));
@@ -218,12 +246,13 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
       const res = await fetch(`/api/assets/${assetId}/categorize/commit`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ analysis: preview.analysis }),
+        body: JSON.stringify({ analysis: preview.analysis, approvals }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || `Commit failed (${res.status})`);
       // Clear preview state + reload current assignments
       setPreview(null);
+      setApprovals({ brands_to_create: [], projects_to_create: [], project_bindings: [] });
       await load();
     } catch (e) {
       setCascadeError(e instanceof Error ? e.message : String(e));
@@ -234,6 +263,7 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
 
   function discardPreview() {
     setPreview(null);
+    setApprovals({ brands_to_create: [], projects_to_create: [], project_bindings: [] });
     setCascadeError(null);
   }
 
@@ -316,38 +346,88 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
           as the full JSON viewer. No curated highlight cards (the
           viewer IS the inspector). Save above commits via the
           imperative handle; Discard clears the preview here. */}
-      {preview && (
-        <div className="mb-3 rounded-lg border border-accent/40 bg-accent/5 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-accent">
-              {hideTrigger ? "Preview — Save above to commit" : "Preview — not yet saved"}
-            </span>
-            <div className="flex gap-1.5">
-              {!hideTrigger && (
+      {preview && (() => {
+        const matchedProjectIds = new Set(
+          preview.project_match.matched.map((m) => m.project_id),
+        );
+        const geoCandidatesForCard = preview.project_match.geo_candidates.filter(
+          (c) => !matchedProjectIds.has(c.project_id),
+        );
+        const hasApprovals =
+          preview.brand_match.suggested_new.length > 0 ||
+          preview.project_match.suggested_new.length > 0 ||
+          geoCandidatesForCard.length > 0;
+        return (
+          <>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-accent">
+                {hasApprovals
+                  ? hideTrigger
+                    ? "Preview — review approvals, then Save above"
+                    : "Preview — review approvals, then Apply"
+                  : hideTrigger
+                    ? "Preview — Save above to commit"
+                    : "Preview — not yet saved"}
+              </span>
+              <div className="flex gap-1.5">
+                {!hideTrigger && (
+                  <button
+                    onClick={commitPreview}
+                    disabled={committing}
+                    className="rounded bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                  >
+                    {committing ? "Applying…" : "✓ Apply"}
+                  </button>
+                )}
                 <button
-                  onClick={commitPreview}
+                  onClick={discardPreview}
                   disabled={committing}
-                  className="rounded bg-accent px-3 py-1 text-[10px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                  className="rounded bg-surface-hover px-3 py-1 text-[10px] text-muted hover:text-foreground disabled:opacity-50"
                 >
-                  {committing ? "Applying…" : "✓ Apply"}
+                  Discard
                 </button>
-              )}
-              <button
-                onClick={discardPreview}
-                disabled={committing}
-                className="rounded bg-surface-hover px-3 py-1 text-[10px] text-muted hover:text-foreground disabled:opacity-50"
-              >
-                Discard
-              </button>
+              </div>
             </div>
-          </div>
-          <JsonViewer
-            value={preview}
-            defaultOpenDepth={1}
-            className="max-h-[28rem]"
-          />
-        </div>
-      )}
+
+            <AssetApprovalCard
+              brandSuggestions={preview.brand_match.suggested_new.map((b) => ({
+                name: b.name,
+                context: b.context,
+              }))}
+              projectSuggestions={preview.project_match.suggested_new.map((p) => ({
+                name: p.name,
+                context: p.context,
+              }))}
+              geoCandidates={geoCandidatesForCard.map((c) => ({
+                project_id: c.project_id,
+                name: c.name,
+                slug: c.slug,
+                distance_m: c.distance_m,
+              }))}
+              value={approvals}
+              onChange={setApprovals}
+              disabled={committing}
+            />
+
+            <details
+              className="mb-3 rounded-lg border border-border bg-background"
+              open={showRawJson}
+              onToggle={(e) => setShowRawJson((e.target as HTMLDetailsElement).open)}
+            >
+              <summary className="cursor-pointer px-3 py-1.5 text-[10px] text-muted hover:text-foreground">
+                Inspect raw cascade (JSON)
+              </summary>
+              <div className="border-t border-border p-2">
+                <JsonViewer
+                  value={preview}
+                  defaultOpenDepth={1}
+                  className="max-h-[28rem]"
+                />
+              </div>
+            </details>
+          </>
+        );
+      })()}
 
       {cascadeError && (
         <div className="mb-2 rounded border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
@@ -355,35 +435,36 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
         </div>
       )}
 
-      {/* Committed analysis — full JSON viewer is the only render of
-          results. Replaces the prior curated summary cards (2026-05-18).
-          The viewer's own Expand/Collapse All buttons handle depth. */}
+      {/* Committed analysis — collapsible JSON inspector. Replaces the
+          prior always-expanded viewer (2026-05-18). The approval card
+          surfaces actionable decisions; the JSON is for power users. */}
       {committed?.raw_analysis && (
-        <JsonViewer
-          value={{
-            analysis: committed.raw_analysis,
-            // Matchers default to their empty shape when the server
-            // returns null/undefined — guarantees the section renders
-            // with structure (matched: [], suggested_new: [], etc.)
-            // instead of vanishing. Subscriber sees that the matcher
-            // ran but found nothing, vs. ambiguity about whether the
-            // matcher fired at all.
-            brand_match: committed.raw_brand_match ?? {
-              matched: [],
-              suggested_new: [],
-            },
-            project_match: committed.raw_project_match ?? {
-              matched: [],
-              suggested_new: [],
-              geo_candidates: [],
-            },
-            service_area_match: committed.raw_service_area_match ?? {
-              matched: [],
-            },
-          }}
-          defaultOpenDepth={1}
-          className="mt-2 max-h-[28rem]"
-        />
+        <details className="mt-2 rounded-lg border border-border bg-background">
+          <summary className="cursor-pointer px-3 py-1.5 text-[10px] text-muted hover:text-foreground">
+            Inspect raw cascade (JSON)
+          </summary>
+          <div className="border-t border-border p-2">
+            <JsonViewer
+              value={{
+                analysis: committed.raw_analysis,
+                brand_match: committed.raw_brand_match ?? {
+                  matched: [],
+                  suggested_new: [],
+                },
+                project_match: committed.raw_project_match ?? {
+                  matched: [],
+                  suggested_new: [],
+                  geo_candidates: [],
+                },
+                service_area_match: committed.raw_service_area_match ?? {
+                  matched: [],
+                },
+              }}
+              defaultOpenDepth={1}
+              className="max-h-[28rem]"
+            />
+          </div>
+        </details>
       )}
 
       {error && <p className="mt-2 text-[10px] text-danger">{error}</p>}
