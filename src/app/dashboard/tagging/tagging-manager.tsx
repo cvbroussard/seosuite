@@ -27,6 +27,11 @@ interface Project {
   manual_caption_count: number;
   hero_asset_id: string | null;
   metadata: Record<string, unknown>;
+  // Geo fields populated when subscriber sets address via LocationPicker.
+  // Drives the project geo matcher's 200m geofence pass.
+  place_id: string | null;
+  gps_lat: number | null;
+  gps_lng: number | null;
 }
 
 interface CaptionStatus {
@@ -1117,11 +1122,38 @@ export function TaggingManager({
                     <option value="paused">Paused</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-[1fr_1fr_2fr] gap-2">
+                <div className="grid grid-cols-[1fr_1fr] gap-2">
                   <input type="date" value={String(editFields.start_date ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, start_date: e.target.value }))} className="text-sm" />
                   <input type="date" value={String(editFields.end_date ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, end_date: e.target.value }))} className="text-sm" />
-                  <input value={String(editFields.address ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, address: e.target.value }))} className="text-sm" placeholder="Address" />
                 </div>
+                {/* Address picker — autocompletes via Google Places.
+                    Drives the project geo matcher (200m geofence).
+                    PATCH receives place_id + gps_lat + gps_lng alongside
+                    the formatted address. */}
+                <LocationPicker
+                  value={
+                    editFields.place_id
+                      ? {
+                          placeId: String(editFields.place_id),
+                          placeName: String(editFields.address ?? ""),
+                          formattedAddress: String(editFields.address ?? ""),
+                          lat: Number(editFields.gps_lat ?? 0),
+                          lon: Number(editFields.gps_lng ?? 0),
+                        }
+                      : null
+                  }
+                  onChange={(picked) =>
+                    setEditFields((f) => ({
+                      ...f,
+                      address: picked?.formattedAddress || null,
+                      place_id: picked?.placeId || null,
+                      gps_lat: picked?.lat ?? null,
+                      gps_lng: picked?.lon ?? null,
+                    }))
+                  }
+                  placeholder="Project address (for GPS-based asset matching)"
+                  className="w-full"
+                />
                 <input value={String(editFields.description ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))} className="w-full text-sm" placeholder="Description" />
                 <input value={String(editFields.hero_asset_id ?? "")} onChange={(e) => setEditFields((f) => ({ ...f, hero_asset_id: e.target.value }))} className="w-full text-sm" placeholder="Hero asset UUID" />
                 <JsonField value={String(editFields.metadata_json ?? "{}")} onChange={(v) => setEditFields((f) => ({ ...f, metadata_json: v, metadata: safeParseJSON(v).value }))} label="metadata (JSON)" />
@@ -1158,7 +1190,7 @@ export function TaggingManager({
                 <div className="flex shrink-0 items-center gap-2">
                   <a href={`/dashboard/project-preview/${project.slug}`} className="text-xs text-accent hover:underline">Preview</a>
                   <a href={`/dashboard/capture?project=${project.id}&projectName=${encodeURIComponent(project.name)}`} className="text-xs text-accent hover:underline">Upload</a>
-                  <EditDeleteRow type="projects" id={project.id} onEdit={() => { setEditing(project.id); setEditFields({ name: project.name, status: project.status, start_date: project.start_date || "", end_date: project.end_date || "", address: project.address || "", description: project.description || "", hero_asset_id: project.hero_asset_id || "", caption_mode: project.caption_mode, metadata_json: jsonStringify(project.metadata) }); }} />
+                  <EditDeleteRow type="projects" id={project.id} onEdit={() => { setEditing(project.id); setEditFields({ name: project.name, status: project.status, start_date: project.start_date || "", end_date: project.end_date || "", address: project.address || "", description: project.description || "", hero_asset_id: project.hero_asset_id || "", caption_mode: project.caption_mode, metadata_json: jsonStringify(project.metadata), place_id: project.place_id || null, gps_lat: project.gps_lat ?? null, gps_lng: project.gps_lng ?? null }); }} />
                 </div>
               </>
             )}

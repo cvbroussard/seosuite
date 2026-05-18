@@ -37,13 +37,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Call Google with no type filter (covers all geographic types — Google
-    // caps includedPrimaryTypes at 5 and a smaller set silently drops valid
-    // declarations like colloquial_area). languageCode pins predictions to
-    // English so subscribers don't see "Pensilvânia, USA" alongside
-    // "Pennsylvania, USA". Filtering happens client-side below since
-    // Places (New) Autocomplete doesn't support excludedPrimaryTypes.
-    void type;
+    // Call Google with no type filter (covers all geographic + address
+    // types — Google caps includedPrimaryTypes at 5 and a smaller set
+    // silently drops valid declarations like colloquial_area).
+    // languageCode pins predictions to English so subscribers don't see
+    // "Pensilvânia, USA" alongside "Pennsylvania, USA". Filtering
+    // happens client-side below per `type` since Places (New)
+    // Autocomplete doesn't support excludedPrimaryTypes.
     const res = await fetch(
       "https://places.googleapis.com/v1/places:autocomplete",
       {
@@ -61,10 +61,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ predictions: [] });
     }
 
-    // Whitelist filter: keep only predictions that include at least one
-    // known geographic type. Drops establishments, businesses, schools,
-    // libraries, restaurants, streets, addresses, plus_codes, etc. without
-    // having to enumerate every business sub-type Google can emit.
+    // type=address — return street addresses + premises. Used by the
+    // LocationPicker when a caller wants a SPECIFIC point (project
+    // address, branch office, etc.). Allows street_address, premise,
+    // subpremise, and other point-like types. Falls back to geographic
+    // when no type matches (handles edge cases like a typed-out ZIP
+    // that Google classifies as postal_code).
+    //
+    // type=null (default) — return geographic regions only (cities,
+    // neighborhoods, ZIPs, counties, states). Used by the canonical
+    // service-area picker which needs admin regions, not addresses.
     const GEOGRAPHIC_TYPES = new Set([
       "locality",
       "sublocality",
@@ -85,12 +91,26 @@ export async function GET(req: NextRequest) {
       "administrative_area_level_5",
       "country",
     ]);
+    const ADDRESS_TYPES = new Set([
+      "street_address",
+      "premise",
+      "subpremise",
+      "route",
+      "intersection",
+      "point_of_interest",
+      "establishment",
+      "street_number",
+      // Falls back to geographic too so a ZIP typed in address mode
+      // still returns something useful.
+      ...GEOGRAPHIC_TYPES,
+    ]);
+    const allowList = type === "address" ? ADDRESS_TYPES : GEOGRAPHIC_TYPES;
 
     const data = await res.json();
     const predictions = ((data.suggestions || []) as Array<Record<string, unknown>>)
       .filter((s) => s.placePrediction)
       .map((s) => s.placePrediction as { placeId: string; text: { text: string }; types?: string[] })
-      .filter((pp) => (pp.types || []).some((t) => GEOGRAPHIC_TYPES.has(t)))
+      .filter((pp) => (pp.types || []).some((t) => allowList.has(t)))
       .map((pp) => ({ placeId: pp.placeId, placeName: pp.text.text }));
 
     return NextResponse.json({ predictions });

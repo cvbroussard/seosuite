@@ -28,7 +28,8 @@ export default async function TaggingPage() {
         WHERE b.site_id = ${siteId}
         ORDER BY b.name`,
     sql`SELECT id, name, slug, status, start_date, end_date, address, description,
-            caption_mode, manual_caption_count, hero_asset_id, metadata
+            caption_mode, manual_caption_count, hero_asset_id, metadata,
+            place_id, gps_lat, gps_lng
         FROM projects WHERE site_id = ${siteId} ORDER BY name`,
     sql`SELECT id, name, slug, display_name, type, consent_given, description,
             visual_cues, narrative_context, relationships,
@@ -83,6 +84,9 @@ export default async function TaggingPage() {
         manual_caption_count: (p.manual_caption_count as number) || 0,
         hero_asset_id: (p.hero_asset_id as string) || null,
         metadata: (p.metadata as Record<string, unknown>) || {},
+        place_id: (p.place_id as string) || null,
+        gps_lat: p.gps_lat != null ? Number(p.gps_lat) : null,
+        gps_lng: p.gps_lng != null ? Number(p.gps_lng) : null,
       }))}
       personas={personas.map((c) => ({
         id: c.id as string,
