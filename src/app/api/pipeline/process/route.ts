@@ -99,15 +99,14 @@ export async function POST(req: NextRequest) {
         if (exif.dateTaken || exif.lat !== null) {
           const exifMeta: Record<string, unknown> = {
             ...(exif.dateTaken && { date_taken: exif.dateTaken }),
-            ...(exif.lat !== null && { geo: { lat: exif.lat, lng: exif.lng } }),
             ...(exif.camera && { camera: exif.camera }),
           };
-          // Update date_taken and recalculate sort_order from the real photo date.
-          // Also persist GPS to first-class columns (gps_lat, gps_lng) per
-          // migration 116 — the columns are queryable / indexable and feed
-          // service-area auto-tagging (Place ID hierarchy matching). The
-          // metadata.geo path is kept for backward compat with downstream
-          // readers that haven't migrated to the columns yet.
+          // GPS goes to first-class columns (gps_lat, gps_lng) only.
+          // The legacy metadata.geo write was retired 2026-05-19 — all
+          // downstream readers (geo-match, project-match service-area,
+          // render) now read from columns. date_taken and camera stay
+          // in metadata since they don't have dedicated columns.
+          // Update date_taken and recalculate sort_order from real photo date.
           const sortOrder = exif.dateTaken ? new Date(exif.dateTaken).getTime() / 1000 : null;
           await sql`
             UPDATE media_assets

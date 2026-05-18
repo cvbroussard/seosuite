@@ -86,17 +86,20 @@ export async function matchAssetToEntities(
     }
   }
 
-  // Match against projects with lat/lng in metadata
+  // Match against projects with dedicated gps_lat/gps_lng columns
+  // (migration 126, 2026-05-18). Legacy metadata->>'lat' path retired
+  // 2026-05-19. Branches still use metadata-stored lat/lng above —
+  // they need their own canonical-place migration eventually.
   const projects = await sql`
-    SELECT id, metadata FROM projects
-    WHERE site_id = ${siteId} AND metadata->>'lat' IS NOT NULL
+    SELECT id, gps_lat, gps_lng FROM projects
+    WHERE site_id = ${siteId} AND gps_lat IS NOT NULL
   `;
 
   for (const proj of projects) {
-    const meta = (proj.metadata || {}) as Record<string, unknown>;
-    const projLat = meta.lat as number;
-    const projLng = meta.lng as number;
-    if (projLat && projLng && haversineKm(lat, lng, projLat, projLng) <= RADIUS_KM) {
+    const projLat = Number(proj.gps_lat);
+    const projLng = Number(proj.gps_lng);
+    if (Number.isFinite(projLat) && Number.isFinite(projLng) &&
+        haversineKm(lat, lng, projLat, projLng) <= RADIUS_KM) {
       await sql`
         INSERT INTO asset_projects (asset_id, project_id)
         VALUES (${assetId}, ${proj.id})
@@ -122,7 +125,10 @@ export async function backfillAssetsForEntity(
   const geo = await geocode(address);
   if (!geo) return { geocoded: false, matched: 0 };
 
-  // Store lat/lng on the entity
+  // Store lat/lng on the entity. Projects use dedicated columns as of
+  // migration 126 (2026-05-18); legacy metadata write retired
+  // 2026-05-19. Branches still use metadata (separate migration
+  // pending — branches don't have dedicated gps columns yet).
   if (entityType === "branch") {
     await sql`
       UPDATE branches
@@ -132,16 +138,18 @@ export async function backfillAssetsForEntity(
   } else {
     await sql`
       UPDATE projects
-      SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ lat: geo.lat, lng: geo.lng })}::jsonb
+      SET gps_lat = ${geo.lat}, gps_lng = ${geo.lng}
       WHERE id = ${entityId}
     `;
   }
 
-  // Find assets with GPS within radius
+  // Find assets with GPS in dedicated columns (legacy metadata.geo
+  // backfilled into columns 2026-05-18; new uploads write to columns
+  // only as of 2026-05-19).
   const assets = await sql`
-    SELECT id, metadata FROM media_assets
+    SELECT id, gps_lat, gps_lng FROM media_assets
     WHERE site_id = ${siteId}
-      AND metadata->>'geo' IS NOT NULL
+      AND gps_lat IS NOT NULL
   `;
 
   let matched = 0;
@@ -149,11 +157,11 @@ export async function backfillAssetsForEntity(
   const fkColumn = entityType === "branch" ? "branch_id" : "project_id";
 
   for (const asset of assets) {
-    const meta = (asset.metadata || {}) as Record<string, unknown>;
-    const assetGeo = meta.geo as { lat: number; lng: number } | undefined;
-    if (!assetGeo?.lat || !assetGeo?.lng) continue;
+    const aLat = Number(asset.gps_lat);
+    const aLng = Number(asset.gps_lng);
+    if (!Number.isFinite(aLat) || !Number.isFinite(aLng)) continue;
 
-    if (haversineKm(assetGeo.lat, assetGeo.lng, geo.lat, geo.lng) <= RADIUS_KM) {
+    if (haversineKm(aLat, aLng, geo.lat, geo.lng) <= RADIUS_KM) {
       // Use raw query for dynamic table/column name
       await sql.query(
         `INSERT INTO ${joinTable} (asset_id, ${fkColumn}) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
