@@ -98,6 +98,11 @@ interface CascadePreview {
     matched: Array<{ brand_id: string; name: string; ner_text: string; context: string }>;
     suggested_new: Array<{ name: string; slug: string; context: string }>;
   };
+  project_match: {
+    matched: Array<{ project_id: string; name: string; slug: string; ner_text: string; context: string }>;
+    suggested_new: Array<{ name: string; slug: string; context: string }>;
+    geo_candidates: Array<{ project_id: string; name: string; slug: string; project_lat: number; project_lng: number; distance_m: number }>;
+  };
   service_area_match: {
     matched: Array<{
       overlay_id: string;
@@ -201,6 +206,7 @@ export const AssetCategoriesSection = forwardRef<AutoTagSectionHandle, AssetCate
       setPreview({
         analysis: d.analysis,
         brand_match: d.brand_match,
+        project_match: d.project_match ?? { matched: [], suggested_new: [], geo_candidates: [] },
         service_area_match: d.service_area_match ?? { matched: [], suggested_new: [] },
       });
     } catch (e) {
