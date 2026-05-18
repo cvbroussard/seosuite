@@ -130,7 +130,12 @@ export async function POST(
 
   const [brandMatch, projectMatch, serviceAreaMatch] = await Promise.all([
     matchBrandsFromNer(asset.site_id as string, nerBrandCandidates),
-    matchProjectsFromNer(asset.site_id as string, nerProjectCandidates),
+    matchProjectsFromNer(
+      asset.site_id as string,
+      nerProjectCandidates,
+      asset.gps_lat as number | null,
+      asset.gps_lng as number | null,
+    ),
     matchServiceAreas(
       asset.site_id as string,
       transcript,

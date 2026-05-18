@@ -109,7 +109,7 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
 
   // ── 1. Load asset state ──────────────────────────────────────────
   const [asset] = await sql`
-    SELECT id, site_id, storage_url, media_type, poster_asset_id
+    SELECT id, site_id, storage_url, media_type, poster_asset_id, gps_lat, gps_lng
     FROM media_assets WHERE id = ${assetId}
   `;
   if (!asset) throw new Error(`Asset ${assetId} not found`);
@@ -149,7 +149,17 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     name: p.text,
     context: p.context_excerpt,
   }));
-  const projectMatch = await matchProjectsFromNer(siteId, nerProjectCandidates);
+  // Pass GPS so the matcher's geo pass can populate geo_candidates
+  // for visibility in the JSON viewer. Note: we intentionally only
+  // auto-bind from `matched` (transcript signal). geo_candidates
+  // surface as plausible-but-unconfirmed and require manual binding
+  // per project_tracpost_project_geo_matcher (2026-05-18 design).
+  const projectMatch = await matchProjectsFromNer(
+    siteId,
+    nerProjectCandidates,
+    asset.gps_lat as number | null,
+    asset.gps_lng as number | null,
+  );
   for (const m of projectMatch.matched) {
     await sql`
       INSERT INTO asset_projects (asset_id, project_id)

@@ -120,7 +120,12 @@ export async function GET(
         ORDER BY p.name
       `,
       matchBrandsFromNer(asset.site_id as string, nerBrandCandidates),
-      matchProjectsFromNer(asset.site_id as string, nerProjectCandidates),
+      matchProjectsFromNer(
+        asset.site_id as string,
+        nerProjectCandidates,
+        asset.gps_lat as number | null,
+        asset.gps_lng as number | null,
+      ),
       transcript.length > 0
         ? matchServiceAreas(
             asset.site_id as string,

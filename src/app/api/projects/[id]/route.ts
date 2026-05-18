@@ -59,8 +59,20 @@ export async function PATCH(
   if (body.caption_mode !== undefined) {
     await sql`UPDATE projects SET caption_mode = ${body.caption_mode} WHERE id = ${id}`;
   }
+  // place_id / gps_lat / gps_lng come together from the LocationPicker.
+  // We accept them independently for flexibility but they should normally
+  // arrive as a set when the subscriber picks an address.
+  if (body.place_id !== undefined) {
+    await sql`UPDATE projects SET place_id = ${body.place_id || null} WHERE id = ${id}`;
+  }
+  if (body.gps_lat !== undefined) {
+    await sql`UPDATE projects SET gps_lat = ${body.gps_lat ?? null} WHERE id = ${id}`;
+  }
+  if (body.gps_lng !== undefined) {
+    await sql`UPDATE projects SET gps_lng = ${body.gps_lng ?? null} WHERE id = ${id}`;
+  }
 
-  const [updated] = await sql`SELECT id, name, slug, status, start_date, end_date, address, description, hero_asset_id, metadata, caption_mode, manual_caption_count FROM projects WHERE id = ${id}`;
+  const [updated] = await sql`SELECT id, name, slug, status, start_date, end_date, address, description, hero_asset_id, metadata, caption_mode, manual_caption_count, place_id, gps_lat, gps_lng FROM projects WHERE id = ${id}`;
 
   // Format dates as YYYY-MM-DD for client consumption
   return NextResponse.json({

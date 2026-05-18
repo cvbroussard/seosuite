@@ -46,9 +46,47 @@ export interface SuggestedNewProject {
   context: string;
 }
 
+/** Geo-derived project candidate. Surfaces in the analyzer JSON as a
+ * project the subscriber may want to confirm — NOT auto-bound. The
+ * asset's GPS fell within a project's geofence (200m default) so the
+ * binding is plausible, but the subscriber confirms via manual binding
+ * since GPS precision and neighbor-inclusion mean false positives are
+ * expected (per discussion 2026-05-18). */
+export interface ProjectGeoCandidate {
+  project_id: string;
+  name: string;
+  slug: string;
+  /** Project center as stored (the subscriber-picked address). */
+  project_lat: number;
+  project_lng: number;
+  /** Distance from asset GPS to project center, in meters. */
+  distance_m: number;
+}
+
 export interface ProjectMatchResult {
   matched: ProjectCatalogMatch[];
   suggested_new: SuggestedNewProject[];
+  /** Geo-matched candidates (asset GPS within 200m of project center).
+   * Empty when asset has no GPS or no projects have geo data set. */
+  geo_candidates: ProjectGeoCandidate[];
+}
+
+/** 200m geofence radius. Generous on purpose — see discussion 2026-05-18
+ * for the precision-vs-false-positives trade-off. Will include 3-4
+ * neighbors on a typical residential block; subscriber resolves via
+ * manual binding (the analyzer surfaces candidates, doesn't auto-bind). */
+const GEOFENCE_RADIUS_M = 200;
+
+/** Haversine great-circle distance between two lat/lng points, in meters. */
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function slugifyName(s: string): string {
@@ -62,13 +100,25 @@ function slugifyName(s: string): string {
 export async function matchProjectsFromNer(
   siteId: string,
   nerProjects: NerProjectCandidate[],
+  /** Asset GPS for the geo-candidate pass. Pass null when asset has
+   * no EXIF GPS — geo_candidates will be empty. */
+  gpsLat?: number | null,
+  gpsLng?: number | null,
 ): Promise<ProjectMatchResult> {
   const matched: ProjectCatalogMatch[] = [];
   const suggested_new: SuggestedNewProject[] = [];
-  if (nerProjects.length === 0) return { matched, suggested_new };
+  const geo_candidates: ProjectGeoCandidate[] = [];
+
+  // Early exit only if both signal sources are absent. Even with zero
+  // NER candidates we may have geo signal worth surfacing.
+  const hasGpsSignal =
+    gpsLat != null && gpsLng != null && Number.isFinite(gpsLat) && Number.isFinite(gpsLng);
+  if (nerProjects.length === 0 && !hasGpsSignal) {
+    return { matched, suggested_new, geo_candidates };
+  }
 
   const projectRows = await sql`
-    SELECT id, name, slug FROM projects WHERE site_id = ${siteId}
+    SELECT id, name, slug, gps_lat, gps_lng FROM projects WHERE site_id = ${siteId}
   `;
   const catalogIndex = projectRows.map((r) => ({
     id: r.id as string,
@@ -152,5 +202,35 @@ export async function matchProjectsFromNer(
     });
   }
 
-  return { matched, suggested_new };
+  // Geo-candidate pass: for every project with stored gps_lat/gps_lng,
+  // compute Haversine distance from asset GPS to project center. If
+  // within GEOFENCE_RADIUS_M, surface as a candidate the subscriber
+  // can confirm. Dedupes against NER-matched projects (no point
+  // surfacing the same project twice).
+  if (hasGpsSignal) {
+    for (const row of projectRows) {
+      if (row.gps_lat == null || row.gps_lng == null) continue;
+      const pLat = Number(row.gps_lat);
+      const pLng = Number(row.gps_lng);
+      if (!Number.isFinite(pLat) || !Number.isFinite(pLng)) continue;
+      const d = haversineMeters(gpsLat as number, gpsLng as number, pLat, pLng);
+      if (d > GEOFENCE_RADIUS_M) continue;
+      // Dedupe against NER matches — already-bound projects don't need
+      // to surface as candidates again.
+      if (matched.some((m) => m.project_id === row.id)) continue;
+      geo_candidates.push({
+        project_id: row.id as string,
+        name: row.name as string,
+        slug: row.slug as string,
+        project_lat: pLat,
+        project_lng: pLng,
+        distance_m: Math.round(d),
+      });
+    }
+    // Sort closest-first so the most plausible candidate is visually
+    // first in the JSON.
+    geo_candidates.sort((a, b) => a.distance_m - b.distance_m);
+  }
+
+  return { matched, suggested_new, geo_candidates };
 }

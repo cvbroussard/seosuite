@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 interface Brand {
   id: string;
@@ -273,6 +274,11 @@ export function TaggingManager({
   const [newProjectStart, setNewProjectStart] = useState("");
   const [newProjectEnd, setNewProjectEnd] = useState("");
   const [newProjectAddress, setNewProjectAddress] = useState("");
+  // LocationPicker output for project geo. When picked, we pass place_id
+  // + gps_lat + gps_lng to the API alongside the formatted address.
+  // Address text is kept in sync so the API still receives the human
+  // string for SEO / display.
+  const [newProjectPlace, setNewProjectPlace] = useState<PickedPlace | null>(null);
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [newProjectHero, setNewProjectHero] = useState("");
   const [newProjectMode, setNewProjectMode] = useState("seeding");
@@ -414,6 +420,11 @@ export function TaggingManager({
     if (!newProjectName.trim()) return;
     setAdding(true);
     try {
+      // Picker is the preferred path — when subscriber picks an address
+      // from autocomplete, we have place_id + lat/lng to send alongside
+      // the formatted address. Falls back to typed-only address for
+      // legacy callers (no geo set in that case).
+      const addressString = newProjectPlace?.formattedAddress || newProjectAddress.trim() || null;
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -422,7 +433,10 @@ export function TaggingManager({
           status: newProjectStatus,
           start_date: newProjectStart || null,
           end_date: newProjectEnd || null,
-          address: newProjectAddress.trim() || null,
+          address: addressString,
+          place_id: newProjectPlace?.placeId || null,
+          gps_lat: newProjectPlace?.lat ?? null,
+          gps_lng: newProjectPlace?.lon ?? null,
           description: newProjectDesc.trim() || null,
           hero_asset_id: newProjectHero.trim() || null,
           caption_mode: newProjectMode,
@@ -433,7 +447,8 @@ export function TaggingManager({
         const data = await res.json();
         setProjects((prev) => [...prev, data.project].sort((a, b) => a.name.localeCompare(b.name)));
         setNewProjectName(""); setNewProjectStatus("active"); setNewProjectStart(""); setNewProjectEnd("");
-        setNewProjectAddress(""); setNewProjectDesc(""); setNewProjectHero(""); setNewProjectMode("seeding");
+        setNewProjectAddress(""); setNewProjectPlace(null);
+        setNewProjectDesc(""); setNewProjectHero(""); setNewProjectMode("seeding");
       }
     } catch { /* ignore */ }
     setAdding(false);
@@ -876,11 +891,20 @@ export function TaggingManager({
                 {adding ? "..." : "Add"}
               </button>
             </div>
-            <div className="grid grid-cols-[1fr_1fr_2fr] gap-2">
+            <div className="grid grid-cols-[1fr_1fr] gap-2">
               <input type="date" value={newProjectStart} onChange={(e) => setNewProjectStart(e.target.value)} className="text-sm" />
               <input type="date" value={newProjectEnd} onChange={(e) => setNewProjectEnd(e.target.value)} className="text-sm" />
-              <input value={newProjectAddress} onChange={(e) => setNewProjectAddress(e.target.value)} className="text-sm" placeholder="Address (for GPS auto-tagging)" />
             </div>
+            {/* Address picker — autocompletes via Google Places. On pick:
+                stores place_id + lat/lng so the analyzer can geo-match
+                assets within a 200m geofence of the project center
+                (per project_tracpost_project_geo_matcher memory). */}
+            <LocationPicker
+              value={newProjectPlace}
+              onChange={setNewProjectPlace}
+              placeholder="Project address (for GPS-based asset matching)"
+              className="w-full"
+            />
             <input value={newProjectDesc} onChange={(e) => setNewProjectDesc(e.target.value)} className="w-full text-sm" placeholder="Description (optional)" />
             <input value={newProjectHero} onChange={(e) => setNewProjectHero(e.target.value)} className="w-full text-sm" placeholder="Hero asset UUID (optional)" />
           </div>

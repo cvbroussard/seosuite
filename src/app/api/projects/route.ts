@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
 
   const projects = await sql`
     SELECT id, name, slug, status, start_date, end_date, address, description,
-           hero_asset_id, metadata, caption_mode, manual_caption_count, created_at
+           hero_asset_id, metadata, caption_mode, manual_caption_count,
+           place_id, gps_lat, gps_lng, created_at
     FROM projects WHERE site_id = ${siteId}
     ORDER BY name ASC
   `;
@@ -30,7 +31,13 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/projects — create a project
  * Body: { name, status?, start_date?, end_date?, address?, description?,
- *         hero_asset_id?, metadata?, caption_mode?, site_id }
+ *         hero_asset_id?, metadata?, caption_mode?, site_id,
+ *         place_id?, gps_lat?, gps_lng? }
+ *
+ * place_id + gps_lat + gps_lng are set when the subscriber uses the
+ * LocationPicker (autocomplete returns these from Google Places). Stored
+ * directly — no server-side geocoding needed. Powers the project geo
+ * matcher (per project_tracpost_project_geo_matcher memory).
  */
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req);
@@ -39,7 +46,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { name, status, start_date, end_date, address, description,
-    hero_asset_id, metadata, caption_mode, site_id } = body;
+    hero_asset_id, metadata, caption_mode, site_id,
+    place_id, gps_lat, gps_lng } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -65,11 +73,13 @@ export async function POST(req: NextRequest) {
 
   const [project] = await sql`
     INSERT INTO projects (site_id, name, slug, status, start_date, end_date,
-      address, description, hero_asset_id, metadata, caption_mode)
+      address, description, hero_asset_id, metadata, caption_mode,
+      place_id, gps_lat, gps_lng)
     VALUES (${site_id}, ${name.trim()}, ${slug}, ${status || "active"},
       ${start_date || null}, ${end_date || null}, ${address || null},
       ${description || null}, ${hero_asset_id || null},
-      ${metadataJson}::jsonb, ${caption_mode || "seeding"})
+      ${metadataJson}::jsonb, ${caption_mode || "seeding"},
+      ${place_id || null}, ${gps_lat ?? null}, ${gps_lng ?? null})
     ON CONFLICT (site_id, slug) DO UPDATE SET
       name = ${name.trim()},
       status = ${status || "active"},
@@ -77,13 +87,20 @@ export async function POST(req: NextRequest) {
       description = ${description || null},
       hero_asset_id = ${hero_asset_id || null},
       metadata = ${metadataJson}::jsonb,
-      caption_mode = ${caption_mode || "seeding"}
+      caption_mode = ${caption_mode || "seeding"},
+      place_id = ${place_id || null},
+      gps_lat = ${gps_lat ?? null},
+      gps_lng = ${gps_lng ?? null}
     RETURNING id, name, slug, status, start_date, end_date, address, description,
-              hero_asset_id, metadata, caption_mode, manual_caption_count
+              hero_asset_id, metadata, caption_mode, manual_caption_count,
+              place_id, gps_lat, gps_lng
   `;
 
-  // Geo-match: geocode address and backfill matching assets — non-blocking
-  if (address) {
+  // Geo-match backfill — only call legacy path if client didn't supply
+  // direct lat/lng. The LocationPicker provides them inline (no
+  // geocoding needed); legacy address-only callers still get the
+  // server-side geocode + backfill path.
+  if (address && (gps_lat == null || gps_lng == null)) {
     import("@/lib/geo-match").then(({ backfillAssetsForEntity }) =>
       backfillAssetsForEntity("project", project.id as string, site_id, address)
         .then((result) => {
