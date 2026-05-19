@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Two-axis privacy settings panel.
@@ -74,14 +74,37 @@ const IDENTITY_OPTIONS: Array<{ value: string; label: string; description: strin
   },
 ];
 
+/** Returns true if the axis is on the permissive option (requires
+ * waiver) but no waiver is signed. This is the "needs attention" state
+ * that triggers the first-visit modal and the inline warnings. */
+function needsSigning(axis: AxisState, options: typeof FACE_OPTIONS): boolean {
+  const opt = options.find((o) => o.value === axis.policy);
+  return Boolean(opt?.requiresWaiver) && !axis.waiver_signed_at;
+}
+
 export function PrivacyPanel({ siteId, initial }: Props) {
   const [face, setFace] = useState<AxisState>(initial.face);
   const [identity, setIdentity] = useState<AxisState>(initial.identity);
-  const [waiverModal, setWaiverModal] = useState<"face" | "identity" | null>(null);
-  const [pendingPolicy, setPendingPolicy] = useState<string | null>(null);
-  const [waiverChecked, setWaiverChecked] = useState(false);
+  // Modal axes: empty array = no modal open. Otherwise the array names
+  // which sections appear inside the unified modal (one or two).
+  const [modalAxes, setModalAxes] = useState<Array<"face" | "identity">>([]);
+  const [faceChecked, setFaceChecked] = useState(false);
+  const [identityChecked, setIdentityChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // First-visit detection: if either axis is on the permissive option
+  // without a signed waiver, surface the modal automatically. Covers
+  // the case where new subscribers land on defaults (asis + allow_names)
+  // and never change them — without this, they'd never see the waiver.
+  // Runs once on mount.
+  useEffect(() => {
+    const needed: Array<"face" | "identity"> = [];
+    if (needsSigning(initial.face, FACE_OPTIONS)) needed.push("face");
+    if (needsSigning(initial.identity, IDENTITY_OPTIONS)) needed.push("identity");
+    if (needed.length > 0) setModalAxes(needed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function savePolicy(opts: {
     face_policy?: string;
@@ -99,7 +122,6 @@ export function PrivacyPanel({ siteId, initial }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
-      // Refetch to pick up server-stamped waiver timestamps
       const fresh = await fetch(`/api/site/privacy?site_id=${siteId}`);
       const freshData = await fresh.json();
       setFace(freshData.face);
@@ -115,9 +137,12 @@ export function PrivacyPanel({ siteId, initial }: Props) {
     const opt = FACE_OPTIONS.find((o) => o.value === nextValue);
     if (!opt) return;
     if (opt.requiresWaiver && !face.waiver_signed_at) {
-      setPendingPolicy(nextValue);
-      setWaiverModal("face");
-      setWaiverChecked(false);
+      // Open the unified modal targeting just the face axis. Pre-fill
+      // the pending policy via the face state so the modal's sign
+      // action knows to save it together with the waiver.
+      setFace({ ...face, policy: nextValue });
+      setModalAxes(["face"]);
+      setFaceChecked(false);
       return;
     }
     void savePolicy({ face_policy: nextValue });
@@ -127,29 +152,35 @@ export function PrivacyPanel({ siteId, initial }: Props) {
     const opt = IDENTITY_OPTIONS.find((o) => o.value === nextValue);
     if (!opt) return;
     if (opt.requiresWaiver && !identity.waiver_signed_at) {
-      setPendingPolicy(nextValue);
-      setWaiverModal("identity");
-      setWaiverChecked(false);
+      setIdentity({ ...identity, policy: nextValue });
+      setModalAxes(["identity"]);
+      setIdentityChecked(false);
       return;
     }
     void savePolicy({ identity_policy: nextValue });
   }
 
-  function confirmWaiver() {
-    if (!waiverChecked || !pendingPolicy) return;
-    if (waiverModal === "face") {
-      void savePolicy({ face_policy: pendingPolicy, sign_face_waiver: true });
-    } else if (waiverModal === "identity") {
-      void savePolicy({ identity_policy: pendingPolicy, sign_identity_waiver: true });
+  async function confirmWaivers() {
+    const opts: Parameters<typeof savePolicy>[0] = {};
+    if (modalAxes.includes("face") && faceChecked) {
+      opts.face_policy = face.policy;
+      opts.sign_face_waiver = true;
     }
-    setWaiverModal(null);
-    setPendingPolicy(null);
+    if (modalAxes.includes("identity") && identityChecked) {
+      opts.identity_policy = identity.policy;
+      opts.sign_identity_waiver = true;
+    }
+    if (Object.keys(opts).length === 0) return;
+    await savePolicy(opts);
+    setModalAxes([]);
+    setFaceChecked(false);
+    setIdentityChecked(false);
   }
 
-  function cancelWaiver() {
-    setWaiverModal(null);
-    setPendingPolicy(null);
-    setWaiverChecked(false);
+  function dismissModal() {
+    setModalAxes([]);
+    setFaceChecked(false);
+    setIdentityChecked(false);
   }
 
   return (
@@ -168,6 +199,7 @@ export function PrivacyPanel({ siteId, initial }: Props) {
         waiverVersion={face.waiver_version}
         onChange={handleFaceChange}
         disabled={saving}
+        needsSigning={needsSigning(face, FACE_OPTIONS)}
       />
 
       <AxisCard
@@ -178,15 +210,19 @@ export function PrivacyPanel({ siteId, initial }: Props) {
         waiverVersion={identity.waiver_version}
         onChange={handleIdentityChange}
         disabled={saving}
+        needsSigning={needsSigning(identity, IDENTITY_OPTIONS)}
       />
 
-      {waiverModal && (
+      {modalAxes.length > 0 && (
         <WaiverModal
-          axis={waiverModal}
-          checked={waiverChecked}
-          onCheckedChange={setWaiverChecked}
-          onConfirm={confirmWaiver}
-          onCancel={cancelWaiver}
+          axes={modalAxes}
+          faceChecked={faceChecked}
+          identityChecked={identityChecked}
+          onFaceCheckedChange={setFaceChecked}
+          onIdentityCheckedChange={setIdentityChecked}
+          onConfirm={confirmWaivers}
+          onCancel={dismissModal}
+          saving={saving}
         />
       )}
     </div>
@@ -201,6 +237,7 @@ function AxisCard({
   waiverVersion,
   onChange,
   disabled,
+  needsSigning,
 }: {
   title: string;
   currentPolicy: string;
@@ -209,10 +246,16 @@ function AxisCard({
   waiverVersion: string | null;
   onChange: (v: string) => void;
   disabled: boolean;
+  needsSigning: boolean;
 }) {
   return (
     <section className="rounded-lg border border-border bg-surface p-4">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+      {needsSigning && (
+        <div className="mb-3 rounded border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
+          ⚠ This option requires a waiver. Until signed, the conservative fallback applies at publish time.
+        </div>
+      )}
       <div className="space-y-2">
         {options.map((opt) => {
           const isCurrent = opt.value === currentPolicy;
@@ -257,33 +300,73 @@ function AxisCard({
   );
 }
 
+/**
+ * Unified waiver modal — handles 1 or 2 axes in a single ceremony.
+ *
+ * Three trigger paths land here:
+ *   1. First-visit (page mount): both axes need signing → axes=['face','identity']
+ *   2. Single-axis change (subscriber picks asis/allow_names): axes=['face'] or ['identity']
+ *   3. Either case after one has already been signed: only the unsigned axis appears
+ *
+ * Each section is independently signable. Subscriber can sign one, both,
+ * or neither (dismissing without signing is allowed — they can come back).
+ * The "Sign & continue" button only commits the axes whose checkboxes
+ * are checked.
+ */
 function WaiverModal({
-  axis,
-  checked,
-  onCheckedChange,
+  axes,
+  faceChecked,
+  identityChecked,
+  onFaceCheckedChange,
+  onIdentityCheckedChange,
   onConfirm,
   onCancel,
+  saving,
 }: {
-  axis: "face" | "identity";
-  checked: boolean;
-  onCheckedChange: (v: boolean) => void;
+  axes: Array<"face" | "identity">;
+  faceChecked: boolean;
+  identityChecked: boolean;
+  onFaceCheckedChange: (v: boolean) => void;
+  onIdentityCheckedChange: (v: boolean) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  saving: boolean;
 }) {
-  const isFace = axis === "face";
+  const showFace = axes.includes("face");
+  const showIdentity = axes.includes("identity");
+  const isInitial = axes.length === 2;
+
+  // Confirm button enabled when at least one axis is checked
+  const canConfirm = (showFace && faceChecked) || (showIdentity && identityChecked);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-w-md rounded-lg bg-background p-5 shadow-lg">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-background p-5 shadow-lg">
         <h3 className="mb-2 text-sm font-semibold">
-          {isFace ? "Publish faces unaltered — waiver" : "Use proper names in captions — waiver"}
+          {isInitial
+            ? "Welcome — review your privacy waivers"
+            : showFace
+              ? "Publish faces unaltered — waiver"
+              : "Use proper names in captions — waiver"}
         </h3>
-        <div className="space-y-2 text-xs text-muted">
-          <p>
-            You are about to opt into the permissive option for{" "}
-            {isFace ? "face publishing" : "identity attribution"}.
+
+        {isInitial && (
+          <p className="mb-4 text-xs text-muted">
+            Your current settings opt into the permissive defaults for both axes. To enact those
+            choices, TracPost needs your acknowledgment as publisher-of-record. Sign one, both,
+            or neither — unsigned axes fall back to the conservative behavior at publish time.
+            You can revisit this page anytime to change.
           </p>
-          {isFace ? (
-            <>
+        )}
+
+        <div className={isInitial ? "grid gap-4 md:grid-cols-2" : ""}>
+          {showFace && (
+            <WaiverSection
+              title="Faces in images"
+              checked={faceChecked}
+              onCheckedChange={onFaceCheckedChange}
+              checkboxLabel="I accept full responsibility for published face content."
+            >
               <p>
                 TracPost will publish images with detected faces appearing as-is, without blur or
                 rectangle overlay. You are solely responsible for obtaining any necessary consent
@@ -295,52 +378,83 @@ function WaiverModal({
                 waiver, you agree that any privacy claims, takedown requests, or legal disputes
                 arising from published faces are your responsibility to resolve.
               </p>
-            </>
-          ) : (
-            <>
+            </WaiverSection>
+          )}
+
+          {showIdentity && (
+            <WaiverSection
+              title="Names in captions"
+              checked={identityChecked}
+              onCheckedChange={onIdentityCheckedChange}
+              checkboxLabel="I accept full responsibility for published name mentions."
+            >
               <p>
                 TracPost&apos;s caption generator will preserve proper names from your audio
-                transcripts in published copy (e.g. &quot;Mary Johnson loved her new addition&quot;
+                transcripts in published copy (e.g. &quot;Mary loved her new addition&quot;
                 rather than &quot;our client loved her new addition&quot;).
               </p>
               <p>
-                Your audio recordings and transcripts serve as the consent record — you mentioned
-                these names in your own voice. TracPost retains your audio and transcripts as
-                evidence that the name attribution originated with you. You are solely responsible
-                for any privacy claims arising from published name mentions.
+                Your audio recordings and transcripts serve as the consent record — you
+                mentioned these names in your own voice. TracPost retains your audio and
+                transcripts as evidence that the name attribution originated with you. You are
+                solely responsible for any privacy claims arising from published name mentions.
               </p>
-            </>
+            </WaiverSection>
           )}
-          <p className="text-foreground">You can revoke this waiver at any time by switching back to the conservative option above.</p>
         </div>
-        <label className="mt-4 flex cursor-pointer items-start gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => onCheckedChange(e.target.checked)}
-            className="mt-0.5 cursor-pointer accent-accent"
-          />
-          <span>
-            I have read the waiver and accept full responsibility for{" "}
-            {isFace ? "published face content" : "published name mentions"}.
-          </span>
-        </label>
-        <div className="mt-4 flex justify-end gap-2">
+
+        <p className="mt-4 text-[10px] text-muted">
+          You can revoke any signed waiver later by switching back to a conservative option on
+          this page.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="rounded border border-border bg-surface px-3 py-1.5 text-xs hover:bg-surface-hover"
+            disabled={saving}
+            className="rounded border border-border bg-surface px-3 py-1.5 text-xs hover:bg-surface-hover disabled:opacity-50"
           >
-            Cancel
+            {isInitial ? "Skip for now" : "Cancel"}
           </button>
           <button
             onClick={onConfirm}
-            disabled={!checked}
+            disabled={!canConfirm || saving}
             className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
           >
-            Sign waiver and continue
+            {saving ? "Signing…" : "Sign and continue"}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WaiverSection({
+  title,
+  checked,
+  onCheckedChange,
+  checkboxLabel,
+  children,
+}: {
+  title: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  checkboxLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded border border-border bg-surface p-4">
+      <h4 className="mb-2 text-xs font-semibold">{title}</h4>
+      <div className="space-y-2 text-xs text-muted">{children}</div>
+      <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onCheckedChange(e.target.checked)}
+          className="mt-0.5 cursor-pointer accent-accent"
+        />
+        <span className="text-foreground">{checkboxLabel}</span>
+      </label>
     </div>
   );
 }
