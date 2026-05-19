@@ -11,6 +11,19 @@ import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
  * site's playbook + voice). The body call's output feeds the kit
  * call's context so kit ingredients are grounded in the actual
  * article.
+ *
+ * TODO(privacy): bake a "NEVER publish a street address from the
+ * transcript" rule into both prompts. The NER pipeline used to carry
+ * a `privacy_sensitive` flag on extracted street_address values (caption
+ * gen could check before emitting) but that signal was retired with
+ * `entities.locations` 2026-05-19 — service area matcher is now the
+ * canonical geo signal and never surfaces street addresses. The
+ * remaining risk is the transcript itself: a subscriber narrates
+ * "we worked at 123 Maple Lane" → that string could leak into a
+ * generated caption if the LLM picks it up. Add an explicit rule
+ * here when caption-gen surfaces start incorporating raw transcript
+ * verbatim. Until then the risk is dormant (current prompts work off
+ * structured assets + brand voice, not transcript pass-through).
  */
 
 export interface BodyPromptInput {
