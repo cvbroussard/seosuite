@@ -203,11 +203,10 @@ export default async function MediaPage({ searchParams }: Props) {
     FROM media_assets WHERE site_id = ${siteId}
   `;
 
-  const [siteData, allBrands, allProjects, allPersonas, allServices, allBranches, assetBrandRows, assetProjectRows, assetPersonaRows, assetServiceRows, assetBranchRows] = await Promise.all([
+  const [siteData, allBrands, allProjects, allServices, allBranches, assetBrandRows, assetProjectRows, assetServiceRows, assetBranchRows] = await Promise.all([
     sql`SELECT content_pillars, pillar_config, brand_label, project_label, persona_label, branch_label, service_label FROM sites WHERE id = ${siteId}`,
     sql`SELECT id, name, slug, url FROM brands WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`SELECT id, name, slug FROM projects WHERE site_id = ${siteId} ORDER BY name ASC`,
-    sql`SELECT id, name, type FROM personas WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`SELECT id, name, slug FROM services WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`SELECT id, name, slug FROM branches WHERE site_id = ${siteId} ORDER BY name ASC`,
     sql`
@@ -219,12 +218,6 @@ export default async function MediaPage({ searchParams }: Props) {
     sql`
       SELECT ap.asset_id, ap.project_id
       FROM asset_projects ap
-      JOIN media_assets ma ON ma.id = ap.asset_id
-      WHERE ma.site_id = ${siteId}
-    `,
-    sql`
-      SELECT ap.asset_id, ap.persona_id
-      FROM asset_personas ap
       JOIN media_assets ma ON ma.id = ap.asset_id
       WHERE ma.site_id = ${siteId}
     `,
@@ -241,6 +234,8 @@ export default async function MediaPage({ searchParams }: Props) {
       WHERE ma.site_id = ${siteId}
     `,
   ]);
+  // Personas retired 2026-05-19.
+  const allPersonas: Array<{ id: string; name: string; type: string }> = [];
 
   const assetBrandMap: Record<string, string[]> = {};
   for (const row of assetBrandRows) {
@@ -257,11 +252,7 @@ export default async function MediaPage({ searchParams }: Props) {
   }
 
   const assetPersonaMap: Record<string, string[]> = {};
-  for (const row of assetPersonaRows) {
-    const aid = row.asset_id as string;
-    if (!assetPersonaMap[aid]) assetPersonaMap[aid] = [];
-    assetPersonaMap[aid].push(row.persona_id as string);
-  }
+  // Personas retired 2026-05-19; map stays empty.
 
   const assetServiceMap: Record<string, string[]> = {};
   for (const row of assetServiceRows) {

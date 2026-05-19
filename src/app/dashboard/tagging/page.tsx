@@ -20,7 +20,7 @@ export default async function TaggingPage() {
 
   const siteId = session.activeSiteId;
 
-  const [brands, projects, personas, branches, services, siteData] = await Promise.all([
+  const [brands, projects, branches, services, siteData] = await Promise.all([
     sql`SELECT b.id, b.name, b.slug, b.url, b.description, b.hero_asset_id,
             b.logo_service_url, ma.storage_url AS hero_url
         FROM brands b
@@ -31,11 +31,6 @@ export default async function TaggingPage() {
             caption_mode, manual_caption_count, hero_asset_id, metadata,
             place_id, gps_lat, gps_lng
         FROM projects WHERE site_id = ${siteId} ORDER BY name`,
-    sql`SELECT id, name, slug, display_name, type, consent_given, description,
-            visual_cues, narrative_context, relationships,
-            appearance_count, first_seen_at, last_seen_at,
-            hero_asset_id, metadata
-        FROM personas WHERE site_id = ${siteId} ORDER BY name`,
     sql`SELECT id, name, slug, address, city, state, description,
             phone, hours, gbp_location_id, is_primary, hero_asset_id, metadata
         FROM branches WHERE site_id = ${siteId} ORDER BY is_primary DESC, name`,
@@ -45,6 +40,8 @@ export default async function TaggingPage() {
     sql`SELECT brand_label, project_label, persona_label, branch_label, service_label
         FROM sites WHERE id = ${siteId}`,
   ]);
+  // Personas retired 2026-05-19.
+  const personas: Array<Record<string, unknown>> = [];
 
   const site = siteData[0];
 

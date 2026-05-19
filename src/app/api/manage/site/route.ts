@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
         (SELECT COUNT(*)::int FROM blog_posts WHERE site_id = ${siteId} AND status = 'draft') AS draft_posts,
         (SELECT COUNT(*)::int FROM brands WHERE site_id = ${siteId}) AS vendors,
         (SELECT COUNT(*)::int FROM projects WHERE site_id = ${siteId}) AS projects,
-        (SELECT COUNT(*)::int FROM personas WHERE site_id = ${siteId}) AS personas
+        0 AS personas
     `;
 
     const platforms = await sql`

@@ -47,14 +47,8 @@ export default async function ProjectPreviewPage({
     ORDER BY b.name
   `;
 
-  // Fetch personas (consent-gated)
-  const personas = await sql`
-    SELECT DISTINCT p.id, p.name, p.display_name, p.type, p.consent_given
-    FROM personas p
-    JOIN asset_personas ap ON ap.persona_id = p.id
-    JOIN asset_projects aproj ON aproj.asset_id = ap.asset_id
-    WHERE aproj.project_id = ${projectId}
-  `;
+  // Personas retired 2026-05-19.
+  const personas: Array<{ id: string; name: string; display_name: string | null; type: string; consent_given: boolean }> = [];
 
   // Fetch branch (formerly "location" — repurposed per migration 110)
   const [location] = await sql`

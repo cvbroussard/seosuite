@@ -74,13 +74,7 @@ export default async function ProjectPage({ params }: Props) {
       WHERE ap.project_id = ${projectId}
       ORDER BY b.name
     `,
-    sql`
-      SELECT DISTINCT p.id, p.name, p.display_name, p.type, p.consent_given
-      FROM personas p
-      JOIN asset_personas ap ON ap.persona_id = p.id
-      JOIN asset_projects aproj ON aproj.asset_id = ap.asset_id
-      WHERE aproj.project_id = ${projectId}
-    `,
+    Promise.resolve([] as Array<{ id: string; name: string; display_name: string | null; type: string; consent_given: boolean }>),
     sql`
       SELECT DISTINCT b.name, b.city, b.state
       FROM branches b

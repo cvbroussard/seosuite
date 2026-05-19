@@ -36,7 +36,7 @@ const PROMPT_CHAR_BUDGET = 850;
 export async function buildTranscriptionPromptForSite(siteId: string): Promise<string> {
   if (!siteId) return "";
 
-  const [brandRows, projectRows, siteRow, categoryRows, personaRows] = await Promise.all([
+  const [brandRows, projectRows, siteRow, categoryRows] = await Promise.all([
     sql`SELECT name FROM brands WHERE site_id = ${siteId} ORDER BY name`,
     sql`SELECT name FROM projects WHERE site_id = ${siteId} ORDER BY name`,
     sql`SELECT gbp_profile->'serviceArea'->'places'->'placeInfos' AS place_infos
@@ -45,7 +45,6 @@ export async function buildTranscriptionPromptForSite(siteId: string): Promise<s
         JOIN gbp_categories gc ON gc.gcid = sgc.gcid
         WHERE sgc.site_id = ${siteId}
         ORDER BY sgc.is_primary DESC, gc.name`,
-    sql`SELECT name FROM personas WHERE site_id = ${siteId}`,
   ]);
 
   const brands = brandRows.map((r) => r.name as string).filter(Boolean);
@@ -55,7 +54,6 @@ export async function buildTranscriptionPromptForSite(siteId: string): Promise<s
     .map((p) => (p.placeName || "").split(",")[0]?.trim())
     .filter((s): s is string => Boolean(s && s.length > 0));
   const categories = categoryRows.map((r) => r.name as string).filter(Boolean);
-  const personas = personaRows.map((r) => r.name as string).filter(Boolean);
 
   // Dedupe across groups (project might be named after a neighborhood).
   const seen = new Set<string>();
@@ -71,12 +69,10 @@ export async function buildTranscriptionPromptForSite(siteId: string): Promise<s
   const projectsList: string[] = [];
   const placesList: string[] = [];
   const categoriesList: string[] = [];
-  const personasList: string[] = [];
   add(brandsList, brands);
   add(projectsList, projects);
   add(placesList, serviceAreas);
   add(categoriesList, categories);
-  add(personasList, personas);
 
   // Priority-ordered single list (2026-05-18 retest). Earlier prompt
   // shape had instruction sentences + per-group headers that ate
@@ -90,14 +86,12 @@ export async function buildTranscriptionPromptForSite(siteId: string): Promise<s
   //   2. projects — subscriber-specific, never in model training
   //   3. service areas — local geography, often mis-heard
   //   4. categories — occupational jargon, mostly in model training
-  //   5. personas — people names, mostly in model training
   // Within each group: as collected (caller order preserved).
   const ordered = [
     ...brandsList,
     ...projectsList,
     ...placesList,
     ...categoriesList,
-    ...personasList,
   ];
   if (ordered.length === 0) return "";
 
@@ -145,7 +139,7 @@ export const buildWhisperPromptForSite = buildTranscriptionPromptForSite;
 export async function normalizeTranscriptCase(text: string, siteId: string): Promise<string> {
   if (!text || !siteId) return text;
 
-  const [brandRows, projectRows, siteRow, categoryRows, personaRows] = await Promise.all([
+  const [brandRows, projectRows, siteRow, categoryRows] = await Promise.all([
     sql`SELECT name FROM brands WHERE site_id = ${siteId}`,
     sql`SELECT name FROM projects WHERE site_id = ${siteId}`,
     sql`SELECT gbp_profile->'serviceArea'->'places'->'placeInfos' AS place_infos
@@ -153,7 +147,6 @@ export async function normalizeTranscriptCase(text: string, siteId: string): Pro
     sql`SELECT gc.name FROM site_gbp_categories sgc
         JOIN gbp_categories gc ON gc.gcid = sgc.gcid
         WHERE sgc.site_id = ${siteId}`,
-    sql`SELECT name FROM personas WHERE site_id = ${siteId}`,
   ]);
 
   const brands = brandRows.map((r) => r.name as string).filter(Boolean);
@@ -163,7 +156,6 @@ export async function normalizeTranscriptCase(text: string, siteId: string): Pro
     .map((p) => (p.placeName || "").split(",")[0]?.trim())
     .filter((s): s is string => Boolean(s && s.length > 0));
   const categories = categoryRows.map((r) => r.name as string).filter(Boolean);
-  const personas = personaRows.map((r) => r.name as string).filter(Boolean);
 
   // Dedupe across groups (a project name might overlap with a brand).
   // Then sort longest-first so multi-word phrases get matched before
@@ -171,7 +163,7 @@ export async function normalizeTranscriptCase(text: string, siteId: string): Pro
   // cases but ordering removes ambiguity).
   const seen = new Set<string>();
   const canonical: string[] = [];
-  for (const name of [...brands, ...projects, ...serviceAreas, ...categories, ...personas]) {
+  for (const name of [...brands, ...projects, ...serviceAreas, ...categories]) {
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);

@@ -175,7 +175,6 @@ export async function POST(req: NextRequest) {
       brandRows,
       serviceRows,
       projectRows,
-      personaRows,
       branchRows,
       tagSuggestion,
       ner,
@@ -183,7 +182,6 @@ export async function POST(req: NextRequest) {
       sql`SELECT id, name FROM brands WHERE site_id = ${site_id}`,
       sql`SELECT id, name FROM services WHERE site_id = ${site_id}`,
       sql`SELECT id, name FROM projects WHERE site_id = ${site_id}`,
-      sql`SELECT id, name FROM personas WHERE site_id = ${site_id}`,
       sql`SELECT id, name FROM branches WHERE site_id = ${site_id}`,
       // Story Angle: multimodal Haiku call when we have an image URL.
       // Image-aware Story Angle is correct for editorial framing — vision
@@ -208,7 +206,7 @@ export async function POST(req: NextRequest) {
       brand: brandRows.map((r) => ({ id: r.id as string, name: r.name as string })),
       service: serviceRows.map((r) => ({ id: r.id as string, name: r.name as string })),
       project: projectRows.map((r) => ({ id: r.id as string, name: r.name as string })),
-      persona: personaRows.map((r) => ({ id: r.id as string, name: r.name as string })),
+      persona: [],
       branch: branchRows.map((r) => ({ id: r.id as string, name: r.name as string })),
     };
 

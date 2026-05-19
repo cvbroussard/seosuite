@@ -51,7 +51,6 @@ export async function POST(req: NextRequest) {
       storage_url,
       mime_type,
       source_asset_id,
-      speaker_persona_id,
       duration_ms,
       source: explicitSource,
       metadata = {},
@@ -130,13 +129,13 @@ export async function POST(req: NextRequest) {
     const [recording] = await sql`
       INSERT INTO recordings (
         site_id, source_asset_id, storage_url, duration_ms,
-        mime_type, speaker_persona_id, source, metadata,
+        mime_type, source, metadata,
         transcript, transcribed_at, transcribe_provider
       )
       VALUES (
         ${site_id}, ${source_asset_id || null},
         ${storage_url || null}, ${duration_ms || null},
-        ${mime_type || null}, ${speaker_persona_id || null}, ${source},
+        ${mime_type || null}, ${source},
         ${JSON.stringify(metadata)}::jsonb,
         ${initialTranscript}, ${transcribedAt}, ${transcribeProvider}
       )

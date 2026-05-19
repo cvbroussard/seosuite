@@ -46,7 +46,7 @@ export default async function SiteControlPanel({ params }: Props) {
       (SELECT COUNT(*)::int FROM blog_posts WHERE site_id = ${siteId} AND status = 'draft') AS draft_posts,
       (SELECT COUNT(*)::int FROM brands WHERE site_id = ${siteId}) AS vendors,
       (SELECT COUNT(*)::int FROM projects WHERE site_id = ${siteId}) AS projects,
-      (SELECT COUNT(*)::int FROM personas WHERE site_id = ${siteId}) AS personas,
+      0 AS personas,
       (SELECT COUNT(*)::int FROM branches WHERE site_id = ${siteId}) AS branches,
       (SELECT COUNT(*)::int FROM image_corrections WHERE site_id = ${siteId}) AS corrections
   `;
