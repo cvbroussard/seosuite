@@ -12,19 +12,24 @@ import type { BrandPlaybook } from "@/lib/brand-intelligence/types";
  * call's context so kit ingredients are grounded in the actual
  * article.
  *
- * TODO(privacy): bake a "NEVER publish a street address from the
- * transcript" rule into both prompts. The NER pipeline used to carry
- * a `privacy_sensitive` flag on extracted street_address values (caption
- * gen could check before emitting) but that signal was retired with
- * `entities.locations` 2026-05-19 — service area matcher is now the
- * canonical geo signal and never surfaces street addresses. The
- * remaining risk is the transcript itself: a subscriber narrates
- * "we worked at 123 Maple Lane" → that string could leak into a
- * generated caption if the LLM picks it up. Add an explicit rule
- * here when caption-gen surfaces start incorporating raw transcript
- * verbatim. Until then the risk is dormant (current prompts work off
- * structured assets + brand voice, not transcript pass-through).
+ * Privacy: identity attribution rule (proper names from transcripts) is
+ * injected based on the site's effective identity_policy. When the
+ * policy is 'anonymize' (default for sensitive industries OR
+ * fallback when subscriber chose 'allow_names' but hasn't signed the
+ * waiver), the prompt instructs the LLM to substitute generic role
+ * descriptors for proper names. Street-address privacy is also baked
+ * into the anonymize rule.
  */
+
+/**
+ * Effective identity policy — resolved from site state at the caller.
+ *
+ * 'allow_names' means waiver IS signed and policy is allow_names.
+ * 'anonymize' means either the subscriber chose anonymize, OR they
+ * chose allow_names but haven't signed the waiver yet (fall-back-to-
+ * conservative semantics per the 2026-05-19 lock).
+ */
+export type EffectiveIdentityPolicy = "allow_names" | "anonymize";
 
 export interface BodyPromptInput {
   spec: ContentSpec;
@@ -32,6 +37,9 @@ export interface BodyPromptInput {
   siteUrl: string;
   playbook: BrandPlaybook | null;
   brandVoice: Record<string, unknown>;
+  /** Effective identity policy after waiver gate. Defaults to 'anonymize'
+   * when caller omits it (safe fallback for older callers). */
+  identityPolicy?: EffectiveIdentityPolicy;
   /** Available media assets the LLM can reference via {{asset:UUID}}. */
   availableAssets: Array<{
     id: string;
@@ -49,8 +57,37 @@ export interface BodyPromptInput {
   }>;
 }
 
+/**
+ * Identity privacy rule block — injected when caption-gen output may
+ * incorporate proper names from the asset's transcription field. Two
+ * concerns covered:
+ *   1. Proper-name attribution per the subscriber's identity_policy
+ *   2. Street addresses — never publish a literal address from the
+ *      transcript regardless of policy (separate from the names axis
+ *      because addresses aren't names + a generic anonymizer rule
+ *      wouldn't necessarily catch them)
+ */
+function identityPrivacyRule(policy: EffectiveIdentityPolicy): string {
+  const parts: string[] = [];
+  parts.push("");
+  parts.push("## Privacy rules — identity + addresses");
+  if (policy === "anonymize") {
+    parts.push("- The transcript may contain proper names (e.g. \"Mary Johnson\", \"Mike Smith\").");
+    parts.push("- DO NOT preserve any proper name from the transcript in your output.");
+    parts.push("- Substitute with generic role descriptors: \"our client\", \"our master carpenter\", \"the homeowner\", \"one of our crew members\". Choose the descriptor that fits the role implied by context.");
+    parts.push("- When a name doesn't add narrative value, just omit it entirely rather than awkward substitution.");
+    parts.push("- Brand names + vendor names are NOT proper-name identities — preserve those normally (Marvin, Pella, Crystal Cabinet Works, etc.).");
+  } else {
+    parts.push("- Proper names from the transcript MAY be preserved in your output (e.g. \"Mike installed the new cabinets\"). The subscriber has signed a publisher waiver authorizing name use.");
+    parts.push("- Brand names + vendor names: preserve normally as always.");
+  }
+  parts.push("- Street addresses from the transcript must NEVER appear in your output. If the subscriber narrates \"we worked at 123 Maple Lane,\" the published copy says \"we worked on a recent residential project\" or similar. This is a HARD rule regardless of the identity policy above.");
+  return parts.join("\n");
+}
+
 export function buildBodyPrompt(input: BodyPromptInput): string {
   const { spec, siteName, siteUrl, playbook, brandVoice, availableAssets } = input;
+  const identityPolicy: EffectiveIdentityPolicy = input.identityPolicy ?? "anonymize";
   const parts: string[] = [];
 
   parts.push("You write authoritative, voice-driven articles for a service business. The article serves as a destination — social posts will point at it. Lead the reader; don't pitch.");
@@ -133,6 +170,8 @@ export function buildBodyPrompt(input: BodyPromptInput): string {
   parts.push("- contentPillars are CATEGORICAL labels, like a taxonomy entry. Examples: \"craft\", \"workflow\", \"renovation\", \"design\", \"proof\". Single words. Lowercase. NEVER sentences or descriptions.");
   parts.push("- contentTags are short keywords, 1-3 words each. Lowercase. Examples: \"kitchen design\", \"rift-sawn oak\", \"Pittsburgh remodel\".");
 
+  parts.push(identityPrivacyRule(identityPolicy));
+
   return parts.join("\n");
 }
 
@@ -142,6 +181,9 @@ export interface KitPromptInput {
   siteUrl: string;
   playbook: BrandPlaybook | null;
   brandVoice: Record<string, unknown>;
+  /** Effective identity policy after waiver gate. Defaults to 'anonymize'
+   * when caller omits it. */
+  identityPolicy?: EffectiveIdentityPolicy;
   /** Body output from the previous LLM call — anchors the kit. */
   bodyContext: {
     title: string;
@@ -153,6 +195,7 @@ export interface KitPromptInput {
 
 export function buildKitPrompt(input: KitPromptInput): string {
   const { spec, siteName, siteUrl, playbook, brandVoice, bodyContext } = input;
+  const identityPolicy: EffectiveIdentityPolicy = input.identityPolicy ?? "anonymize";
   const parts: string[] = [];
 
   parts.push("You distill an article into structured ingredients. These ingredients feed a slicing system that composes social captions for every platform — short and long, casual and professional. Generate ingredients RICH enough that any platform's slicer can pull a great caption without further help.");
@@ -200,6 +243,8 @@ export function buildKitPrompt(input: KitPromptInput): string {
   parts.push("- Key terms are PascalCase-able later; use natural casing here");
   parts.push("- Voice markers describe the article's actual register, not aspirational");
   parts.push(`- Topic context: ${spec.pool} for ${siteName}; ingredients should reflect this`);
+
+  parts.push(identityPrivacyRule(identityPolicy));
 
   return parts.join("\n");
 }

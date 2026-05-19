@@ -39,7 +39,8 @@ export async function generateV2Content(spec: ContentSpec): Promise<GenerateResu
   // We pull both: the embedded playbook for positioning + audience language,
   // and the signals for voice fingerprint + concrete reference samples.
   const [site] = await sql`
-    SELECT name, url, brand_dna
+    SELECT name, url, brand_dna,
+           identity_policy, identity_waiver_signed_at
     FROM sites
     WHERE id = ${spec.siteId}
   `;
@@ -50,6 +51,18 @@ export async function generateV2Content(spec: ContentSpec): Promise<GenerateResu
   const dna = (site.brand_dna || {}) as Record<string, unknown>;
   const playbook = (dna.playbook as BrandPlaybook | null) || null;
   const brandVoice = (dna.signals as Record<string, unknown> | null)?.voice as Record<string, unknown> || {};
+
+  // Resolve effective identity policy. 'allow_names' only applies when
+  // the subscriber has signed the publisher waiver; otherwise we
+  // fall back to 'anonymize' regardless of the stored policy (the
+  // unsigned-waiver-on-permissive-policy → conservative fallback locked
+  // 2026-05-19). The 6 dev sites flipped to 'allow_names' in migration
+  // 131 but their waivers are NULL, so they currently resolve to
+  // 'anonymize' until the subscriber visits the Privacy settings page.
+  const identityPolicy: "allow_names" | "anonymize" =
+    site.identity_policy === "allow_names" && site.identity_waiver_signed_at
+      ? "allow_names"
+      : "anonymize";
 
   // 2. Resolve available assets — pull the FULL context the database
   // knows, not a one-line hint. The model needs concrete details
@@ -104,6 +117,7 @@ export async function generateV2Content(spec: ContentSpec): Promise<GenerateResu
     siteUrl,
     playbook,
     brandVoice,
+    identityPolicy,
     availableAssets,
   });
   const bodyResponse = await anthropic.messages.create({
@@ -122,6 +136,7 @@ export async function generateV2Content(spec: ContentSpec): Promise<GenerateResu
     siteUrl,
     playbook,
     brandVoice,
+    identityPolicy,
     bodyContext: {
       title: body.title,
       body: body.body,
