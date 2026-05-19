@@ -1,29 +1,28 @@
 /**
- * Face detection — pixel-level only, no identification.
+ * Face detection — pixel-level + age range, no identification.
  *
  * Resurrected 2026-05-19 as a detection-only helper. The prior version
  * (retired with the personas entity) also did indexFace + searchFaces
  * against a per-site biometric collection to identify WHO was in each
  * frame. That capability is gone. We never want to know whose face is
- * in the asset; we only want to know that faces ARE in the asset, so
- * the privacy pipeline can blur/box/suppress per the subscriber's
- * site-level face policy.
+ * in the asset; we only want to know that faces ARE in the asset and
+ * which ones may be minors, so the privacy pipeline can apply the
+ * subscriber's face_policy + minor_face_policy per-face.
  *
- * Pure DetectFaces call. No biometric collection. No GDPR/BIPA
- * exposure. Just bounding boxes + confidence.
- *
- * Attributes: 'DEFAULT' only (bounding box + confidence). We
- * deliberately do NOT request 'ALL' — that returns age/gender/emotion/
- * pose, which are sensitive inferences we have no use for and no
- * reason to surface to AWS for our own pipeline.
+ * Attributes: 'ALL' since 2026-05-19 — captures AgeRange so the
+ * minor face policy (migration 133) can route per-face treatment.
+ * AWS also returns gender/emotion/pose under ALL; we ignore those
+ * fields and never persist them. Only AgeRange flows into the
+ * pipeline as is_potential_minor. The bump from DEFAULT → ALL
+ * doubles per-call cost from ~$0.0005 to ~$0.001/face — still tiny.
  *
  * Cost: ~$0.001 per image. Used at upload time (one-time-per-asset)
  * and never re-run on re-analysis — face presence is a pixel fact, not
  * an interpretation that changes with new transcripts.
  *
- * AI-generated assets are skipped upstream (see /api/assets POST and
- * the helper below) — synthetic faces aren't real-person likenesses,
- * so the privacy policy has nothing to protect against.
+ * AI-generated assets are skipped upstream — synthetic faces aren't
+ * real-person likenesses, so the privacy policy has nothing to
+ * protect against.
  */
 import "server-only";
 import { RekognitionClient, DetectFacesCommand } from "@aws-sdk/client-rekognition";
@@ -44,7 +43,23 @@ export interface DetectedFace {
   box: { x: number; y: number; w: number; h: number };
   /** Detection confidence 0..1. Subscriber-facing UI may filter weak hits. */
   confidence: number;
+  /** Estimated age range from Rekognition AgeRange (years). Used to
+   * route per-face policy: face_policy vs minor_face_policy. */
+  age_low: number;
+  age_high: number;
+  /** Computed flag: AgeRange.Low < MINOR_AGE_THRESHOLD. Pre-computed
+   * here so the render pipeline doesn't need to re-apply the threshold
+   * (which could drift if the threshold ever moves). */
+  is_potential_minor: boolean;
 }
+
+/** Age threshold for flagging a face as potential minor. 18 is the
+ * common legal cutoff in the US; we err on the side of catching
+ * borderline cases. Rekognition AgeRange estimation has known false-
+ * positive rate (young-looking adults flagged as minors, late teens
+ * occasionally missed) — subscriber can verify per-asset via the
+ * Privacy section in the modal. */
+const MINOR_AGE_THRESHOLD = 18;
 
 export interface FaceDetectionResult {
   face_count: number;
@@ -80,7 +95,12 @@ export async function detectFaces(imageUrl: string): Promise<FaceDetectionResult
 
     const command = new DetectFacesCommand({
       Image: { Bytes: buf },
-      Attributes: ["DEFAULT"],
+      // 'ALL' attributes captures AgeRange (load-bearing for the
+      // minor face policy routing). Also returns gender/emotion/pose
+      // which we ignore and never persist — only AgeRange flows
+      // downstream. The cost bump from DEFAULT → ALL doubles per-call
+      // price (~$0.0005 → ~$0.001) but absolute numbers are tiny.
+      Attributes: ["ALL"],
     });
 
     const response = await rekognition.send(command);
@@ -99,6 +119,8 @@ export async function detectFaces(imageUrl: string): Promise<FaceDetectionResult
         ) {
           return null;
         }
+        const ageLow = face.AgeRange?.Low ?? 0;
+        const ageHigh = face.AgeRange?.High ?? 0;
         return {
           box: {
             x: bbox.Left,
@@ -108,6 +130,9 @@ export async function detectFaces(imageUrl: string): Promise<FaceDetectionResult
           },
           // Rekognition returns 0-100; normalize to 0-1 for downstream consumers
           confidence: (face.Confidence || 0) / 100,
+          age_low: ageLow,
+          age_high: ageHigh,
+          is_potential_minor: ageLow < MINOR_AGE_THRESHOLD,
         };
       })
       .filter((f): f is DetectedFace => f !== null);
