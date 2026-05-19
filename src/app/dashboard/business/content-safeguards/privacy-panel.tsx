@@ -3,16 +3,19 @@
 import { useState } from "react";
 
 /**
- * Two-axis privacy settings panel.
+ * Three-axis content safeguards panel.
  *
- * Faces (likeness) and Identity (names) are independent. Each axis has
- * a conservative default that needs no waiver, and a permissive option
- * that requires the subscriber to sign an explicit waiver. Once signed,
- * the waiver record persists for audit even if subscriber reverts to
- * the conservative option later.
+ * Adult faces, minor faces, and identity (names) are independent
+ * decisions. Each axis has a conservative default (no waiver) and a
+ * permissive option (waiver required). The minor face waiver is
+ * meaningfully stronger than the adult face waiver — it affirms
+ * parental / legal-guardian consent rather than generic publisher-of-
+ * record responsibility.
  *
- * UI: two cards, each with policy radios + waiver state + sign/revoke
+ * UI: three cards, each with policy radios + waiver state + sign/revoke
  * affordance. Permissive options open a waiver modal before applying.
+ * Modal supports multi-axis ceremonies (initial visit could surface
+ * any or all of the three).
  */
 
 interface AxisState {
@@ -21,9 +24,11 @@ interface AxisState {
   waiver_version: string | null;
 }
 
+type AxisKey = "face" | "minor_face" | "identity";
+
 interface Props {
   siteId: string;
-  initial: { face: AxisState; identity: AxisState };
+  initial: { face: AxisState; minor_face: AxisState; identity: AxisState };
 }
 
 const FACE_OPTIONS: Array<{ value: string; label: string; description: string; requiresWaiver: boolean }> = [
@@ -31,28 +36,59 @@ const FACE_OPTIONS: Array<{ value: string; label: string; description: string; r
     value: "blur",
     label: "Blur faces (default)",
     description:
-      "Every detected face is gaussian-blurred at publish time. Safe by default — no consent or waiver concerns. Works for any business publishing photos with people in them.",
+      "Every detected adult face is gaussian-blurred at publish time. Safe by default — no consent or waiver concerns.",
     requiresWaiver: false,
   },
   {
     value: "box",
     label: "Rectangle overlay",
     description:
-      "Each detected face is covered by a solid rectangle. Editorial / stylistic choice that preserves anonymity while showing people are present.",
+      "Each detected adult face is covered by a solid rectangle. Editorial / stylistic choice that preserves anonymity while showing people are present.",
     requiresWaiver: false,
   },
   {
     value: "suppress",
-    label: "Don't publish images with faces",
+    label: "Don't publish images with adult faces",
     description:
-      "Assets with detected faces are quarantined from autopilot publishing. Most conservative; you'd manually compose for the rare face-OK shot.",
+      "Assets containing detected adult faces are quarantined from autopilot publishing. Most conservative; you'd manually compose for the rare face-OK shot.",
     requiresWaiver: false,
   },
   {
     value: "asis",
-    label: "Publish faces unaltered",
+    label: "Publish adult faces unaltered",
     description:
-      "Faces appear as-is in published images. Opt into this if you have consent from the people in your uploads (crew, clients who agreed to be featured, public-figure context). Because TracPost's autopilot is the publisher-of-record, you sign a one-time waiver accepting responsibility for the consent status of every person whose face appears in your published content.",
+      "Adult faces appear as-is in published images. Opt into this if you have consent from the people in your uploads (crew, clients who agreed to be featured, public-figure context). Because TracPost's autopilot is the publisher-of-record, you sign a one-time waiver accepting responsibility for the consent status of every adult whose face appears in your published content.",
+    requiresWaiver: true,
+  },
+];
+
+const MINOR_FACE_OPTIONS: Array<{ value: string; label: string; description: string; requiresWaiver: boolean }> = [
+  {
+    value: "blur",
+    label: "Blur minor faces (default)",
+    description:
+      "Every face flagged as potentially under 18 is gaussian-blurred — independent of your adult face policy. The safe default for any business that occasionally captures minors in the background (or whose work routinely involves families).",
+    requiresWaiver: false,
+  },
+  {
+    value: "box",
+    label: "Rectangle overlay on minor faces",
+    description:
+      "Each detected minor face is covered by a solid rectangle. Recognizable people-are-present signal without the parental-consent burden of as-is.",
+    requiresWaiver: false,
+  },
+  {
+    value: "suppress",
+    label: "Don't publish images with minor faces",
+    description:
+      "Assets containing any face flagged as potentially under 18 are quarantined from autopilot publishing. The strictest minor-protection setting.",
+    requiresWaiver: false,
+  },
+  {
+    value: "asis",
+    label: "Publish minor faces unaltered",
+    description:
+      "Minor faces appear as-is in published images. Sign this waiver only if you have verifiable parental or legal-guardian consent for every minor whose face will be published. The waiver is non-trivial by design — TracPost is asking you to be sure, because parental consent is a higher legal bar than adult consent.",
     requiresWaiver: true,
   },
 ];
@@ -74,29 +110,30 @@ const IDENTITY_OPTIONS: Array<{ value: string; label: string; description: strin
   },
 ];
 
-/** Returns true if the axis is on the permissive option (requires
- * waiver) but no waiver is signed. This is the "needs attention" state
- * that triggers the first-visit modal and the inline warnings. */
-function needsSigning(axis: AxisState, options: typeof FACE_OPTIONS): boolean {
+type OptionList = typeof FACE_OPTIONS;
+
+function needsSigning(axis: AxisState, options: OptionList): boolean {
   const opt = options.find((o) => o.value === axis.policy);
   return Boolean(opt?.requiresWaiver) && !axis.waiver_signed_at;
 }
 
 export function PrivacyPanel({ siteId, initial }: Props) {
   const [face, setFace] = useState<AxisState>(initial.face);
+  const [minorFace, setMinorFace] = useState<AxisState>(initial.minor_face);
   const [identity, setIdentity] = useState<AxisState>(initial.identity);
-  // Modal axes: empty array = no modal open. Otherwise the array names
-  // which sections appear inside the unified modal (one or two).
-  const [modalAxes, setModalAxes] = useState<Array<"face" | "identity">>([]);
+  const [modalAxes, setModalAxes] = useState<AxisKey[]>([]);
   const [faceChecked, setFaceChecked] = useState(false);
+  const [minorFaceChecked, setMinorFaceChecked] = useState(false);
   const [identityChecked, setIdentityChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function savePolicy(opts: {
     face_policy?: string;
+    minor_face_policy?: string;
     identity_policy?: string;
     sign_face_waiver?: boolean;
+    sign_minor_face_waiver?: boolean;
     sign_identity_waiver?: boolean;
   }) {
     setSaving(true);
@@ -112,6 +149,7 @@ export function PrivacyPanel({ siteId, initial }: Props) {
       const fresh = await fetch(`/api/site/privacy?site_id=${siteId}`);
       const freshData = await fresh.json();
       setFace(freshData.face);
+      setMinorFace(freshData.minor_face);
       setIdentity(freshData.identity);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -124,15 +162,24 @@ export function PrivacyPanel({ siteId, initial }: Props) {
     const opt = FACE_OPTIONS.find((o) => o.value === nextValue);
     if (!opt) return;
     if (opt.requiresWaiver && !face.waiver_signed_at) {
-      // Open the unified modal targeting just the face axis. Pre-fill
-      // the pending policy via the face state so the modal's sign
-      // action knows to save it together with the waiver.
       setFace({ ...face, policy: nextValue });
       setModalAxes(["face"]);
       setFaceChecked(false);
       return;
     }
     void savePolicy({ face_policy: nextValue });
+  }
+
+  function handleMinorFaceChange(nextValue: string) {
+    const opt = MINOR_FACE_OPTIONS.find((o) => o.value === nextValue);
+    if (!opt) return;
+    if (opt.requiresWaiver && !minorFace.waiver_signed_at) {
+      setMinorFace({ ...minorFace, policy: nextValue });
+      setModalAxes(["minor_face"]);
+      setMinorFaceChecked(false);
+      return;
+    }
+    void savePolicy({ minor_face_policy: nextValue });
   }
 
   function handleIdentityChange(nextValue: string) {
@@ -153,6 +200,10 @@ export function PrivacyPanel({ siteId, initial }: Props) {
       opts.face_policy = face.policy;
       opts.sign_face_waiver = true;
     }
+    if (modalAxes.includes("minor_face") && minorFaceChecked) {
+      opts.minor_face_policy = minorFace.policy;
+      opts.sign_minor_face_waiver = true;
+    }
     if (modalAxes.includes("identity") && identityChecked) {
       opts.identity_policy = identity.policy;
       opts.sign_identity_waiver = true;
@@ -161,12 +212,14 @@ export function PrivacyPanel({ siteId, initial }: Props) {
     await savePolicy(opts);
     setModalAxes([]);
     setFaceChecked(false);
+    setMinorFaceChecked(false);
     setIdentityChecked(false);
   }
 
   function dismissModal() {
     setModalAxes([]);
     setFaceChecked(false);
+    setMinorFaceChecked(false);
     setIdentityChecked(false);
   }
 
@@ -179,7 +232,7 @@ export function PrivacyPanel({ siteId, initial }: Props) {
       )}
 
       <AxisCard
-        title="Faces in images"
+        title="Adult faces in images"
         currentPolicy={face.policy}
         options={FACE_OPTIONS}
         waiverSignedAt={face.waiver_signed_at}
@@ -187,6 +240,19 @@ export function PrivacyPanel({ siteId, initial }: Props) {
         onChange={handleFaceChange}
         disabled={saving}
         needsSigning={needsSigning(face, FACE_OPTIONS)}
+      />
+
+      <AxisCard
+        title="Minor faces in images"
+        currentPolicy={minorFace.policy}
+        options={MINOR_FACE_OPTIONS}
+        waiverSignedAt={minorFace.waiver_signed_at}
+        waiverVersion={minorFace.waiver_version}
+        onChange={handleMinorFaceChange}
+        disabled={saving}
+        needsSigning={needsSigning(minorFace, MINOR_FACE_OPTIONS)}
+        accent="strong"
+        subtitle="Faces flagged as potentially under 18 are routed through this axis — independent of the adult face policy above."
       />
 
       <AxisCard
@@ -204,8 +270,10 @@ export function PrivacyPanel({ siteId, initial }: Props) {
         <WaiverModal
           axes={modalAxes}
           faceChecked={faceChecked}
+          minorFaceChecked={minorFaceChecked}
           identityChecked={identityChecked}
           onFaceCheckedChange={setFaceChecked}
+          onMinorFaceCheckedChange={setMinorFaceChecked}
           onIdentityCheckedChange={setIdentityChecked}
           onConfirm={confirmWaivers}
           onCancel={dismissModal}
@@ -218,6 +286,7 @@ export function PrivacyPanel({ siteId, initial }: Props) {
 
 function AxisCard({
   title,
+  subtitle,
   currentPolicy,
   options,
   waiverSignedAt,
@@ -225,19 +294,27 @@ function AxisCard({
   onChange,
   disabled,
   needsSigning,
+  accent = "default",
 }: {
   title: string;
+  subtitle?: string;
   currentPolicy: string;
-  options: Array<{ value: string; label: string; description: string; requiresWaiver: boolean }>;
+  options: OptionList;
   waiverSignedAt: string | null;
   waiverVersion: string | null;
   onChange: (v: string) => void;
   disabled: boolean;
   needsSigning: boolean;
+  accent?: "default" | "strong";
 }) {
+  const cardClass =
+    accent === "strong"
+      ? "rounded-lg border border-accent/30 bg-surface p-4"
+      : "rounded-lg border border-border bg-surface p-4";
   return (
-    <section className="rounded-lg border border-border bg-surface p-4">
-      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    <section className={cardClass}>
+      <h2 className="mb-1 text-sm font-semibold">{title}</h2>
+      {subtitle && <p className="mb-3 text-xs text-muted">{subtitle}</p>}
       {needsSigning && (
         <div className="mb-3 rounded border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
           ⚠ This option requires a waiver. Until signed, the conservative fallback applies at publish time.
@@ -288,82 +365,116 @@ function AxisCard({
 }
 
 /**
- * Unified waiver modal — handles 1 or 2 axes in a single ceremony.
+ * Unified waiver modal — handles 1, 2, or 3 axes in a single ceremony.
  *
- * Three trigger paths land here:
- *   1. First-visit (page mount): both axes need signing → axes=['face','identity']
- *   2. Single-axis change (subscriber picks asis/allow_names): axes=['face'] or ['identity']
- *   3. Either case after one has already been signed: only the unsigned axis appears
- *
- * Each section is independently signable. Subscriber can sign one, both,
- * or neither (dismissing without signing is allowed — they can come back).
- * The "Sign & continue" button only commits the axes whose checkboxes
- * are checked.
+ * Each section is independently signable. Subscriber can sign any
+ * subset (dismissing without signing is allowed — they can come back).
+ * The minor face waiver text is meaningfully stronger than the adult
+ * waiver: parental / legal-guardian consent affirmation, plus a line
+ * about subscriber's verification process.
  */
 function WaiverModal({
   axes,
   faceChecked,
+  minorFaceChecked,
   identityChecked,
   onFaceCheckedChange,
+  onMinorFaceCheckedChange,
   onIdentityCheckedChange,
   onConfirm,
   onCancel,
   saving,
 }: {
-  axes: Array<"face" | "identity">;
+  axes: AxisKey[];
   faceChecked: boolean;
+  minorFaceChecked: boolean;
   identityChecked: boolean;
   onFaceCheckedChange: (v: boolean) => void;
+  onMinorFaceCheckedChange: (v: boolean) => void;
   onIdentityCheckedChange: (v: boolean) => void;
   onConfirm: () => void;
   onCancel: () => void;
   saving: boolean;
 }) {
   const showFace = axes.includes("face");
+  const showMinorFace = axes.includes("minor_face");
   const showIdentity = axes.includes("identity");
-  const isInitial = axes.length === 2;
+  const multi = axes.length > 1;
 
-  // Confirm button enabled when at least one axis is checked
-  const canConfirm = (showFace && faceChecked) || (showIdentity && identityChecked);
+  const canConfirm =
+    (showFace && faceChecked) ||
+    (showMinorFace && minorFaceChecked) ||
+    (showIdentity && identityChecked);
+
+  const singleTitle = showFace
+    ? "Publish adult faces unaltered — waiver"
+    : showMinorFace
+      ? "Publish minor faces unaltered — parental consent waiver"
+      : "Use proper names in captions — waiver";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-background p-5 shadow-lg">
         <h3 className="mb-2 text-sm font-semibold">
-          {isInitial
-            ? "Welcome — review your privacy waivers"
-            : showFace
-              ? "Publish faces unaltered — waiver"
-              : "Use proper names in captions — waiver"}
+          {multi ? "Review your content safeguard waivers" : singleTitle}
         </h3>
 
-        {isInitial && (
+        {multi && (
           <p className="mb-4 text-xs text-muted">
-            Your current settings opt into the permissive defaults for both axes. To enact those
-            choices, TracPost needs your acknowledgment as publisher-of-record. Sign one, both,
-            or neither — unsigned axes fall back to the conservative behavior at publish time.
-            You can revisit this page anytime to change.
+            You&apos;ve opted into permissive settings for more than one axis. Sign one, some,
+            or all — unsigned axes fall back to the conservative behavior at publish time. You
+            can revisit this page anytime to change.
           </p>
         )}
 
-        <div className={isInitial ? "grid gap-4 md:grid-cols-2" : ""}>
+        <div className={multi ? "grid gap-4 md:grid-cols-2" : ""}>
           {showFace && (
             <WaiverSection
-              title="Faces in images"
+              title="Adult faces"
               checked={faceChecked}
               onCheckedChange={onFaceCheckedChange}
-              checkboxLabel="I accept full responsibility for published face content."
+              checkboxLabel="I accept full responsibility for published adult face content."
             >
               <p>
-                TracPost will publish images with detected faces appearing as-is, without blur or
-                rectangle overlay. You are solely responsible for obtaining any necessary consent
-                from people whose faces appear in your published content.
+                TracPost will publish images with detected adult faces appearing as-is, without
+                blur or rectangle overlay. You are solely responsible for obtaining any
+                necessary consent from adults whose faces appear in your published content.
               </p>
               <p>
                 TracPost makes no claims about, and assumes no liability for, the consent status
                 of any individual whose face appears in your uploaded images. By signing this
                 waiver, you agree that any privacy claims, takedown requests, or legal disputes
-                arising from published faces are your responsibility to resolve.
+                arising from published adult faces are your responsibility to resolve.
+              </p>
+            </WaiverSection>
+          )}
+
+          {showMinorFace && (
+            <WaiverSection
+              title="Minor faces — parental consent"
+              accent="strong"
+              checked={minorFaceChecked}
+              onCheckedChange={onMinorFaceCheckedChange}
+              checkboxLabel="I have verifiable parental or legal-guardian consent for every minor whose face will be published, and I accept full responsibility for that consent."
+            >
+              <p>
+                TracPost will publish images with faces flagged as potentially under 18
+                appearing as-is, without blur or rectangle overlay. This is a stronger
+                commitment than the adult face waiver because parental consent is a higher
+                legal bar than adult consent.
+              </p>
+              <p>
+                You attest that you have a documented process for obtaining and verifying
+                parental or legal-guardian consent before publishing minor faces, and that
+                consent is on file for every minor whose face will appear in your content.
+                TracPost makes no claims about, and assumes no liability for, the consent
+                status of any minor whose face appears in your uploaded images.
+              </p>
+              <p>
+                Any privacy claims, takedown requests, COPPA-adjacent inquiries, or legal
+                disputes arising from published minor faces are your responsibility to
+                resolve. TracPost can disable this option for your business at any time if a
+                credible concern is raised.
               </p>
             </WaiverSection>
           )}
@@ -401,7 +512,7 @@ function WaiverModal({
             disabled={saving}
             className="rounded border border-border bg-surface px-3 py-1.5 text-xs hover:bg-surface-hover disabled:opacity-50"
           >
-            {isInitial ? "Skip for now" : "Cancel"}
+            Cancel
           </button>
           <button
             onClick={onConfirm}
@@ -422,15 +533,21 @@ function WaiverSection({
   onCheckedChange,
   checkboxLabel,
   children,
+  accent = "default",
 }: {
   title: string;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   checkboxLabel: string;
   children: React.ReactNode;
+  accent?: "default" | "strong";
 }) {
+  const wrapperClass =
+    accent === "strong"
+      ? "rounded border border-accent/40 bg-accent/5 p-4"
+      : "rounded border border-border bg-surface p-4";
   return (
-    <div className="rounded border border-border bg-surface p-4">
+    <div className={wrapperClass}>
       <h4 className="mb-2 text-xs font-semibold">{title}</h4>
       <div className="space-y-2 text-xs text-muted">{children}</div>
       <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs">
