@@ -1,0 +1,154 @@
+import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@/lib/db";
+import { getSession } from "@/lib/session";
+
+export const runtime = "nodejs";
+
+/**
+ * Site-level privacy policy state (face publishing + identity attribution).
+ *
+ * Two independent axes (per 2026-05-19 lock):
+ *   face_policy      governs what happens to detected faces at variant
+ *                    render time (blur / box / asis / suppress)
+ *   identity_policy  governs whether caption-gen preserves proper names
+ *                    from the transcript or anonymizes them
+ *
+ * Each axis has independent waiver tracking. Picking a permissive option
+ * (`asis` for faces, `allow_names` for identity) requires the matching
+ * waiver. Picking back to a conservative option doesn't auto-revoke the
+ * waiver record — it stays for audit but no longer gates behavior.
+ *
+ * GET   returns current policy state + waiver state
+ * PUT   updates policy + optionally signs waiver in the same call
+ *
+ * Authorization: subscriber must own the site_id (via session.sites).
+ * Operator role can modify on behalf of subscriber (for support flows).
+ */
+
+const FACE_POLICIES = ["asis", "box", "blur", "suppress"] as const;
+const IDENTITY_POLICIES = ["allow_names", "anonymize"] as const;
+const FACE_WAIVER_VERSION = "v1-2026-05-19";
+const IDENTITY_WAIVER_VERSION = "v1-2026-05-19";
+
+type FacePolicy = (typeof FACE_POLICIES)[number];
+type IdentityPolicy = (typeof IDENTITY_POLICIES)[number];
+
+export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const siteId = req.nextUrl.searchParams.get("site_id");
+  if (!siteId) {
+    return NextResponse.json({ error: "site_id required" }, { status: 400 });
+  }
+  if (!session.sites.some((s) => s.id === siteId)) {
+    return NextResponse.json({ error: "Site not in your subscription" }, { status: 403 });
+  }
+
+  const [row] = await sql`
+    SELECT face_policy, face_waiver_signed_at, face_waiver_version,
+           identity_policy, identity_waiver_signed_at, identity_waiver_version
+    FROM sites WHERE id = ${siteId}
+  `;
+  if (!row) return NextResponse.json({ error: "Site not found" }, { status: 404 });
+
+  return NextResponse.json({
+    face: {
+      policy: row.face_policy,
+      waiver_signed_at: row.face_waiver_signed_at,
+      waiver_version: row.face_waiver_version,
+      current_waiver_version: FACE_WAIVER_VERSION,
+    },
+    identity: {
+      policy: row.identity_policy,
+      waiver_signed_at: row.identity_waiver_signed_at,
+      waiver_version: row.identity_waiver_version,
+      current_waiver_version: IDENTITY_WAIVER_VERSION,
+    },
+  });
+}
+
+export async function PUT(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  let body: {
+    site_id?: string;
+    face_policy?: string;
+    identity_policy?: string;
+    sign_face_waiver?: boolean;
+    sign_identity_waiver?: boolean;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const { site_id, face_policy, identity_policy, sign_face_waiver, sign_identity_waiver } = body;
+  if (!site_id) {
+    return NextResponse.json({ error: "site_id required" }, { status: 400 });
+  }
+  if (!session.sites.some((s) => s.id === site_id)) {
+    return NextResponse.json({ error: "Site not in your subscription" }, { status: 403 });
+  }
+
+  if (face_policy && !FACE_POLICIES.includes(face_policy as FacePolicy)) {
+    return NextResponse.json(
+      { error: `face_policy must be one of: ${FACE_POLICIES.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  if (identity_policy && !IDENTITY_POLICIES.includes(identity_policy as IdentityPolicy)) {
+    return NextResponse.json(
+      { error: `identity_policy must be one of: ${IDENTITY_POLICIES.join(", ")}` },
+      { status: 400 },
+    );
+  }
+
+  // Waiver gate: picking 'asis' for faces requires sign_face_waiver=true
+  // in the same call OR a prior signed waiver. Same for 'allow_names'.
+  const [current] = await sql`
+    SELECT face_waiver_signed_at, identity_waiver_signed_at
+    FROM sites WHERE id = ${site_id}
+  `;
+  if (!current) return NextResponse.json({ error: "Site not found" }, { status: 404 });
+
+  if (face_policy === "asis" && !current.face_waiver_signed_at && !sign_face_waiver) {
+    return NextResponse.json(
+      { error: "face_policy='asis' requires sign_face_waiver=true" },
+      { status: 400 },
+    );
+  }
+  if (identity_policy === "allow_names" && !current.identity_waiver_signed_at && !sign_identity_waiver) {
+    return NextResponse.json(
+      { error: "identity_policy='allow_names' requires sign_identity_waiver=true" },
+      { status: 400 },
+    );
+  }
+
+  // Build the UPDATE — only touch fields the caller passed. Waiver
+  // signing only fires on this call when sign_*_waiver=true AND no
+  // existing waiver (don't bump the datestamp on every PUT).
+  const willSignFaceWaiver = sign_face_waiver === true && !current.face_waiver_signed_at;
+  const willSignIdentityWaiver =
+    sign_identity_waiver === true && !current.identity_waiver_signed_at;
+
+  await sql`
+    UPDATE sites SET
+      face_policy = COALESCE(${face_policy ?? null}, face_policy),
+      face_waiver_signed_at = CASE WHEN ${willSignFaceWaiver}
+        THEN NOW() ELSE face_waiver_signed_at END,
+      face_waiver_version = CASE WHEN ${willSignFaceWaiver}
+        THEN ${FACE_WAIVER_VERSION} ELSE face_waiver_version END,
+      identity_policy = COALESCE(${identity_policy ?? null}, identity_policy),
+      identity_waiver_signed_at = CASE WHEN ${willSignIdentityWaiver}
+        THEN NOW() ELSE identity_waiver_signed_at END,
+      identity_waiver_version = CASE WHEN ${willSignIdentityWaiver}
+        THEN ${IDENTITY_WAIVER_VERSION} ELSE identity_waiver_version END,
+      updated_at = NOW()
+    WHERE id = ${site_id}
+  `;
+
+  return NextResponse.json({ ok: true });
+}
