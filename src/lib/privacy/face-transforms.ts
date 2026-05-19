@@ -1,25 +1,28 @@
 /**
  * Face transforms for the variant render pipeline.
  *
- * Applies the subscriber's site-level face_policy to a source image
- * buffer BEFORE the variant's crop/resize happens. By the time the
- * transformed buffer reaches sharp's resize step, faces are already
- * blurred / boxed / left alone per policy — the downstream crop just
- * works on the privacy-protected pixels.
+ * Applies the subscriber's site-level face policies (adult + minor) to a
+ * source image buffer BEFORE the variant's crop/resize happens. Each
+ * detected face is routed to one of two policies based on the
+ * is_potential_minor flag from AWS Rekognition's AgeRange (set in
+ * face-detect.ts when AgeRange.Low < 18).
  *
- * Effective-policy resolution (locked 2026-05-19):
- *   - 'asis' + face_waiver_signed_at NULL  →  fall back to 'blur'
- *   - 'asis' + face_waiver_signed_at set   →  pass through
- *   - 'blur' / 'box'                        →  apply directly
- *   - 'suppress'                            →  caller skips render
+ * Effective-policy resolution (per axis):
+ *   - 'asis' + waiver NULL  →  fall back to 'blur'
+ *   - 'asis' + waiver set   →  pass through
+ *   - 'blur' / 'box'         →  apply directly
+ *   - 'suppress'             →  caller skips render (per-axis check)
  *
- * AI-generated assets are skipped upstream (face detection never ran
- * at upload time, so face_detection metadata is absent and we have
- * nothing to transform).
+ * Per-face routing rules:
+ *   - is_potential_minor=true  →  minor_face_policy applies
+ *   - is_potential_minor=false →  face_policy applies
  *
- * Image only in v1. Video face handling deferred (poster-frame
- * detection doesn't track motion; full-runtime detection is its own
- * project).
+ * Suppress is asset-level, not per-face. If ANY face in the asset
+ * resolves to 'suppress', the caller skips the render entirely — we
+ * can't partially honor a "don't publish faces" promise.
+ *
+ * AI-generated assets are skipped upstream.
+ * Image only in v1. Video face handling deferred.
  */
 import "server-only";
 import sharp from "sharp";
@@ -29,11 +32,18 @@ export type EffectiveFacePolicy = "asis" | "blur" | "box" | "suppress";
 export interface DetectedFaceBox {
   box: { x: number; y: number; w: number; h: number }; // normalized 0..1
   confidence: number;
+  /** Optional — present when face-detect.ts ran with Attributes:['ALL'].
+   * Absent for legacy faces detected before 2026-05-19; those are
+   * treated as adult (conservative fallback documented below). */
+  is_potential_minor?: boolean;
+  age_low?: number;
+  age_high?: number;
 }
 
 /**
- * Resolve the stored site policy + waiver state into an effective
- * policy. The fall-back-to-conservative rule lives here.
+ * Resolve a stored policy + waiver state into an effective policy.
+ * The fall-back-to-conservative rule lives here. Same logic applies
+ * for both the adult and minor face axes.
  */
 export function resolveFacePolicy(
   storedPolicy: string,
@@ -45,62 +55,115 @@ export function resolveFacePolicy(
   if (storedPolicy === "blur" || storedPolicy === "box" || storedPolicy === "suppress") {
     return storedPolicy;
   }
-  // Unknown / corrupt policy value → conservative fallback
   return "blur";
 }
 
 /**
- * Apply face transforms to an image buffer per effective policy.
+ * Decide whether the render should be skipped entirely based on the
+ * combination of detected faces and resolved per-axis policies.
  *
- * - 'asis': returns buffer unchanged
- * - 'blur': blurs each face region with strong gaussian (sigma 20)
- * - 'box':  fills each face region with solid black rectangle
- * - 'suppress': throws — caller MUST check before invoking
+ * Returns a reason string if suppress fires, or null if the render
+ * should proceed.
  *
- * Faces with confidence < 0.5 are ignored (Rekognition can return
- * weak hits; we don't want false positives blurring random regions).
+ * Why suppress is asset-level not per-face: blurring one face while
+ * publishing the asset would still publish the suppressed face's
+ * presence (clothing, posture, context) — that's not what "don't
+ * publish images with faces of this category" means. The whole asset
+ * gets shelved.
  *
- * Bounding boxes are normalized [0..1] and scaled to the actual image
- * dimensions on the fly.
+ * Legacy assets without is_potential_minor flags (detection ran
+ * before the 2026-05-19 AgeRange flip) are treated as adult — the
+ * conservative choice given that pre-flip subscribers had effectively
+ * the same adult-only policy.
+ */
+export function checkSuppressGate(
+  faces: DetectedFaceBox[],
+  adultPolicy: EffectiveFacePolicy,
+  minorPolicy: EffectiveFacePolicy,
+): string | null {
+  const strongFaces = faces.filter((f) => f.confidence >= 0.5);
+  if (strongFaces.length === 0) return null;
+
+  const minorCount = strongFaces.filter((f) => f.is_potential_minor === true).length;
+  const adultCount = strongFaces.length - minorCount;
+
+  if (minorCount > 0 && minorPolicy === "suppress") {
+    return `minor_face_policy='suppress' + ${minorCount} potential minor face(s) detected`;
+  }
+  if (adultCount > 0 && adultPolicy === "suppress") {
+    return `face_policy='suppress' + ${adultCount} adult face(s) detected`;
+  }
+  return null;
+}
+
+/**
+ * Apply per-face transforms to an image buffer. Each face is routed to
+ * one of two policies (adult or minor) based on is_potential_minor.
+ *
+ * Faces with confidence < 0.5 are ignored (Rekognition can return weak
+ * hits; we don't want false positives blurring random regions).
+ *
+ * Caller MUST check checkSuppressGate() first — this function throws
+ * if either policy is 'suppress' (asset-level skip didn't happen
+ * upstream).
  */
 export async function applyFaceTransforms(
   imageBuffer: Buffer,
   faces: DetectedFaceBox[],
-  policy: EffectiveFacePolicy,
+  adultPolicy: EffectiveFacePolicy,
+  minorPolicy: EffectiveFacePolicy,
 ): Promise<Buffer> {
-  if (policy === "suppress") {
-    throw new Error("applyFaceTransforms called with 'suppress' policy — caller must skip render");
-  }
-
-  // No transform needed
-  if (policy === "asis" || faces.length === 0) {
-    return imageBuffer;
+  if (adultPolicy === "suppress" || minorPolicy === "suppress") {
+    throw new Error(
+      "applyFaceTransforms called with 'suppress' policy — caller must skip render",
+    );
   }
 
   const strongFaces = faces.filter((f) => f.confidence >= 0.5);
   if (strongFaces.length === 0) return imageBuffer;
 
-  // Get image dimensions to scale normalized boxes to pixel coords
+  // Partition into minor/adult and per-action buckets. Adult-asis +
+  // minor-asis means no transform needed for that face. Box + blur
+  // groups by destination treatment regardless of which axis routed them.
+  const boxFaces: DetectedFaceBox[] = [];
+  const blurFaces: DetectedFaceBox[] = [];
+
+  for (const f of strongFaces) {
+    const isMinor = f.is_potential_minor === true;
+    const policy = isMinor ? minorPolicy : adultPolicy;
+    if (policy === "box") boxFaces.push(f);
+    else if (policy === "blur") blurFaces.push(f);
+    // 'asis' faces drop through unmodified
+  }
+
+  if (boxFaces.length === 0 && blurFaces.length === 0) {
+    return imageBuffer;
+  }
+
   const metadata = await sharp(imageBuffer).rotate().metadata();
   const imgWidth = metadata.width;
   const imgHeight = metadata.height;
   if (!imgWidth || !imgHeight) {
-    // Can't determine dimensions — return unchanged rather than risk
-    // bad transforms. Caller's existing behavior handles unknown size.
     return imageBuffer;
   }
 
-  if (policy === "box") {
-    return applyBoxOverlay(imageBuffer, strongFaces, imgWidth, imgHeight);
+  // Single pipeline that handles both treatments: blur regions composited
+  // first (so any box-overlay sits cleanly on top in the rare mixed case),
+  // then box overlays on top.
+  let oriented = await sharp(imageBuffer).rotate().toBuffer();
+
+  if (blurFaces.length > 0) {
+    oriented = await applyBlurToRegions(oriented, blurFaces, imgWidth, imgHeight);
+  }
+  if (boxFaces.length > 0) {
+    oriented = await applyBoxOverlay(oriented, boxFaces, imgWidth, imgHeight);
   }
 
-  // 'blur' path: extract each face region, blur it, composite back
-  return applyBlurToRegions(imageBuffer, strongFaces, imgWidth, imgHeight);
+  return oriented;
 }
 
 /**
- * Black-rectangle overlay per face. Sharp's composite with create:
- * solid color works here.
+ * Black-rectangle overlay per face.
  */
 async function applyBoxOverlay(
   imageBuffer: Buffer,
@@ -127,7 +190,7 @@ async function applyBoxOverlay(
     };
   });
 
-  return sharp(imageBuffer).rotate().composite(overlays).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+  return sharp(imageBuffer).composite(overlays).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
 }
 
 /**
@@ -137,9 +200,7 @@ async function applyBoxOverlay(
  * idiom.
  *
  * Extract regions are slightly EXPANDED (10% padding) so the blur
- * coverage extends a bit beyond the strict box. Prevents a sharp edge
- * just outside the box where part of the face spills out of
- * Rekognition's detection.
+ * coverage extends a bit beyond the strict box.
  */
 async function applyBlurToRegions(
   imageBuffer: Buffer,
@@ -147,10 +208,6 @@ async function applyBlurToRegions(
   imgWidth: number,
   imgHeight: number,
 ): Promise<Buffer> {
-  // First normalize orientation so subsequent extract math is correct
-  const oriented = await sharp(imageBuffer).rotate().toBuffer();
-
-  // Build blurred-region overlays
   const overlays: Array<{ input: Buffer; left: number; top: number }> = [];
   for (const f of faces) {
     const padX = f.box.w * 0.1;
@@ -165,13 +222,13 @@ async function applyBlurToRegions(
     const pw = Math.max(1, Math.min(imgWidth - px, Math.round(w * imgWidth)));
     const ph = Math.max(1, Math.min(imgHeight - py, Math.round(h * imgHeight)));
 
-    const blurred = await sharp(oriented)
+    const blurred = await sharp(imageBuffer)
       .extract({ left: px, top: py, width: pw, height: ph })
-      .blur(20) // Sigma 20 = strong, faces unrecognizable
+      .blur(20)
       .toBuffer();
 
     overlays.push({ input: blurred, left: px, top: py });
   }
 
-  return sharp(oriented).composite(overlays).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+  return sharp(imageBuffer).composite(overlays).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
 }

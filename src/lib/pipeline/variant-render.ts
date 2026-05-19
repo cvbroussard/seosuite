@@ -5,7 +5,13 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { isSmartRotateEnabled, callSmartRotate, smartRotateDimsForTemplate } from "./smart-rotate-client";
 import { isEnterpriseTier } from "./site-tier";
 import { extractSlugFromSourceUrl, deriveVariantKey } from "./asset-keys";
-import { applyFaceTransforms, resolveFacePolicy, type DetectedFaceBox } from "@/lib/privacy/face-transforms";
+import {
+  applyFaceTransforms,
+  checkSuppressGate,
+  resolveFacePolicy,
+  type DetectedFaceBox,
+  type EffectiveFacePolicy,
+} from "@/lib/privacy/face-transforms";
 
 /**
  * Variant render worker (#163, #172).
@@ -161,31 +167,40 @@ export async function renderTemplateVariant(
 
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type, ma.metadata,
-           s.face_policy, s.face_waiver_signed_at
+           s.face_policy, s.face_waiver_signed_at,
+           s.minor_face_policy, s.minor_face_waiver_signed_at
     FROM media_assets ma JOIN sites s ON s.id = ma.site_id
     WHERE ma.id = ${assetId}
   `;
   if (!asset) return null;
 
-  // Resolve effective face policy + check whether this asset has any
-  // detected faces. Suppress short-circuits BEFORE we create a variant
-  // row — no need to track suppressed renders, the asset just doesn't
-  // get a variant. Orchestrator pool query already filters on
-  // "has-ready-variant" so absent variants naturally exclude the asset.
+  // Resolve both effective face policies (adult + minor). Each face in
+  // the asset is routed to one of them based on is_potential_minor
+  // (set by face-detect.ts when AgeRange.Low < 18).
+  //
+  // Suppress short-circuits BEFORE we create a variant row — no need
+  // to track suppressed renders. Orchestrator pool query already filters
+  // on "has-ready-variant" so absent variants naturally exclude the
+  // asset. Suppress is asset-level (any face in the suppress group
+  // blocks the entire render) — see checkSuppressGate docs.
   const assetMetadata = (asset.metadata as Record<string, unknown> | null) || {};
   const faceDetection = assetMetadata.face_detection as
     | { faces?: DetectedFaceBox[]; face_count?: number }
     | undefined;
   const detectedFaces = faceDetection?.faces || [];
-  const hasFaces = detectedFaces.length > 0;
-  const facePolicy = resolveFacePolicy(
-    (asset.face_policy as string) || "asis",
+  const adultFacePolicy: EffectiveFacePolicy = resolveFacePolicy(
+    (asset.face_policy as string) || "blur",
     (asset.face_waiver_signed_at as Date | string | null) || null,
   );
+  const minorFacePolicy: EffectiveFacePolicy = resolveFacePolicy(
+    (asset.minor_face_policy as string) || "blur",
+    (asset.minor_face_waiver_signed_at as Date | string | null) || null,
+  );
 
-  if (hasFaces && facePolicy === "suppress") {
+  const suppressReason = checkSuppressGate(detectedFaces, adultFacePolicy, minorFacePolicy);
+  if (suppressReason) {
     console.log(
-      `Variant render skipped (assetId=${assetId}, templateId=${templateId}): face_policy='suppress' + ${detectedFaces.length} face(s) detected`,
+      `Variant render skipped (assetId=${assetId}, templateId=${templateId}): ${suppressReason}`,
     );
     return null;
   }
@@ -247,7 +262,7 @@ export async function renderTemplateVariant(
     } else {
       ({ outputUrl, renderNotes } = await renderImageVariant(
         sourceUrl, templateId, siteId, assetId,
-        { faces: detectedFaces, policy: facePolicy },
+        { faces: detectedFaces, adultPolicy: adultFacePolicy, minorPolicy: minorFacePolicy },
       ));
     }
 
@@ -316,7 +331,8 @@ async function renderImageVariant(
   sourceAssetId: string,
   privacy: {
     faces: DetectedFaceBox[];
-    policy: "asis" | "blur" | "box" | "suppress";
+    adultPolicy: EffectiveFacePolicy;
+    minorPolicy: EffectiveFacePolicy;
   },
 ): Promise<{ outputUrl: string; renderNotes: Record<string, unknown> }> {
   // Video-output templates: Ken Burns motion from the still. The duration
@@ -354,16 +370,27 @@ async function renderImageVariant(
   if (!res.ok) throw new Error(`Source fetch failed: ${res.status}`);
   const sourceBuffer = Buffer.from(await res.arrayBuffer());
 
-  // Apply face transforms BEFORE crop/resize so the privacy treatment
-  // operates on the full-resolution source pixels. Sharp's "attention"
-  // crop downstream may include or exclude transformed regions; either
-  // way the transformed bytes stay transformed.
-  let faceTransformApplied = false;
-  const inputBuffer: Buffer =
-    privacy.faces.length > 0 && privacy.policy !== "asis"
-      ? ((faceTransformApplied = true),
-        await applyFaceTransforms(sourceBuffer, privacy.faces, privacy.policy))
-      : sourceBuffer;
+  // Apply face transforms BEFORE crop/resize so privacy treatment
+  // operates on the full-resolution source pixels. Each face is routed
+  // to either adultPolicy or minorPolicy based on is_potential_minor.
+  // No-op when there are no faces, or when every face's routed policy
+  // is 'asis' — applyFaceTransforms short-circuits internally.
+  const strongFaceCount = privacy.faces.filter((f) => f.confidence >= 0.5).length;
+  const minorCount = privacy.faces
+    .filter((f) => f.confidence >= 0.5 && f.is_potential_minor === true).length;
+  const adultCount = strongFaceCount - minorCount;
+  const willTransform =
+    strongFaceCount > 0 &&
+    !(privacy.adultPolicy === "asis" && privacy.minorPolicy === "asis");
+
+  const inputBuffer: Buffer = willTransform
+    ? await applyFaceTransforms(
+        sourceBuffer,
+        privacy.faces,
+        privacy.adultPolicy,
+        privacy.minorPolicy,
+      )
+    : sourceBuffer;
 
   const outputBuffer = await sharp(inputBuffer)
     .rotate() // Honor EXIF orientation
@@ -384,10 +411,12 @@ async function renderImageVariant(
       width: dims.width,
       height: dims.height,
       from: "image",
-      ...(faceTransformApplied && {
+      ...(willTransform && {
         face_transform: {
-          policy: privacy.policy,
-          faces_treated: privacy.faces.length,
+          adult_policy: privacy.adultPolicy,
+          minor_policy: privacy.minorPolicy,
+          adult_faces_treated: adultCount,
+          minor_faces_treated: minorCount,
         },
       }),
     },
