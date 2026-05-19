@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast, confirm as confirmDialog } from "@/components/feedback";
 import type { PillarGroup } from "./tag-picker";
-import { FaceOverlay } from "./face-overlay";
+// FaceOverlay retired 2026-05-19 with the personas entity removal.
 import { useAudioBriefing } from "@/hooks/use-audio-briefing";
 import {
   AutoTagBar,
@@ -1782,22 +1782,6 @@ export function AssetEditModal({
                   src={imageUrl}
                   controls
                   className="w-full max-h-[36vh] object-contain"
-                />
-              ) : faceData && faceData.length > 0 ? (
-                <FaceOverlay
-                  imageUrl={imageUrl}
-                  faces={faceData}
-                  detectionWidth={faceDetectionWidth}
-                  detectionHeight={faceDetectionHeight}
-                  personas={personaList}
-                  assetId={assetId}
-                  onFaceNamed={(faceIndex, personaId, personaName) => {
-                    setFaceData((prev) =>
-                      prev ? prev.map((f, i) =>
-                        i === faceIndex ? { ...f, personaId, personaName } : f
-                      ) : prev
-                    );
-                  }}
                 />
               ) : (
                 <img

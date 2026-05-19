@@ -2,8 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import type { AutopilotConfig, TriageResult, ContentPillar, PlatformFormat } from "./types";
 import { SCENE_TYPE_IDS } from "@/lib/scene-types";
-import { buildPersonaPrompt, processDetections } from "@/lib/personas";
-import type { PersonaDetection } from "@/lib/personas";
+// Personas retired 2026-05-19 (full entity removal). The cascade no
+// longer extracts, matches, or binds persons. See discussion: privacy
+// posture says identity attribution lives in the transcript verbatim,
+// not in a structured entity. Brand auto-binding remains (brands earn
+// their entity status via enrichable metadata; personas don't).
 
 const anthropic = new Anthropic();
 
@@ -98,9 +101,6 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
   let result: TriageResult;
   const mediaType = asset.media_type as string;
 
-  // Build persona prompt if site has characters defined
-  const personaPrompt = await buildPersonaPrompt(asset.site_id as string).catch(() => null);
-
   // Fetch site's brand list for auto-detection
   const brands = await sql`
     SELECT id, name, slug FROM brands
@@ -126,7 +126,7 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
     // analyzes the right image without coupling to the poster lookup.
     const visionAsset = { ...asset, storage_url: visionUrl };
     try {
-      result = await visionTriage(visionAsset, config, availablePillars, pillarConfig, site?.brand_voice, personaPrompt, brands);
+      result = await visionTriage(visionAsset, config, availablePillars, pillarConfig, site?.brand_voice, brands);
     } catch (err: unknown) {
       console.error("Vision triage failed, falling back to heuristic:", err);
       result = heuristicTriage(asset, config, availablePillars);
@@ -135,13 +135,9 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
     result = heuristicTriage(asset, config, availablePillars);
   }
 
-  // Process persona detections from vision
-  const detections = (result.ai_analysis?.detected_personas || []) as PersonaDetection[];
-  if (detections.length > 0) {
-    await processDetections(assetId, detections).catch((err) =>
-      console.error("Persona detection processing failed:", err)
-    );
-  }
+  // Persona detection retired 2026-05-19. Vision pass no longer
+  // produces detected_personas (prompt cleaned up below); even if it
+  // did, the entity layer is gone.
 
   // Persist triage result + generated text (merged into one vision call)
   const metadataUpdate = result.generated_text
@@ -232,7 +228,6 @@ async function visionTriage(
   pillars: ContentPillar[],
   pillarConfig?: Array<{ id: string; label: string; description: string; tags: Array<{ id: string; label: string }> }>,
   brandVoice?: unknown,
-  personaPrompt?: string | null,
   brands?: Array<Record<string, unknown>>
 ): Promise<TriageResult> {
   const contextNote = (asset.context_note as string) || "";
@@ -337,7 +332,6 @@ Respond with ONLY valid JSON (no markdown):
   "scene_types": [<array of matching IDs from this fixed vocabulary — pick all that apply (1 to many): "wide_shot" (whole space/subject in frame), "close_up" (detail of material/finish/feature), "in_progress" (active work mid-task), "people" (humans visible), "before" (pre-work/starting state), "after" (completed result), "documentation" (plans/diagrams/sketches/screenshots), "lifestyle" (finished space being lived in/used). Examples: ["wide_shot","after"] for a finished kitchen reveal; ["in_progress","people"] for a crew working; ["close_up","after"] for a finished detail shot.>],
   "quality_notes": "<brief note on quality issues if any>",
   "detected_vendors": [<array of vendor slugs from the known vendors list that appear in this image, e.g. ["lacanche", "crystal_cabinet_works"]>],
-  "detected_personas": [{"persona_id": "<id>", "persona_name": "<name>", "confidence": <0.0-1.0>, "role": "subject"|"background", "reasoning": "<why>"}],
   "pin_headline": "<6-8 word Pinterest headline. Title case. Include one searchable keyword relevant to the business. Example: 'Custom Zellige Backsplash with Floating Shelves'>",
   "display_caption": "<1-2 sentence public-facing caption for the business website. Written in the brand's voice for their audience, not for the project owner.>",
   "alt_text": "<concise image alt text for screen readers. What is literally shown, no interpretation. Under 125 characters.>",
@@ -357,8 +351,7 @@ Rules:
   0.5-0.6: Rough but identifiable — poor lighting, construction debris visible, blurry areas, but the subject is clear.
   0.3-0.4: Very rough — dark, blurry, heavy clutter, hard to identify the subject.
   0.0-0.2: Unusable — accidental shot, completely dark, no discernible subject.
-- Score based on whether the IMAGE can be published, not whether the subject matter is interesting.
-${personaPrompt || 'If no known characters list is provided, return "detected_personas": []'}`,
+- Score based on whether the IMAGE can be published, not whether the subject matter is interesting.`,
           },
         ],
       },
@@ -454,7 +447,6 @@ ${personaPrompt || 'If no known characters list is provided, return "detected_pe
       has_faces: parsed.has_faces,
       has_text_overlay: parsed.has_text_overlay,
       detected_vendors: parsed.detected_vendors || [],
-      detected_personas: parsed.detected_personas || [],
       // SEO-shaped slug derived from full briefing context + visual
       // analysis. Used by the source-rename pipeline (next commit) to
       // generate pretty URLs for source asset + variant + poster keys.

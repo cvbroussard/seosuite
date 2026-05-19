@@ -161,12 +161,9 @@ export async function PATCH(
         await sql`INSERT INTO asset_projects (asset_id, project_id) VALUES (${id}, ${projectId}) ON CONFLICT DO NOTHING`;
       }
     }
-    if (Array.isArray(persona_ids)) {
-      await sql`DELETE FROM asset_personas WHERE asset_id = ${id}`;
-      for (const personaId of persona_ids) {
-        await sql`INSERT INTO asset_personas (asset_id, persona_id) VALUES (${id}, ${personaId}) ON CONFLICT DO NOTHING`;
-      }
-    }
+    // persona_ids field retained for backwards compat with older clients
+    // but ignored — personas retired 2026-05-19.
+    void persona_ids;
     if (Array.isArray(branch_ids)) {
       await sql`DELETE FROM asset_branches WHERE asset_id = ${id}`;
       for (const branchId of branch_ids) {
