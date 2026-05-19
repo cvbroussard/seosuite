@@ -141,14 +141,16 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     context: b.context_excerpt,
   }));
   const brandMatch = await matchBrandsFromNer(siteId, nerBrandCandidates);
-  // Destructive replace of algorithmic rows (per autopilot mental model
-  // 2026-05-18): the cascade's current view IS the asset's current
-  // truth. Subscriber/operator manual assignments (assigned_by !=
-  // 'auto') stay untouched. ON CONFLICT then handles the case where a
-  // 'subscriber' row already exists for the same matched brand.
+  // Full destructive replace (policy locked 2026-05-19): a new brief is
+  // the only thing that fires re-analysis, and committing a new brief
+  // is the subscriber implicitly declaring "I have new context; re-
+  // derive everything." Every asset_brands row gets wiped regardless of
+  // provenance — manual edits don't survive the next brief. Subscribers
+  // who want their overrides preserved should make them AFTER the most
+  // recent analysis and refrain from recording another brief. The
+  // assigned_by column from migration 127 stays as audit-only metadata.
   await sql`
-    DELETE FROM asset_brands
-    WHERE asset_id = ${assetId} AND assigned_by = 'auto'
+    DELETE FROM asset_brands WHERE asset_id = ${assetId}
   `;
   let brandRows = 0;
   for (const m of brandMatch.matched) {
@@ -180,10 +182,13 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
   let approvedBrandRows = 0;
 
   if (approvals?.brands_to_create && approvals.brands_to_create.length > 0) {
-    // Mirror POST /api/brands: name → slug, ON CONFLICT DO UPDATE so
-    // simultaneous approvals across assets converge. enrichBrand fires
-    // async to fill URL/description/logo from the web; subscriber sees
-    // the brand land immediately, enrichment polishes later.
+    // Write-once-by-analyzer policy (locked 2026-05-19): the analyzer
+    // gets exactly one shot to create a brand row. Once it exists,
+    // subscriber edits to name/URL/description are sovereign — the
+    // analyzer NEVER overwrites them. So ON CONFLICT DO NOTHING (not
+    // DO UPDATE). When a conflict happens, the existing row's id is
+    // fetched via the follow-up SELECT and used for the binding.
+    // enrichBrand fires async for newly-created rows only.
     const newBrandIds: Array<{ id: string; name: string }> = [];
     for (const b of approvals.brands_to_create) {
       const name = b.name.trim();
@@ -193,7 +198,7 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
         .replace(/[^a-z0-9]+/g, "_")
         .replace(/^_|_$/g, "")
         .slice(0, 40);
-      const [brand] = await sql`
+      const insertResult = await sql`
         INSERT INTO brands (
           site_id, name, slug, seed_source, seed_asset_id, authorized_at, enrichment_status
         )
@@ -201,16 +206,31 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
           ${siteId}, ${name}, ${slug},
           'audio_transcript', ${assetId}, NOW(), 'pending'
         )
-        ON CONFLICT (site_id, slug) DO UPDATE SET name = ${name}
+        ON CONFLICT (site_id, slug) DO NOTHING
         RETURNING id
       `;
+      let brandId: string;
+      const wasCreated = insertResult.length > 0;
+      if (wasCreated) {
+        brandId = insertResult[0].id as string;
+      } else {
+        const [existing] = await sql`
+          SELECT id FROM brands WHERE site_id = ${siteId} AND slug = ${slug}
+        `;
+        if (!existing) continue; // shouldn't happen but be defensive
+        brandId = existing.id as string;
+      }
       await sql`
         INSERT INTO asset_brands (asset_id, brand_id, assigned_by)
-        VALUES (${assetId}, ${brand.id}, 'subscriber')
+        VALUES (${assetId}, ${brandId}, 'subscriber')
         ON CONFLICT DO NOTHING
       `;
       approvedBrandRows++;
-      newBrandIds.push({ id: brand.id as string, name });
+      // Only enrich rows we actually created — never re-enrich an
+      // existing row (subscriber edits to URL/description are sovereign).
+      if (wasCreated) {
+        newBrandIds.push({ id: brandId, name });
+      }
     }
     // Fire enrichment async — same waitUntil pattern as POST /api/brands.
     if (newBrandIds.length > 0) {
