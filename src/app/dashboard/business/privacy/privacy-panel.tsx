@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /**
  * Two-axis privacy settings panel.
@@ -28,17 +28,10 @@ interface Props {
 
 const FACE_OPTIONS: Array<{ value: string; label: string; description: string; requiresWaiver: boolean }> = [
   {
-    value: "asis",
-    label: "Publish faces unaltered (default)",
-    description:
-      "Standard for most businesses. Crew photos, client testimonials, event recaps publish with faces as-is — matches normal industry practice. Because TracPost's autopilot is the publisher-of-record, you sign a one-time waiver acknowledging you have consent for the people in your uploads.",
-    requiresWaiver: true,
-  },
-  {
     value: "blur",
-    label: "Blur faces",
+    label: "Blur faces (default)",
     description:
-      "Every detected face is gaussian-blurred. Opt into this if your industry has stricter privacy norms — childcare, healthcare, addiction recovery, before/after cosmetic, litigation-prone fields. The conservative posture is its own protection; no waiver needed.",
+      "Every detected face is gaussian-blurred at publish time. Safe by default — no consent or waiver concerns. Works for any business publishing photos with people in them.",
     requiresWaiver: false,
   },
   {
@@ -55,22 +48,29 @@ const FACE_OPTIONS: Array<{ value: string; label: string; description: string; r
       "Assets with detected faces are quarantined from autopilot publishing. Most conservative; you'd manually compose for the rare face-OK shot.",
     requiresWaiver: false,
   },
+  {
+    value: "asis",
+    label: "Publish faces unaltered",
+    description:
+      "Faces appear as-is in published images. Opt into this if you have consent from the people in your uploads (crew, clients who agreed to be featured, public-figure context). Because TracPost's autopilot is the publisher-of-record, you sign a one-time waiver accepting responsibility for the consent status of every person whose face appears in your published content.",
+    requiresWaiver: true,
+  },
 ];
 
 const IDENTITY_OPTIONS: Array<{ value: string; label: string; description: string; requiresWaiver: boolean }> = [
   {
-    value: "allow_names",
-    label: "Use proper names (default)",
+    value: "anonymize",
+    label: "Anonymize names (default)",
     description:
-      "Captions preserve real names from your transcripts (\"Mike installed the new cabinets\"). Matches normal business practice for crew attribution and testimonials. Your audio + transcript is the consent record — you mentioned the name in your own voice. One-time waiver acknowledges publisher-of-record responsibility.",
-    requiresWaiver: true,
+      "Captions substitute generic role descriptors (\"our client installed her new cabinets\") even when you mention real names in the transcript. Safe by default — no consent concerns.",
+    requiresWaiver: false,
   },
   {
-    value: "anonymize",
-    label: "Anonymize names",
+    value: "allow_names",
+    label: "Use proper names",
     description:
-      "Captions substitute generic role descriptors (\"our client installed her new cabinets\") even when you mention real names. Opt into this if your industry handles sensitive client relationships or you prefer not to expose individuals by name in published copy.",
-    requiresWaiver: false,
+      "Captions preserve real names from your transcripts (\"Mike installed the new cabinets\"). Opt into this for crew attribution and testimonials. Your audio + transcript is the consent record — you mentioned the name in your own voice. One-time waiver acknowledges publisher-of-record responsibility for published name mentions.",
+    requiresWaiver: true,
   },
 ];
 
@@ -92,19 +92,6 @@ export function PrivacyPanel({ siteId, initial }: Props) {
   const [identityChecked, setIdentityChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // First-visit detection: if either axis is on the permissive option
-  // without a signed waiver, surface the modal automatically. Covers
-  // the case where new subscribers land on defaults (asis + allow_names)
-  // and never change them — without this, they'd never see the waiver.
-  // Runs once on mount.
-  useEffect(() => {
-    const needed: Array<"face" | "identity"> = [];
-    if (needsSigning(initial.face, FACE_OPTIONS)) needed.push("face");
-    if (needsSigning(initial.identity, IDENTITY_OPTIONS)) needed.push("identity");
-    if (needed.length > 0) setModalAxes(needed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function savePolicy(opts: {
     face_policy?: string;
