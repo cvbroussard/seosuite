@@ -1808,6 +1808,37 @@ export function AssetEditModal({
               )}
             </div>
 
+            {/* PROJECT BINDING — single-project manual assignment surface.
+                Per 2026-05-19: projects are 100% subscriber-managed; the
+                cascade no longer touches asset_projects. Single-project
+                semantics by design — if subscriber wants the same asset
+                in multiple projects, the right answer is to upload it
+                again with a different project picker selection (and a
+                project-specific transcript). Lifts the picker out of
+                the dead auto-tag inspector surface so it's always
+                visible and always editable. */}
+            {localProjects.length > 0 && (
+              <div className="mb-3 flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-[11px]">
+                <span className="text-muted">Project:</span>
+                <select
+                  value={projectIds[0] || ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setProjectIds(v ? [v] : []);
+                  }}
+                  className="flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-foreground"
+                >
+                  <option value="">— Unassigned —</option>
+                  {localProjects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                {projectIds.length > 0 && projectIds[0] !== savedProjectIds[0] && (
+                  <span className="text-[10px] text-warning">unsaved</span>
+                )}
+              </div>
+            )}
+
             {/* TAGS STRIP — confirmation row of what's currently attached
                 to this asset (primary + secondary categories, brands,
                 projects, service areas). Sits between source media and
