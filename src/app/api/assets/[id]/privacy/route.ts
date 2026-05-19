@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  *   - media_type and ai_generated for the "skipped" scenarios
  *
  * Read-only. Per-asset overrides are deferred from v1 — subscribers
- * change policy via /dashboard/business/privacy, which applies to all
+ * change policy via /dashboard/business/content-safeguards, which applies to all
  * their assets.
  */
 export async function GET(

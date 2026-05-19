@@ -12,7 +12,7 @@
  *      suppress mode), nudges toward the settings page
  *
  * Read-only in v1. Per-asset overrides + per-face controls deferred.
- * Subscriber changes policy at /dashboard/business/privacy; this
+ * Subscriber changes policy at /dashboard/business/content-safeguards; this
  * surface just reflects what's configured.
  *
  * Renders nothing while loading or when there's nothing meaningful to
@@ -198,7 +198,7 @@ export function AssetPrivacySection({ assetId }: Props) {
         </div>
         {(showSettingsLink || showWaiverLink) && (
           <a
-            href="/dashboard/business/privacy"
+            href="/dashboard/business/content-safeguards"
             className="shrink-0 text-[10px] text-accent hover:underline"
           >
             {showWaiverLink ? "Sign waiver →" : "Settings →"}
