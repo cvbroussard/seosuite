@@ -29,7 +29,6 @@ export interface LocationRecord extends EntityRecord {
 
 export interface NerEntities {
   brands: EntityRecord[];
-  projects: EntityRecord[];
   specialties: EntityRecord[];
   locations: LocationRecord[];
   materials: EntityRecord[];
@@ -50,19 +49,19 @@ export const NER_MODEL = "claude-haiku-4-5-20251001";
 
 const SYSTEM_PROMPT = `You extract structured entities and tag suggestions from a media asset's transcript (operator/subscriber narration during briefing).
 
-OUTPUT five entity arrays + suggested_tags. Each entity record has uniform fields plus type-specific extras for locations.
+OUTPUT four entity arrays + suggested_tags. Each entity record has uniform fields plus type-specific extras for locations.
 
 ENTITY DEFINITIONS:
 
 - **brands** — Vendor / manufacturer / product brand mentions ("Marvin windows", "Benjamin Moore paint", "Sub-Zero refrigerator"). Use proper noun + product context as the signal. Don't extract generic terms (e.g., "windows" alone is NOT a brand).
-
-- **projects** — Named projects the subscriber is talking about ("Shadyside Parlor Restoration", "Mitchell Kitchen Remodel"). Usually title-cased multi-word phrases, often preceded by "our" or possessive context. NOT the same as work themes.
 
 - **specialties** — Granular work-themes the subscriber mentions ("architectural millwork", "heritage kitchen restoration", "furniture-grade lacquer finishing"). These are NARROWER than GBP categories — they capture the subscriber's specific positioning and craft language. Industry-agnostic concept.
 
 - **locations** — Geographic references. Set type field to one of: city, neighborhood, street_address, landmark, state, region, unknown. Set geocodable=true if there's a unique resolvable geographic point. Set privacy_sensitive=true for street_address values (subscriber home or client home — caption generation must never include these).
 
 - **materials** — Materials, finishes, techniques ("oak", "lacquer paint", "walnut burl", "granite countertops", "limewash"). Construction-domain nouns specific enough to matter for SEO/captioning.
+
+DO NOT EXTRACT "projects" — project membership is set by the subscriber at upload time, not inferred from the transcript. If you see what looks like a project name, IGNORE it.
 
 ENTITY RECORD SHAPE (all entities):
 {
@@ -86,7 +85,6 @@ OUTPUT SHAPE (strict — entities MUST be nested under an "entities" object):
 {
   "entities": {
     "brands":      [ { "text": "...", "context_excerpt": "...", "char_start": N, "char_end": N }, ... ],
-    "projects":    [ { ... same shape ... }, ... ],
     "specialties": [ { ... same shape ... }, ... ],
     "locations":   [ { ..., "type": "city|...|unknown", "geocodable": true, "privacy_sensitive": false }, ... ],
     "materials":   [ { ... same shape ... }, ... ]
@@ -142,7 +140,6 @@ export async function extractNer(transcript: string): Promise<NerOutcome> {
     const result: NerResult = {
       entities: {
         brands: e.brands ?? [],
-        projects: e.projects ?? [],
         specialties: e.specialties ?? [],
         locations: (e.locations ?? []) as LocationRecord[],
         materials: e.materials ?? [],
