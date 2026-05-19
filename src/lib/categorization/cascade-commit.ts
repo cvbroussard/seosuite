@@ -160,11 +160,20 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     context: b.context_excerpt,
   }));
   const brandMatch = await matchBrandsFromNer(siteId, nerBrandCandidates);
+  // Destructive replace of algorithmic rows (per autopilot mental model
+  // 2026-05-18): the cascade's current view IS the asset's current
+  // truth. Subscriber/operator manual assignments (assigned_by !=
+  // 'auto') stay untouched. ON CONFLICT then handles the case where a
+  // 'subscriber' row already exists for the same matched brand.
+  await sql`
+    DELETE FROM asset_brands
+    WHERE asset_id = ${assetId} AND assigned_by = 'auto'
+  `;
   let brandRows = 0;
   for (const m of brandMatch.matched) {
     await sql`
-      INSERT INTO asset_brands (asset_id, brand_id)
-      VALUES (${assetId}, ${m.brand_id})
+      INSERT INTO asset_brands (asset_id, brand_id, assigned_by)
+      VALUES (${assetId}, ${m.brand_id}, 'auto')
       ON CONFLICT DO NOTHING
     `;
     brandRows++;
@@ -190,10 +199,20 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
     asset.gps_lat as number | null,
     asset.gps_lng as number | null,
   );
+  // Same destructive-replace pattern as brands. geo_candidates do NOT
+  // get auto-bound here (only `matched` does); they surface in the
+  // approval card for explicit subscriber confirmation. So a project
+  // that only matches by geo never lands as 'auto' — it lands as
+  // 'subscriber' via the project_bindings path below if the subscriber
+  // checks the box.
+  await sql`
+    DELETE FROM asset_projects
+    WHERE asset_id = ${assetId} AND assigned_by = 'auto'
+  `;
   for (const m of projectMatch.matched) {
     await sql`
-      INSERT INTO asset_projects (asset_id, project_id)
-      VALUES (${assetId}, ${m.project_id})
+      INSERT INTO asset_projects (asset_id, project_id, assigned_by)
+      VALUES (${assetId}, ${m.project_id}, 'auto')
       ON CONFLICT DO NOTHING
     `;
   }
@@ -232,8 +251,8 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
         RETURNING id
       `;
       await sql`
-        INSERT INTO asset_brands (asset_id, brand_id)
-        VALUES (${assetId}, ${brand.id})
+        INSERT INTO asset_brands (asset_id, brand_id, assigned_by)
+        VALUES (${assetId}, ${brand.id}, 'subscriber')
         ON CONFLICT DO NOTHING
       `;
       approvedBrandRows++;
@@ -287,8 +306,8 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
         RETURNING id
       `;
       await sql`
-        INSERT INTO asset_projects (asset_id, project_id)
-        VALUES (${assetId}, ${project.id})
+        INSERT INTO asset_projects (asset_id, project_id, assigned_by)
+        VALUES (${assetId}, ${project.id}, 'subscriber')
         ON CONFLICT DO NOTHING
       `;
       approvedProjectRows++;
@@ -304,8 +323,8 @@ export async function commitCascade(input: CommitCascadeInput): Promise<CommitCa
       `;
       if (!valid) continue;
       const result = await sql`
-        INSERT INTO asset_projects (asset_id, project_id)
-        VALUES (${assetId}, ${projectId})
+        INSERT INTO asset_projects (asset_id, project_id, assigned_by)
+        VALUES (${assetId}, ${projectId}, 'subscriber')
         ON CONFLICT DO NOTHING
         RETURNING asset_id
       `;
