@@ -5,6 +5,7 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { isSmartRotateEnabled, callSmartRotate, smartRotateDimsForTemplate } from "./smart-rotate-client";
 import { isEnterpriseTier } from "./site-tier";
 import { extractSlugFromSourceUrl, deriveVariantKey } from "./asset-keys";
+import { applyFaceTransforms, resolveFacePolicy, type DetectedFaceBox } from "@/lib/privacy/face-transforms";
 
 /**
  * Variant render worker (#163, #172).
@@ -159,10 +160,35 @@ export async function renderTemplateVariant(
   if (!tpl) return null;
 
   const [asset] = await sql`
-    SELECT id, site_id, storage_url, media_type
-    FROM media_assets WHERE id = ${assetId}
+    SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type, ma.metadata,
+           s.face_policy, s.face_waiver_signed_at
+    FROM media_assets ma JOIN sites s ON s.id = ma.site_id
+    WHERE ma.id = ${assetId}
   `;
   if (!asset) return null;
+
+  // Resolve effective face policy + check whether this asset has any
+  // detected faces. Suppress short-circuits BEFORE we create a variant
+  // row — no need to track suppressed renders, the asset just doesn't
+  // get a variant. Orchestrator pool query already filters on
+  // "has-ready-variant" so absent variants naturally exclude the asset.
+  const assetMetadata = (asset.metadata as Record<string, unknown> | null) || {};
+  const faceDetection = assetMetadata.face_detection as
+    | { faces?: DetectedFaceBox[]; face_count?: number }
+    | undefined;
+  const detectedFaces = faceDetection?.faces || [];
+  const hasFaces = detectedFaces.length > 0;
+  const facePolicy = resolveFacePolicy(
+    (asset.face_policy as string) || "asis",
+    (asset.face_waiver_signed_at as Date | string | null) || null,
+  );
+
+  if (hasFaces && facePolicy === "suppress") {
+    console.log(
+      `Variant render skipped (assetId=${assetId}, templateId=${templateId}): face_policy='suppress' + ${detectedFaces.length} face(s) detected`,
+    );
+    return null;
+  }
 
   // Idempotency: existing ready variant short-circuits. Stale variants
   // get re-rendered (caller is markVariantsStale → re-trigger flow).
@@ -212,9 +238,17 @@ export async function renderTemplateVariant(
     let renderNotes: Record<string, unknown>;
 
     if (isVideo) {
+      // Video face handling deferred — poster-frame detection doesn't
+      // track motion across the runtime. Until that lands, video
+      // variants pass through unchanged regardless of face_policy.
+      // Documented limitation; subscribers in face-sensitive industries
+      // should review video before publishing (see Privacy settings).
       ({ outputUrl, renderNotes } = await renderVideoVariant(sourceUrl, templateId, siteId, assetId));
     } else {
-      ({ outputUrl, renderNotes } = await renderImageVariant(sourceUrl, templateId, siteId, assetId));
+      ({ outputUrl, renderNotes } = await renderImageVariant(
+        sourceUrl, templateId, siteId, assetId,
+        { faces: detectedFaces, policy: facePolicy },
+      ));
     }
 
     await sql`
@@ -280,6 +314,10 @@ async function renderImageVariant(
   templateId: string,
   siteId: string,
   sourceAssetId: string,
+  privacy: {
+    faces: DetectedFaceBox[];
+    policy: "asis" | "blur" | "box" | "suppress";
+  },
 ): Promise<{ outputUrl: string; renderNotes: Record<string, unknown> }> {
   // Video-output templates: Ken Burns motion from the still. The duration
   // is template-tuned — Reels lean longer, Stories shorter.
@@ -314,7 +352,18 @@ async function renderImageVariant(
 
   const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`Source fetch failed: ${res.status}`);
-  const inputBuffer = Buffer.from(await res.arrayBuffer());
+  const sourceBuffer = Buffer.from(await res.arrayBuffer());
+
+  // Apply face transforms BEFORE crop/resize so the privacy treatment
+  // operates on the full-resolution source pixels. Sharp's "attention"
+  // crop downstream may include or exclude transformed regions; either
+  // way the transformed bytes stay transformed.
+  let faceTransformApplied = false;
+  const inputBuffer: Buffer =
+    privacy.faces.length > 0 && privacy.policy !== "asis"
+      ? ((faceTransformApplied = true),
+        await applyFaceTransforms(sourceBuffer, privacy.faces, privacy.policy))
+      : sourceBuffer;
 
   const outputBuffer = await sharp(inputBuffer)
     .rotate() // Honor EXIF orientation
@@ -335,6 +384,12 @@ async function renderImageVariant(
       width: dims.width,
       height: dims.height,
       from: "image",
+      ...(faceTransformApplied && {
+        face_transform: {
+          policy: privacy.policy,
+          faces_treated: privacy.faces.length,
+        },
+      }),
     },
   };
 }
