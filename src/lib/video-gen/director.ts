@@ -56,27 +56,31 @@ export const DIRECTOR_TEMPLATE_SPECS: Record<DirectorTemplate, DirectorTemplateS
     label: "Reel",
     durationSeconds: 5,
     guidance:
-      "Punchy and kinetic. The motion must read in the first 1-2 seconds — " +
-      "assume a thumb hovering over the swipe. One decisive camera move, one " +
-      "clear focal moment. Energy over contemplation.",
+      "Punchy and kinetic. The motion must READ in the first 1-2 seconds — " +
+      "assume a thumb hovering over the swipe. But 'punchy' means instantly " +
+      "legible, NOT far-travelling: keep the camera's throw SHORT and the " +
+      "pace gentle. A slow, restrained push reads just as fast and looks far " +
+      "more composed than a long traverse crammed into 5 seconds. One " +
+      "decisive camera move, one clear focal moment.",
   },
   story_9x16: {
     id: "story_9x16",
     label: "Story",
     durationSeconds: 5,
     guidance:
-      "Atmospheric and intimate. A slow, confident drift — let the viewer " +
-      "settle into the space. Mood over momentum. This is the quiet, " +
-      "behind-the-curtain register.",
+      "Atmospheric and intimate. A slow, confident, short-throw drift — let " +
+      "the viewer settle into the space. Mood over momentum. This is the " +
+      "quiet, behind-the-curtain register.",
   },
   long_16x9: {
     id: "long_16x9",
     label: "Long Video",
     durationSeconds: 10,
     guidance:
-      "Documentary and composed. A wider establishing sensibility — room to " +
-      "breathe across 10 seconds. A measured camera move that reveals, then " +
-      "settles. Authoritative, unhurried.",
+      "Documentary and composed. A wider establishing sensibility — 10 " +
+      "seconds is room to breathe, so the camera can afford a longer throw " +
+      "and still stay unhurried. A measured move that reveals, then settles. " +
+      "Authoritative.",
   },
 };
 
@@ -178,6 +182,7 @@ ${toneLine}
 ## How Kling behaves — write for it
 Kling executes literally and tends to over-animate. Write for restraint:
 - Name ONE primary camera move in plain terms: push in, pull back, dolly, pan, tilt, orbit, crane, handheld drift, or rack focus.
+- Pace = distance ÷ time. Scale the camera's THROW to the ${spec.durationSeconds} seconds you have — a short, gentle move looks composed and cinematic; a long traverse crammed into the clip reads rushed. A slow short-throw push still reads instantly. "Slow" means a short move done gently, NOT a long move. Default to under-travelling.
 - Add at most one small motion or light element beyond the camera.
 - Keep the brief to 40-70 words. Specific beats elaborate.
 - Avoid directing what Kling distorts: faces in tight close-up (they morph), text or logos in motion (they warp), complex hand or finger movement, fast or chaotic action. If the subject is a face or a logo, keep the move gentle and at a respectful distance.
