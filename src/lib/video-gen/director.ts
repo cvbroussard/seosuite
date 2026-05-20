@@ -57,20 +57,18 @@ export const DIRECTOR_TEMPLATE_SPECS: Record<DirectorTemplate, DirectorTemplateS
     durationSeconds: 5,
     guidance:
       "Punchy and kinetic. The motion must READ in the first 1-2 seconds — " +
-      "assume a thumb hovering over the swipe. But 'punchy' means instantly " +
-      "legible, NOT far-travelling: keep the camera's throw SHORT and the " +
-      "pace gentle. A slow, restrained push reads just as fast and looks far " +
-      "more composed than a long traverse crammed into 5 seconds. One " +
-      "decisive camera move, one clear focal moment.",
+      "assume a thumb hovering over the swipe. 'Punchy' means instantly " +
+      "legible, NOT fast or far-travelling: a decisive arcing push at a " +
+      "gentle pace. The curve carries the energy; one clear focal moment.",
   },
   story_9x16: {
     id: "story_9x16",
     label: "Story",
     durationSeconds: 5,
     guidance:
-      "Atmospheric and intimate. A slow, confident, short-throw drift — let " +
-      "the viewer settle into the space. Mood over momentum. This is the " +
-      "quiet, behind-the-curtain register.",
+      "Atmospheric and intimate. A slow, confident arcing drift — let the " +
+      "viewer settle into the space as the camera curves through it. Mood " +
+      "over momentum. The quiet, behind-the-curtain register.",
   },
   long_16x9: {
     id: "long_16x9",
@@ -78,9 +76,8 @@ export const DIRECTOR_TEMPLATE_SPECS: Record<DirectorTemplate, DirectorTemplateS
     durationSeconds: 10,
     guidance:
       "Documentary and composed. A wider establishing sensibility — 10 " +
-      "seconds is room to breathe, so the camera can afford a longer throw " +
-      "and still stay unhurried. A measured move that reveals, then settles. " +
-      "Authoritative.",
+      "seconds is room for a longer, sweeping arc that reveals, then " +
+      "settles. Unhurried and authoritative.",
   },
 };
 
@@ -113,7 +110,7 @@ export interface DirectorInput {
 export interface DirectorBrief {
   /** The cinematic prompt for Kling — camera move + any micro-motion. */
   prompt: string;
-  /** Short descriptor of the primary camera move (e.g. "slow push in").
+  /** Short descriptor of the primary camera move (e.g. "arcing push-in").
    * Drives the per-asset variety knob. */
   cameraMove: string;
   /** Brands visibly present in the shot the brief features (from the
@@ -153,7 +150,7 @@ export function buildDirectorPrompt(input: DirectorInput): string {
 
   const variety =
     input.previousCameraMoves && input.previousCameraMoves.length > 0
-      ? `Camera moves already used for this asset: ${input.previousCameraMoves.join("; ")}. Pick a DISTINCTLY DIFFERENT move.`
+      ? `Camera moves already used for this asset: ${input.previousCameraMoves.join("; ")}. Pick a DISTINCTLY DIFFERENT move (vary the arc direction or the move type).`
       : "No camera move used yet for this asset — any move is open.";
 
   return `You are the Director. You write ONE camera-move brief that an AI video model (Kling) will execute, turning a single still photo into a short video. The photo you are shown IS the first frame — Kling generates motion forward from it. Your brief describes what HAPPENS next: the camera move, and any small motion or light shift. It never re-describes what is already in the frame. Your job is the VISUAL only — the camera, not the story.
@@ -161,10 +158,22 @@ export function buildDirectorPrompt(input: DirectorInput): string {
 ## The rule that matters most — stay real
 TracPost's subscribers are real working businesses. Their entire advantage is being real. The video must feel like a true moment from their actual work — never a staged lifestyle scene, never invented people or events.
 
-- DEFAULT to camera motion. The most authentic, most reliable move is the camera exploring a frozen real moment — a slow push toward the subject, a drift across the work, a tilt that reveals scale. The scene holds still; the camera brings it alive.
+- DEFAULT to camera motion. The most authentic, most reliable move is the camera exploring a frozen real moment — a slow arcing push toward the subject, a curving drift across the work. The scene holds still; the camera brings it alive.
 - Scene motion, if any, must be a PLAUSIBLE MICRO-CONTINUATION of what the photo froze: steam still rising, dust still settling, light shifting as a cloud passes, a hand finishing a motion ALREADY visible in the frame. Small, real, physically continuous.
 - NEVER invent people who aren't in the photo, activities that aren't happening, drama, or lifestyle vignettes. Empty finished kitchen? The brief does not add a family. Wall mid-install? The brief does not add a crew walking in.
 - The test: could this have plausibly happened in the half-second after the shutter clicked? If yes, allowed. If it needs new actors or events, forbidden.
+
+## The camera move — curve it, for parallax
+A still photo becomes a video when the camera moves through 3-D space and near objects slide against far ones. That effect is PARALLAX, and it is the entire point of this render — without it the clip is just a zoom on a photo, which is worthless.
+
+Parallax comes from the camera moving SIDEWAYS relative to the scene — the lateral component of the motion. This rule drives every brief you write:
+- A STRAIGHT push-in (camera moving straight toward the subject) has almost no sideways component — so almost no parallax. It reads as a zoom. Do not default to it.
+- A CURVED, ARCING path — the camera advances while sweeping to one side — has a strong sideways component at every point. It produces clear parallax even when the move is small and slow.
+- A PAN or TILT is the camera rotating in place. Rotation is not travel — it produces ZERO parallax. Never use a pan or tilt as the main move.
+
+DEFAULT to an arcing push-in: the camera moves toward the subject AND curves to one side as it goes. The forward motion gives the sense of approaching the work; the sideways curve gives the parallax. Make the arc a real, visible sweep — not a straight line with a hint of bend.
+
+This is what lets the move stay gentle. You do NOT need a fast, aggressive throw to get parallax — the curve does that work. A slow, modest arcing move reads as a genuine camera gliding through the space.
 
 ## This render
 Template: ${spec.label} — ${spec.durationSeconds} seconds.
@@ -181,26 +190,26 @@ ${toneLine}
 
 ## How Kling behaves — write for it
 Kling executes literally and tends to over-animate. Write for restraint:
-- Name ONE primary camera move in plain terms: push in, pull back, dolly, pan, tilt, orbit, crane, handheld drift, or rack focus.
-- Pace = distance ÷ time. Scale the camera's THROW to the ${spec.durationSeconds} seconds you have — a short, gentle move looks composed and cinematic; a long traverse crammed into the clip reads rushed. A slow short-throw push still reads instantly. "Slow" means a short move done gently, NOT a long move. Default to under-travelling.
+- The ONE camera move comes from the parallax-rich family: an arcing push-in (your default), a curved dolly, an orbit, or a lateral truck. Avoid straight pushes; never make a pan or tilt the move.
+- Keep the pace gentle and eased — ease into the move, ease to a stop. The curve, not speed, delivers the parallax, so there is no need to rush. Scale the arc's reach to the ${spec.durationSeconds} seconds available.
 - Add at most one small motion or light element beyond the camera.
 - Keep the brief to 40-70 words. Specific beats elaborate.
 - Avoid directing what Kling distorts: faces in tight close-up (they morph), text or logos in motion (they warp), complex hand or finger movement, fast or chaotic action. If the subject is a face or a logo, keep the move gentle and at a respectful distance.
 
 ## Your job
-1. LOOK at the image. Read the real composition — where the subject sits, the light direction, foreground/background depth, negative space. Compose the camera move FOR this actual frame.
-2. Choose ONE camera move that this template's creative direction calls for. ${variety}
-3. Write the brief: 40-70 words, one camera move, grounded and real, for a ${spec.durationSeconds}-second clip. Name brands ONLY if the analysis lists them as visibly present — never invent.
+1. LOOK at the image. Read the real composition and especially the DEPTH — what sits in the foreground, what sits behind. Parallax plays out between those depth layers, so the move must be built around them.
+2. Compose ONE arcing camera move for THIS frame: which way should the curve sweep, given where the subject and the depth layers sit. ${variety}
+3. Write the brief: 40-70 words, one arcing camera move, gentle and eased, grounded and real, for a ${spec.durationSeconds}-second clip. Name brands ONLY if the analysis lists them as visibly present — never invent.
 
 ## A strong brief looks like this
-(Story template, photo of an insulated-but-unfinished wall cavity)
-"A slow, low drift along the wall cavity, the camera gliding past the foam board and rough-in like an inspector taking it in. Cool, even light; the scene itself stays still. The shot lingers a half-beat on a sealed seam, then eases to a stop."
-Why it works: one camera move, zero invented people, the motion is pure camera exploring a real frozen moment, composed for the actual frame.
+(Story template, photo of a finished kitchen — an island in the foreground, cabinetry along the back wall)
+"A slow arcing push-in: the camera advances toward the cabinetry while curving gently to the right, so the foreground island slides leftward across the frame against the back wall — a clear, calm parallax. The scene holds still; cool even light. The arc eases to a stop with the range hood centered."
+Why it works: the curve produces real parallax at a gentle pace; the foreground island and the background wall visibly separate; no invented people; composed for the actual depth in the frame.
 
 ## Output — JSON only, no markdown
 {
   "prompt": "the 40-70 word camera-move brief for Kling",
-  "camera_move": "<2-4 word descriptor of the primary move, e.g. 'slow push in'>",
+  "camera_move": "<2-4 word descriptor of the move, e.g. 'arcing push-in'>",
   "brands_mentioned": ["<brands visibly present that the shot features, or empty>"]
 }`;
 }
