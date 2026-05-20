@@ -10,11 +10,11 @@ import { toast } from "@/components/feedback";
  * a small inline panel below the strip with the tool's input (instruction
  * text, prompt, etc.) and a Run button.
  *
- * On success, the new asset lands in pending_briefing state. A success
+ * On success, the new asset lands in onboarded state. A success
  * toast surfaces with a link to navigate to the new asset for briefing.
  *
  * Per the briefing-required + AI-as-scaffolding principles:
- * - All outputs go through the standard briefing queue (pending_briefing)
+ * - All outputs go through the standard briefing queue (onboarded)
  * - Tools are positioned as utility, not headline capability
  * - Operator stays out — this is subscriber-facing only
  */

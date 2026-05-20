@@ -65,7 +65,7 @@ export async function generatePosterForAsset(
     )
     VALUES (
       ${siteId}, ${posterUrl}, 'image/jpeg', 'video_poster',
-      'triaged', EXTRACT(EPOCH FROM NOW()),
+      'onboarded', EXTRACT(EPOCH FROM NOW()),
       ${JSON.stringify({
         role: "poster",
         source_video_asset_id: sourceAssetId,

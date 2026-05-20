@@ -221,7 +221,7 @@ export async function autoSyncPhotos(siteId: string): Promise<{ synced: number; 
            ma.ai_analysis, ma.metadata AS asset_metadata
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status = 'triaged'
+      AND ma.triage_status = 'briefed'
       AND ma.quality_score >= ${minQuality}
       AND ma.media_type LIKE 'image/%'
       AND NOT EXISTS (

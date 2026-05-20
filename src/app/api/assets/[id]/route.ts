@@ -186,26 +186,26 @@ export async function PATCH(
       })})
     `;
 
-    // Briefing flip: if asset is in 'pending_briefing' and now has a
+    // Briefing flip: if asset is in 'onboarded' and now has a
     // substantive context_note (>= 40 chars per the readiness primitive
-    // floor), promote to 'triaged'. This is the human-briefing action
+    // floor), promote to 'briefed'. This is the human-briefing action
     // that gates orchestrator pool entry per migrate-099. A subscriber
-    // saving a thin or empty caption keeps the asset in pending_briefing.
+    // saving a thin or empty caption keeps the asset in onboarded.
     const [latest] = await sql`
       SELECT triage_status, context_note FROM media_assets WHERE id = ${id}
     `;
-    if (latest?.triage_status === "pending_briefing") {
+    if (latest?.triage_status === "onboarded") {
       const note = (latest.context_note as string) || "";
       if (note.trim().length >= 40) {
         await sql`
           UPDATE media_assets
-          SET triage_status = 'triaged',
+          SET triage_status = 'briefed',
               triaged_at = COALESCE(triaged_at, NOW()),
               metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
                 'briefed_at', NOW()::text,
                 'briefed_by_subscription_id', ${auth.subscriptionId}
               )
-          WHERE id = ${id} AND triage_status = 'pending_briefing'
+          WHERE id = ${id} AND triage_status = 'onboarded'
         `;
 
         // Manual-first cascade (LOCKED 2026-05-16):

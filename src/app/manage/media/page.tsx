@@ -31,7 +31,7 @@ function MediaContent({ siteId }: { siteId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [counts, setCounts] = useState<Counts | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "upload" | "ai" | "pending_briefing" | "untagged">("all");
+  const [filter, setFilter] = useState<"all" | "upload" | "ai" | "onboarded" | "untagged">("all");
   const [selected, setSelected] = useState<Asset | null>(null);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ function MediaContent({ siteId }: { siteId: string }) {
   const filtered = filter === "all" ? assets
     : filter === "upload" ? assets.filter(a => a.source === "upload")
     : filter === "ai" ? assets.filter(a => a.source === "ai_generated")
-    : filter === "pending_briefing" ? assets.filter(a => a.status === "pending_briefing")
+    : filter === "onboarded" ? assets.filter(a => a.status === "onboarded")
     : assets.filter(a => !a.context);
 
   if (loading) {
@@ -103,18 +103,18 @@ function MediaContent({ siteId }: { siteId: string }) {
       )}
 
       <div className="flex items-center gap-2">
-        {(["all", "upload", "ai", "pending_briefing", "untagged"] as const).map(f => (
+        {(["all", "upload", "ai", "onboarded", "untagged"] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             className={`rounded px-3 py-1 text-[10px] font-medium ${
               filter === f ? "bg-accent text-white" : "bg-surface-hover text-muted hover:text-foreground"
-            } ${f === "pending_briefing" && filter !== f && counts && counts.pending_briefing > 0 ? "ring-1 ring-amber-500/40" : ""}`}
+            } ${f === "onboarded" && filter !== f && counts && counts.pending_briefing > 0 ? "ring-1 ring-amber-500/40" : ""}`}
           >
             {f === "all" ? `All (${assets.length})`
               : f === "upload" ? `Uploads (${assets.filter(a => a.source === "upload").length})`
               : f === "ai" ? `AI (${assets.filter(a => a.source === "ai_generated").length})`
-              : f === "pending_briefing" ? `Needs briefing (${assets.filter(a => a.status === "pending_briefing").length})`
+              : f === "onboarded" ? `Needs briefing (${assets.filter(a => a.status === "onboarded").length})`
               : `Untagged (${assets.filter(a => !a.context).length})`}
           </button>
         ))}
@@ -158,10 +158,10 @@ function MediaContent({ siteId }: { siteId: string }) {
               {asset.quality ? Math.round(asset.quality * 100) : "—"}
             </span>
             <span className={`absolute top-1 left-1 h-1.5 w-1.5 rounded-full ${
-              asset.status === "triaged" ? "bg-success"
-                : asset.status === "pending_briefing" ? "bg-amber-500"
-                : asset.status === "shelved" ? "bg-muted"
-                : asset.status === "flagged" || asset.status === "quarantined" ? "bg-danger"
+              asset.status === "analyzed" ? "bg-success"
+                : asset.status === "briefed" ? "bg-success"
+                : asset.status === "onboarded" ? "bg-amber-500"
+                : asset.status === "failed" ? "bg-danger"
                 : "bg-warning"
             }`} />
             {!asset.context && (
@@ -231,10 +231,10 @@ function MediaContent({ siteId }: { siteId: string }) {
                   <span className="text-muted capitalize">{selected.source}</span>
                   <span className="text-muted">·</span>
                   <span className={
-                    selected.status === "triaged" ? "text-success"
-                      : selected.status === "pending_briefing" ? "text-amber-400"
+                    selected.status === "briefed" ? "text-success"
+                      : selected.status === "onboarded" ? "text-amber-400"
                       : "text-warning"
-                  }>{selected.status === "pending_briefing" ? "needs briefing" : selected.status}</span>
+                  }>{selected.status === "onboarded" ? "needs briefing" : selected.status}</span>
                   {selected.autoContext && <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning">Auto-generated</span>}
                 </div>
 

@@ -163,12 +163,8 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
       `.catch(() => {});
     }
 
-    // Update source asset
-    await sql`
-      UPDATE media_assets SET triage_status = 'consumed'
-      WHERE id = (SELECT source_asset_id FROM social_posts WHERE id = ${postId})
-        AND triage_status = 'scheduled'
-    `;
+    // Asset utilization is no longer a triage_status — publishing a post
+    // does not mutate the source asset's processing stage.
 
     // Audit trail
     await sql`

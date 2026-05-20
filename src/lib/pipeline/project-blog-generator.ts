@@ -70,7 +70,7 @@ export async function generateProjectArticle(
     WHERE ap.project_id = ${projectId}
       AND ma.context_note IS NOT NULL
       AND ma.context_note != ''
-      AND ma.triage_status = 'triaged'
+      AND ma.triage_status = 'analyzed'
     ORDER BY ma.sort_order ASC NULLS LAST
   `;
 
@@ -390,7 +390,7 @@ export async function generateProjectArticleFromPrompt(
     JOIN asset_projects ap ON ap.asset_id = ma.id
     WHERE ap.project_id = ${projectId}
       AND ma.context_note IS NOT NULL AND ma.context_note != ''
-      AND ma.triage_status = 'triaged'
+      AND ma.triage_status = 'analyzed'
     ORDER BY ma.sort_order ASC NULLS LAST
   `;
 

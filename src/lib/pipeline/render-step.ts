@@ -97,7 +97,7 @@ export async function renderPendingAssets(siteId: string): Promise<{
     SELECT id FROM media_assets
     WHERE site_id = ${siteId}
       AND render_status = 'pending'
-      AND triage_status IN ('triaged', 'scheduled')
+      AND triage_status = 'analyzed'
       AND media_type LIKE 'image%'
     ORDER BY quality_score DESC NULLS LAST
     LIMIT 20

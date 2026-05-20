@@ -57,7 +57,7 @@ export async function processPdf(
     VALUES (
       ${siteId}, ${pdfUrl}, 'pdf',
       ${contextNote || `${pageCount}-page document`},
-      'pdf', 'triaged',
+      'pdf', 'onboarded',
       ${JSON.stringify(parentMetadata)},
       ${baseSortOrder + (pageCount + 1) * 0.001}
     )
@@ -66,7 +66,7 @@ export async function processPdf(
   const parentId = parentAsset.id as string;
   allAssetIds.push(parentId);
 
-  // Link parent PDF to project immediately (parent is 'triaged', won't go through pipeline)
+  // Link parent PDF to project immediately (parent is 'onboarded', won't go through pipeline)
   if (projectId) {
     await sql`
       INSERT INTO asset_projects (asset_id, project_id)
@@ -116,7 +116,7 @@ export async function processPdf(
       )
       VALUES (
         ${siteId}, ${thumbnailUrl}, 'image',
-        ${pageNote}, 'pdf', 'pending_briefing',
+        ${pageNote}, 'pdf', 'onboarded',
         ${JSON.stringify(thumbMetadata)},
         ${pageSortOrder}
       )

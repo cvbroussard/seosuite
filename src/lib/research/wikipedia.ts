@@ -534,7 +534,7 @@ Content note: "${contextNote}"
                   content_tags, metadata
                 ) VALUES (
                   ${siteId}, ${url}, 'image', ${imgPrompt.alt},
-                  'ai_generated', 'triaged', 0.95,
+                  'ai_generated', 'briefed', 0.95,
                   ${imageTags},
                   ${JSON.stringify({
                     ai_generated: true,

@@ -148,7 +148,7 @@ export async function quarantineAsset(
 ): Promise<void> {
   await sql`
     UPDATE media_assets
-    SET triage_status = 'quarantined',
+    SET archived_at = NOW(),
         metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ quarantine_reason: reason, quarantined_at: new Date().toISOString() })}::jsonb
     WHERE id = ${assetId}
   `;
@@ -162,13 +162,14 @@ export async function quarantineAsset(
 }
 
 /**
- * Release a quarantined asset back to triaged.
+ * Release a quarantined asset back to briefed (un-archive).
  */
 export async function releaseAsset(assetId: string): Promise<void> {
   await sql`
     UPDATE media_assets
-    SET triage_status = 'triaged',
+    SET triage_status = 'briefed',
+        archived_at = NULL,
         metadata = COALESCE(metadata, '{}'::jsonb) - 'quarantine_reason' - 'quarantined_at'
-    WHERE id = ${assetId} AND triage_status = 'quarantined'
+    WHERE id = ${assetId} AND archived_at IS NOT NULL
   `;
 }

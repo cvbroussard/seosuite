@@ -186,7 +186,7 @@ export default async function MediaPage({ searchParams }: Props) {
     });
   }
   if (briefingFilter === "pending") {
-    filtered = filtered.filter(a => a.triage_status === "pending_briefing");
+    filtered = filtered.filter(a => a.triage_status === "onboarded");
   }
 
   let filteredAssets = filtered.slice(0, 200);
@@ -198,7 +198,7 @@ export default async function MediaPage({ searchParams }: Props) {
       COUNT(*)::int AS total,
       COUNT(*) FILTER (WHERE COALESCE(source, 'upload') = 'upload')::int AS uploads,
       COUNT(*) FILTER (WHERE source = 'ai_generated')::int AS ai_generated,
-      COUNT(*) FILTER (WHERE triage_status = 'pending_briefing' AND archived_at IS NULL)::int AS pending_briefing,
+      COUNT(*) FILTER (WHERE triage_status = 'onboarded' AND archived_at IS NULL)::int AS pending_briefing,
       COUNT(*) FILTER (WHERE archived_at IS NOT NULL)::int AS archived
     FROM media_assets WHERE site_id = ${siteId}
   `;

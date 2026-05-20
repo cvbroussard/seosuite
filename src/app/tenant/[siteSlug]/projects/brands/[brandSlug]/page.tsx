@@ -103,7 +103,7 @@ export default async function BrandDetailPage({ params }: Props) {
       JOIN asset_brands ab ON ab.asset_id = ma.id
       WHERE ab.brand_id = ${brandId}
         AND ma.media_type LIKE 'image%'
-        AND ma.triage_status = 'triaged'
+        AND ma.triage_status = 'briefed'
       ORDER BY ma.quality_score DESC NULLS LAST
       LIMIT 12
     `,

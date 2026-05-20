@@ -142,7 +142,7 @@ async function findMatchingAsset(
     FROM media_assets ma
     LEFT JOIN blog_posts bp ON bp.source_asset_id = ma.id
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status IN ('triaged', 'scheduled')
+      AND ma.triage_status = 'analyzed'
       AND ma.quality_score >= ${publishAbove(qt)}
       AND bp.id IS NULL
     ORDER BY

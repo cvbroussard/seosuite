@@ -17,7 +17,7 @@ import {
  * for navigation context only).
  *
  * Per the briefing-required principle (project_tracpost_generation_briefing_separation.md):
- *   - All outputs land in `media_assets` rows with `triage_status='pending_briefing'`
+ *   - All outputs land in `media_assets` rows with `triage_status='briefed'`
  *   - Modify-only tools (edit/enhance/regenerate) create SIBLINGS — original preserved
  *   - All generated assets carry full provenance metadata (tool, prompt, model, source/parent)
  *   - Subscriber briefs the new asset via the standard PATCH /api/assets/:id flow
@@ -32,7 +32,7 @@ import {
  *   }
  *
  * Returns:
- *   { newAssetId: string, triage_status: "pending_briefing" }
+ *   { newAssetId: string, triage_status: "briefed" }
  *   For draft-caption: { caption: string } (no asset created — subscriber edits + saves)
  */
 export async function POST(
@@ -90,7 +90,7 @@ export async function POST(
           inheritFrom: asset,
           isSibling: true,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "pending_briefing" });
+        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
       }
 
       case "enhance":
@@ -119,12 +119,12 @@ export async function POST(
           inheritFrom: asset,
           isSibling: true,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "pending_briefing" });
+        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
       }
 
       case "animate": {
         // Kling motion from this still. Uses the same Kling primitive as
-        // the cron-driven Video Pool; result lands in pending_briefing.
+        // the cron-driven Video Pool; result lands in briefed.
         const duration = (body.duration === 10 ? "10" : "5") as "5" | "10";
         const motionPrompt = body.instruction
           || `Add subtle natural motion to this scene. ${(asset.context_note as string) || ""}`.trim();
@@ -146,7 +146,7 @@ export async function POST(
           ) VALUES (
             ${asset.site_id}, ${video.url}, 'video',
             NULL,
-            'ai_generated', 'pending_briefing', ${assetId},
+            'ai_generated', 'briefed', ${assetId},
             ${asset.content_tags || []},
             ${JSON.stringify({
               ai_generated: true,
@@ -161,7 +161,7 @@ export async function POST(
           )
           RETURNING id
         `;
-        return NextResponse.json({ newAssetId: inserted.id, triage_status: "pending_briefing" });
+        return NextResponse.json({ newAssetId: inserted.id, triage_status: "briefed" });
       }
 
       case "generate-variation": {
@@ -194,7 +194,7 @@ export async function POST(
           inheritFrom: asset,
           isSibling: false,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "pending_briefing" });
+        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
       }
 
       case "generate-from-prompt": {
@@ -223,7 +223,7 @@ export async function POST(
           inheritFrom: null, // no inheritance — this is fresh content
           isSibling: false,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "pending_briefing" });
+        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
       }
 
       case "draft-caption": {
@@ -254,7 +254,7 @@ export async function POST(
 
 /**
  * Common path for persisting a Gemini-generated image as a new
- * pending_briefing asset with proper provenance + inheritance.
+ * briefed asset with proper provenance + inheritance.
  */
 async function persistGeneratedAsset(opts: {
   siteId: string;
@@ -300,7 +300,7 @@ async function persistGeneratedAsset(opts: {
       content_tags, metadata
     ) VALUES (
       ${opts.siteId}, ${url}, ${opts.mediaType}, NULL,
-      'ai_generated', 'pending_briefing', ${sourceAssetId},
+      'ai_generated', 'briefed', ${sourceAssetId},
       ${contentTags},
       ${JSON.stringify(metadata)}::jsonb
     )

@@ -96,7 +96,7 @@ export default async function ProvisioningPage() {
               SELECT id, storage_url, context_note, quality_score, metadata, ai_analysis
               FROM media_assets
               WHERE site_id = ${sub.site_id}
-                AND triage_status IN ('triaged', 'scheduled')
+                AND triage_status IN ('briefed', 'analyzed')
               ORDER BY quality_score DESC
               LIMIT 50
             ` : [];

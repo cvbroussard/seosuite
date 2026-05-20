@@ -63,7 +63,7 @@ export default async function ProjectPage({ params }: Props) {
       FROM media_assets ma
       JOIN asset_projects ap ON ap.asset_id = ma.id
       WHERE ap.project_id = ${projectId}
-        AND ma.triage_status = 'triaged'
+        AND ma.triage_status = 'briefed'
       ORDER BY ma.sort_order ASC NULLS LAST
     `,
     sql`

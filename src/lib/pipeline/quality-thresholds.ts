@@ -58,7 +58,7 @@ export async function recalculateThresholds(siteId: string): Promise<QualityThre
       MAX(quality_score) AS max_score
     FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status IN ('triaged', 'consumed')
+      AND triage_status = 'analyzed'
       AND quality_score IS NOT NULL
   `;
 

@@ -46,10 +46,10 @@ export default async function DashboardOverview() {
     `,
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE triage_status = 'pending_briefing')::int AS received,
-        COUNT(*) FILTER (WHERE triage_status = 'triaged')::int AS ready,
-        COUNT(*) FILTER (WHERE triage_status = 'shelved')::int AS shelved,
-        COUNT(*) FILTER (WHERE triage_status = 'flagged')::int AS flagged
+        COUNT(*) FILTER (WHERE triage_status = 'onboarded')::int AS onboarded,
+        COUNT(*) FILTER (WHERE triage_status = 'briefed')::int AS briefed,
+        COUNT(*) FILTER (WHERE triage_status = 'analyzed')::int AS analyzed,
+        COUNT(*) FILTER (WHERE triage_status = 'failed')::int AS failed
       FROM media_assets WHERE site_id = ${siteId}
     `,
     sql`
@@ -64,7 +64,7 @@ export default async function DashboardOverview() {
     sql`
       SELECT
         (SELECT COUNT(*)::int FROM media_assets
-         WHERE site_id = ${siteId} AND triage_status = 'triaged') AS triaged,
+         WHERE site_id = ${siteId} AND triage_status = 'briefed') AS triaged,
         (SELECT COUNT(*)::int FROM publishing_slots
          WHERE site_id = ${siteId} AND status = 'open'
            AND scheduled_at <= ${sevenDaysFromNow}) AS open_slots,
@@ -204,8 +204,8 @@ export default async function DashboardOverview() {
           <p className="mt-1 text-sm text-muted">Published</p>
         </div>
         <div>
-          <p className={`text-3xl font-semibold ${a.ready + a.shelved > 0 ? "" : "text-warning"}`}>
-            {a.ready + a.shelved}
+          <p className={`text-3xl font-semibold ${a.analyzed > 0 ? "" : "text-warning"}`}>
+            {a.analyzed}
           </p>
           <p className="mt-1 text-sm text-muted">Assets Ready</p>
         </div>
@@ -216,20 +216,20 @@ export default async function DashboardOverview() {
         <h2 className="mb-4">Media Pipeline</h2>
         <div className="grid grid-cols-4 gap-6">
           <div>
-            <p className="text-2xl font-semibold">{a.received}</p>
-            <p className="mt-1 text-sm text-muted">Awaiting Triage</p>
+            <p className="text-2xl font-semibold">{a.onboarded}</p>
+            <p className="mt-1 text-sm text-muted">Awaiting Briefing</p>
           </div>
           <div>
-            <p className="text-2xl font-semibold">{a.ready}</p>
-            <p className="mt-1 text-sm text-muted">Ready</p>
+            <p className="text-2xl font-semibold">{a.briefed}</p>
+            <p className="mt-1 text-sm text-muted">Briefed</p>
           </div>
           <div>
-            <p className="text-2xl font-semibold">{a.shelved}</p>
-            <p className="mt-1 text-sm text-muted">Shelved</p>
+            <p className="text-2xl font-semibold">{a.analyzed}</p>
+            <p className="mt-1 text-sm text-muted">Analyzed</p>
           </div>
           <div>
-            <p className={`text-2xl font-semibold ${a.flagged > 0 ? "text-warning" : ""}`}>{a.flagged}</p>
-            <p className="mt-1 text-sm text-muted">Flagged</p>
+            <p className={`text-2xl font-semibold ${a.failed > 0 ? "text-warning" : ""}`}>{a.failed}</p>
+            <p className="mt-1 text-sm text-muted">Failed</p>
           </div>
         </div>
       </section>

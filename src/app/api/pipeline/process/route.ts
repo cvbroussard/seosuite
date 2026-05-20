@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     SELECT id, site_id, storage_url, media_type, metadata
     FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status = 'pending_briefing'
+      AND triage_status = 'onboarded'
       AND ai_analysis IS NULL
     ORDER BY created_at ASC
     LIMIT 50
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       // Triage now runs WITH subscriber context (caption + pillar + brands +
       // project), so AI returns a context-aware url_slug rather than guessing
       // from pixels alone. Until the subscriber briefs the asset it stays in
-      // pending_briefing with deterministic prep (HEIC / EXIF / project tag)
+      // onboarded with deterministic prep (HEIC / EXIF / project tag)
       // already done above, ready for the briefing-flip pipeline to take over.
 
       processed++;

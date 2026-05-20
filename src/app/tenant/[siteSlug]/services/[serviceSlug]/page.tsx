@@ -89,7 +89,7 @@ export default async function ServiceDetailPage({ params }: Props) {
     FROM asset_services asv
     JOIN media_assets ma ON ma.id = asv.asset_id
     WHERE asv.service_id = ${service.id}
-      AND ma.triage_status = 'triaged'
+      AND ma.triage_status = 'briefed'
       AND ma.media_type LIKE 'image%'
     ORDER BY ma.quality_score DESC NULLS LAST
     LIMIT 12

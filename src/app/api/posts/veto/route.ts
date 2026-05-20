@@ -5,9 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * POST /api/posts/veto — Subscriber's one lever over the pipeline.
  *
- * Pulls back a scheduled post. The asset returns to "shelved" status
- * and the publishing slot is marked "vetoed". The pipeline will
- * attempt to fill the slot with the next best asset on next run.
+ * Pulls back a scheduled post. The publishing slot is marked "vetoed".
+ * The pipeline will attempt to fill the slot with the next best asset
+ * on next run. The source asset's processing stage is unchanged —
+ * utilization is no longer a triage_status.
  *
  * Body: { post_id, reason? }
  */
@@ -59,11 +60,12 @@ export async function POST(req: NextRequest) {
       WHERE id = ${post_id}
     `;
 
-    // Return asset to shelf
+    // Record the veto reason on the asset for audit. Processing stage
+    // (triage_status) is unchanged — utilization is no longer a status.
     if (post.source_asset_id) {
       await sql`
         UPDATE media_assets
-        SET triage_status = 'shelved', shelve_reason = 'Vetoed by subscriber'
+        SET shelve_reason = 'Vetoed by subscriber'
         WHERE id = ${post.source_asset_id}
       `;
     }
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       vetoed: true,
       post_id,
-      message: "Post vetoed. Asset returned to shelf. Slot will be refilled on next pipeline run.",
+      message: "Post vetoed. Slot will be refilled on next pipeline run.",
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

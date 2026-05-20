@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
       SELECT id, storage_url, context_note, quality_score
       FROM media_assets
       WHERE site_id = ${siteId}
-        AND triage_status = 'triaged'
+        AND triage_status = 'briefed'
         AND media_type LIKE 'image%'
       ORDER BY quality_score DESC NULLS LAST
       LIMIT 12

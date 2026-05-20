@@ -33,7 +33,7 @@ export default async function ContentQueuePage() {
              ma.quality_score, ma.created_at, s.name AS site_name
       FROM media_assets ma
       JOIN sites s ON ma.site_id = s.id
-      WHERE ma.triage_status = 'flagged'
+      WHERE ma.archived_at IS NOT NULL
       ORDER BY ma.created_at DESC
     `,
   ]);

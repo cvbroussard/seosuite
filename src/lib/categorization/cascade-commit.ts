@@ -77,7 +77,9 @@ async function persistCascadeArtifact(
 ): Promise<{ categoryRows: number }> {
   await sql`
     UPDATE media_assets
-    SET asset_analysis = ${JSON.stringify(analysis)}::jsonb, updated_at = NOW()
+    SET asset_analysis = ${JSON.stringify(analysis)}::jsonb,
+        triage_status = 'analyzed',
+        updated_at = NOW()
     WHERE id = ${assetId}
   `;
 

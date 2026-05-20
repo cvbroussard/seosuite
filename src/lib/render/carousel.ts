@@ -108,7 +108,7 @@ export async function composeCarousel(
     FROM asset_projects ap
     JOIN media_assets ma ON ma.id = ap.asset_id
     WHERE ap.project_id = ${projectId}
-      AND ma.triage_status IN ('triaged', 'scheduled', 'consumed')
+      AND ma.triage_status = 'analyzed'
       AND ma.media_type LIKE 'image%'
       AND ma.quality_score >= ${shelveBelow(qt)}
     ORDER BY ma.date_taken ASC NULLS LAST, ma.created_at ASC
@@ -215,7 +215,7 @@ export async function shouldComposeCarousel(projectId: string): Promise<boolean>
     JOIN media_assets ma ON ma.id = ap.asset_id
     JOIN projects p ON p.id = ap.project_id
     WHERE ap.project_id = ${projectId}
-      AND ma.triage_status IN ('triaged', 'scheduled', 'consumed')
+      AND ma.triage_status = 'analyzed'
       AND ma.media_type LIKE 'image%'
     GROUP BY p.end_date
   `;

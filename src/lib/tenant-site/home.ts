@@ -50,7 +50,7 @@ export async function loadHomePage(siteId: string): Promise<HomePageData> {
     SELECT storage_url, context_note
     FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status = 'triaged'
+      AND triage_status = 'briefed'
       AND media_type LIKE 'image%'
       ${heroAssetId ? sql`AND id != ${heroAssetId}` : sql``}
     ORDER BY quality_score DESC NULLS LAST
@@ -127,7 +127,7 @@ async function resolveHeroImage(
   const [top] = await sql`
     SELECT storage_url FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status = 'triaged'
+      AND triage_status = 'briefed'
       AND media_type LIKE 'image%'
     ORDER BY quality_score DESC NULLS LAST
     LIMIT 1

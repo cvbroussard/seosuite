@@ -3,16 +3,13 @@ import type { AutopilotConfig } from "./types";
 import { primaryPillarFromTags, type PillarConfig } from "@/lib/pillars";
 
 /**
- * Fill open publishing slots with the best available triaged assets.
+ * Fill open publishing slots with the best available analyzed assets.
  *
  * For each open slot:
- * 1. Find the highest-quality triaged asset matching the slot's
+ * 1. Find the highest-quality analyzed asset matching the slot's
  *    content_pillar and platform_fit
  * 2. Create a social_post linked to the asset and slot
- * 3. Update the asset to "scheduled" and the slot to "filled"
- *
- * Falls back to shelf inventory when no triaged assets available
- * (if backfill_from_shelf is enabled).
+ * 3. Mark the slot "filled" (asset processing stage is unchanged)
  */
 export async function fillSlots(siteId: string): Promise<number> {
   // Fetch site config + pillar_config (LOCKED 2026-05-09 — pillar
@@ -43,10 +40,8 @@ export async function fillSlots(siteId: string): Promise<number> {
   let filled = 0;
 
   for (const slot of openSlots) {
-    // Find best matching asset: triaged first, then shelved if backfill enabled
-    const statusFilter = config.backfill_from_shelf
-      ? ["triaged", "shelved"]
-      : ["triaged"];
+    // Find best matching asset: analyzed assets are the consumable pool.
+    const statusFilter = ["analyzed"];
 
     let asset = null;
 
@@ -125,12 +120,8 @@ export async function fillSlots(siteId: string): Promise<number> {
       WHERE id = ${slot.id}
     `;
 
-    // Update asset → scheduled
-    await sql`
-      UPDATE media_assets
-      SET triage_status = 'scheduled'
-      WHERE id = ${asset.id}
-    `;
+    // Asset utilization is no longer a triage_status — slotting an asset
+    // does not mutate its processing stage.
 
     // Log in post history
     await sql`

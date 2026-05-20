@@ -129,11 +129,11 @@ export async function POST(req: NextRequest) {
 
     // Briefed-on-upload optimization (#166): when subscriber provides a
     // substantive context_note (≥40 chars per the readiness floor) at upload,
-    // skip the 'pending_briefing' intermediate state and land directly in
-    // 'triaged'. Mirrors PATCH-time briefing flip but avoids a follow-up
+    // skip the 'onboarded' intermediate state and land directly in
+    // 'briefed'. Mirrors PATCH-time briefing flip but avoids a follow-up
     // PATCH for the common case of "subscriber types caption then uploads".
     const briefedOnUpload = (context_note || "").trim().length >= 40;
-    const initialStatus = briefedOnUpload ? "triaged" : "pending_briefing";
+    const initialStatus = briefedOnUpload ? "briefed" : "onboarded";
     const briefedMeta = briefedOnUpload
       ? {
           briefed_at: new Date().toISOString(),

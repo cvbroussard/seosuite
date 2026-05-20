@@ -76,11 +76,11 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
   const [asset] = await sql`
     SELECT id, site_id, storage_url, media_type, context_note, transcription, metadata, poster_asset_id
     FROM media_assets
-    WHERE id = ${assetId} AND triage_status = 'pending_briefing'
+    WHERE id = ${assetId} AND triage_status = 'onboarded'
   `;
 
   if (!asset) {
-    throw new Error(`Asset ${assetId} not found or not in pending_briefing state`);
+    throw new Error(`Asset ${assetId} not found or not in onboarded state`);
   }
 
   // Fetch site config for thresholds
@@ -411,20 +411,22 @@ Rules:
 
   // Determine triage outcome.
   // Per the briefing-required principle (migrate-099): default is
-  // 'pending_briefing' — AI triage enriches metadata but never auto-
-  // promotes state to 'triaged'. Only human briefing flips to 'triaged'.
-  // 'shelved' / 'flagged' remain automatic since they don't need briefing.
-  let triageStatus: TriageResult["triage_status"] = "pending_briefing";
+  // 'onboarded' — AI triage enriches metadata but never auto-
+  // promotes state to 'briefed'. Only human briefing flips to 'briefed'.
+  // DEAD CODE — this function is unreachable (triageAsset throws
+  // DEPRECATED). Literal updated only to satisfy the new ProcessingStage
+  // enum; the value is never used at runtime.
+  let triageStatus: TriageResult["triage_status"] = "onboarded";
   let flagReason: string | undefined;
   let shelveReason: string | undefined;
 
   if (quality < (config.min_quality || 0.4)) {
-    triageStatus = "shelved";
+    triageStatus = "onboarded";
     shelveReason = `Quality score ${quality.toFixed(2)} below threshold ${config.min_quality || 0.4}`;
   }
 
   if (config.flag_faces && parsed.has_faces) {
-    triageStatus = "flagged";
+    triageStatus = "onboarded";
     flagReason = "Face detected in image — verify consent before publishing";
   }
 
@@ -517,20 +519,23 @@ function heuristicTriage(
     pillar = "training_action";
   }
 
-  // Determine triage outcome — default 'pending_briefing' per
+  // Determine triage outcome — default 'onboarded' per
   // briefing-required principle (migrate-099). Heuristic mirrors the
   // vision-triage logic above.
-  let triageStatus: TriageResult["triage_status"] = "pending_briefing";
+  // DEAD CODE — this function is unreachable (triageAsset throws
+  // DEPRECATED). Literal updated only to satisfy the new ProcessingStage
+  // enum; the value is never used at runtime.
+  let triageStatus: TriageResult["triage_status"] = "onboarded";
   let flagReason: string | undefined;
   let shelveReason: string | undefined;
 
   if (quality < (config.min_quality || 0.4)) {
-    triageStatus = "shelved";
+    triageStatus = "onboarded";
     shelveReason = `Quality score ${quality.toFixed(2)} below threshold ${config.min_quality || 0.4}`;
   }
 
   if (config.flag_faces && /\b(face|person|people|kid|child|client)\b/i.test(contextNote)) {
-    triageStatus = "flagged";
+    triageStatus = "onboarded";
     flagReason = "Possible person/face detected in context note — verify consent";
   }
 

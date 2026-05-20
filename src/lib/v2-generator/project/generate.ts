@@ -51,8 +51,8 @@ export async function generateProjectChapter(
     FROM asset_projects ap
     JOIN media_assets ma ON ma.id = ap.asset_id
     WHERE ap.project_id = ${chapter.project_id}
-      AND ma.triage_status NOT IN ('quarantined','shelved')
-      AND ma.status NOT IN ('deleted','failed')
+      AND ma.triage_status = 'analyzed'
+      AND ma.archived_at IS NULL
       AND (ma.media_type ILIKE 'image%' OR ma.media_type = 'video')
     ORDER BY
       CASE WHEN ma.media_type = 'video' THEN 0 ELSE 1 END,

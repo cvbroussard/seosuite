@@ -52,8 +52,7 @@ export const rewardPromptStrategy: BlogStrategy = {
           SELECT id FROM media_assets
           WHERE site_id = ${assessment.siteId}
             AND id <> ${seedId}
-            AND triage_status = 'triaged' AND archived_at IS NULL
-            AND status NOT IN ('deleted','failed')
+            AND triage_status = 'analyzed' AND archived_at IS NULL
             AND (media_type ILIKE 'image%' OR media_type = 'video')
             AND content_tags && ${pillarTagIds}::text[]
           ORDER BY quality_score DESC NULLS LAST, created_at DESC
@@ -63,8 +62,7 @@ export const rewardPromptStrategy: BlogStrategy = {
           SELECT id FROM media_assets
           WHERE site_id = ${assessment.siteId}
             AND id <> ${seedId}
-            AND triage_status = 'triaged' AND archived_at IS NULL
-            AND status NOT IN ('deleted','failed')
+            AND triage_status = 'analyzed' AND archived_at IS NULL
             AND (media_type ILIKE 'image%' OR media_type = 'video')
           ORDER BY quality_score DESC NULLS LAST, created_at DESC
           LIMIT 8

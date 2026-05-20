@@ -62,7 +62,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const processing = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Poll for server-side processing status (assets at 'pending_briefing')
+  // Poll for server-side processing status (assets at 'onboarded')
   useEffect(() => {
     const siteId = localStorage.getItem(POLL_KEY);
     if (siteId) {
@@ -79,10 +79,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     async function poll() {
       try {
-        // Per #157: status renamed `received` → `pending_briefing`. Polling
-        // surfaces assets that haven't yet been briefed so the UI can prompt
-        // the subscriber to caption them.
-        const res = await fetch(`/api/assets?site_id=${siteId}&status=pending_briefing`);
+        // Polling surfaces assets that haven't yet been briefed (status
+        // 'onboarded') so the UI can prompt the subscriber to caption them.
+        const res = await fetch(`/api/assets?site_id=${siteId}&status=onboarded`);
         if (res.ok) {
           const data = await res.json();
           const count = data.assets?.length || 0;

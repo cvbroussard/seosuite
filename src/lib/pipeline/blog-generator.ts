@@ -155,7 +155,7 @@ export async function generateBlogPost(assetId: string): Promise<string | null> 
     FROM media_assets
     WHERE site_id = ${asset.site_id}
       AND id != ${assetId}
-      AND triage_status IN ('triaged', 'scheduled')
+      AND triage_status = 'analyzed'
       AND quality_score > ${heroAbove(qt)}
       AND storage_url IS NOT NULL
       AND storage_url != ALL(${recentUrls.length > 0 ? recentUrls : ["__none__"]})
@@ -438,7 +438,7 @@ export async function generateBlogFromTopic(topicId: string): Promise<string | n
     SELECT storage_url, context_note
     FROM media_assets
     WHERE site_id = ${topic.site_id}
-      AND triage_status IN ('triaged', 'scheduled')
+      AND triage_status = 'analyzed'
       AND quality_score > ${heroAbove(qt2)}
       AND storage_url IS NOT NULL
     ORDER BY
@@ -517,7 +517,7 @@ export async function generateMissingBlogPosts(siteId: string): Promise<number> 
     FROM media_assets ma
     LEFT JOIN blog_posts bp ON bp.source_asset_id = ma.id
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status IN ('triaged', 'scheduled', 'consumed')
+      AND ma.triage_status = 'analyzed'
       AND bp.id IS NULL
     ORDER BY ma.created_at DESC
     LIMIT 5
@@ -1082,7 +1082,7 @@ export async function generateFromPairing(
     WHERE site_id = ${siteData.site_id}
       AND id != ${asset.id}
       AND source = 'upload'
-      AND triage_status IN ('triaged', 'scheduled')
+      AND triage_status = 'analyzed'
       AND quality_score > ${pairingFloor}
       AND storage_url IS NOT NULL
       AND storage_url != ALL(${excludeUrls})
@@ -1099,7 +1099,7 @@ export async function generateFromPairing(
     WHERE site_id = ${siteData.site_id}
       AND id != ${asset.id}
       AND source = 'ai_generated'
-      AND triage_status IN ('triaged', 'scheduled')
+      AND triage_status = 'analyzed'
       AND quality_score > ${pairingFloor}
       AND storage_url IS NOT NULL
       AND storage_url != ALL(${excludeUrls})
@@ -1119,7 +1119,7 @@ export async function generateFromPairing(
       FROM media_assets
       WHERE site_id = ${siteData.site_id}
         AND id != ${asset.id}
-        AND triage_status IN ('triaged', 'scheduled')
+        AND triage_status = 'analyzed'
         AND quality_score > ${pairingFloor}
         AND storage_url IS NOT NULL
         AND storage_url != ALL(${excludeUrls})
@@ -1352,7 +1352,7 @@ ${blogCorrectionsBlock}
                 ) VALUES (
                   ${siteData.site_id}, ${video.url}, 'video',
                   ${rewardPrompt.prompt.slice(0, 200)},
-                  'ai_generated', 'triaged', 0.95,
+                  'ai_generated', 'briefed', 0.95,
                   ${videoTags},
                   ${JSON.stringify({
                     scene_type: rewardPrompt.scene,

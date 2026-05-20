@@ -419,7 +419,7 @@ export async function captureLogoAsHeroAsset(
         ${storageUrl},
         ${contentType},
         'brand_logo',
-        'pending_briefing',
+        'onboarded',
         NOW(),
         ${`Logo for ${brandName} (auto-fetched from ${brandUrl})`},
         ${JSON.stringify({

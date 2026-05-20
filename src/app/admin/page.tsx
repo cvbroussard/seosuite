@@ -17,10 +17,10 @@ export default async function AdminOverview() {
     `,
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE triage_status = 'pending_briefing')::int AS received,
-        COUNT(*) FILTER (WHERE triage_status = 'triaged')::int AS triaged,
-        COUNT(*) FILTER (WHERE triage_status = 'scheduled')::int AS scheduled,
-        COUNT(*) FILTER (WHERE triage_status = 'flagged')::int AS flagged
+        COUNT(*) FILTER (WHERE triage_status = 'onboarded')::int AS onboarded,
+        COUNT(*) FILTER (WHERE triage_status = 'briefed')::int AS briefed,
+        COUNT(*) FILTER (WHERE triage_status = 'analyzed')::int AS analyzed,
+        COUNT(*) FILTER (WHERE triage_status = 'failed')::int AS failed
       FROM media_assets
     `,
   ]);
@@ -35,10 +35,10 @@ export default async function AdminOverview() {
   ];
 
   const pipeline = [
-    { label: "Received (untriaged)", value: assets[0].received },
-    { label: "Triaged (ready)", value: assets[0].triaged },
-    { label: "Scheduled", value: assets[0].scheduled },
-    { label: "Flagged", value: assets[0].flagged, danger: assets[0].flagged > 0 },
+    { label: "Onboarded (awaiting briefing)", value: assets[0].onboarded },
+    { label: "Briefed", value: assets[0].briefed },
+    { label: "Analyzed (ready)", value: assets[0].analyzed },
+    { label: "Failed", value: assets[0].failed, danger: assets[0].failed > 0 },
   ];
 
   return (

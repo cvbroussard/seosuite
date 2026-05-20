@@ -59,8 +59,7 @@ export const pillarFillStrategy: BlogStrategy = {
       SELECT id FROM media_assets
       WHERE site_id = ${assessment.siteId}
         AND (media_type ILIKE 'image%' OR media_type = 'video')
-        AND triage_status = 'triaged' AND archived_at IS NULL
-        AND status NOT IN ('deleted','failed')
+        AND triage_status = 'analyzed' AND archived_at IS NULL
         AND content_tags && ${gapTagIds}::text[]
         AND id <> ALL(${usedIds}::uuid[])
       ORDER BY
@@ -75,8 +74,7 @@ export const pillarFillStrategy: BlogStrategy = {
       SELECT id FROM media_assets
       WHERE site_id = ${assessment.siteId}
         AND id <> ${seed.id}
-        AND triage_status = 'triaged' AND archived_at IS NULL
-        AND status NOT IN ('deleted','failed')
+        AND triage_status = 'analyzed' AND archived_at IS NULL
         AND (media_type ILIKE 'image%' OR media_type = 'video')
         AND content_tags && ${gapTagIds}::text[]
       ORDER BY quality_score DESC NULLS LAST, created_at DESC

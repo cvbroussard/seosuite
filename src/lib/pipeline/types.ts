@@ -1,14 +1,23 @@
-/** Triage statuses for media assets */
+/**
+ * Asset processing stage — the monotonic preparation pipeline.
+ *
+ * The DB column is `media_assets.triage_status` (CHECK-constrained,
+ * NOT NULL, default 'uploaded') — a follow-up migration renames the
+ * column to `processing_stage`; this type renames with it.
+ *
+ * This is the SINGLE source of truth for the value set. It is
+ * deliberately ONLY the processing axis. Two things that used to be
+ * commingled here now live elsewhere:
+ *   - Liveness (archived) → orthogonal `archived_at` timestamp.
+ *   - Utilization (scheduled/consumed) → a derived usage history,
+ *     never a stored status value.
+ */
 export type TriageStatus =
-  | "pending_briefing" // arrived (uploaded OR AI-generated), awaiting human briefing — replaces legacy 'received'. AI triage may run for metadata enrichment but does NOT change state. Only human briefing flips to 'triaged'.
-  | "received"         // DEPRECATED — kept for backward compat in old queries during cutover; rows migrated to pending_briefing
-  | "triaged"          // human-briefed and ready for orchestrator pool. ONLY reached via briefing action.
-  | "scheduled"        // promoted into a publishing slot
-  | "shelved"          // usable but not selected (inventory for slow weeks); auto-set when quality below threshold
-  | "flagged"          // AI uncertain, needs subscriber input (< 5%) — face/consent review
-  | "quarantined"      // content guard violation (set by quality-gates)
-  | "consumed"         // used in a published post
-  | "rejected";        // subscriber vetoed or quality too low
+  | "uploaded"   // baseline processing in progress (HEIC convert, video poster, EXIF, R2, URL catalog)
+  | "onboarded"  // baseline processing done — asset is in the system, awaiting human briefing
+  | "briefed"    // transcription saved (human briefing complete)
+  | "analyzed"   // cascade committed — asset_analysis populated; the consumable gate
+  | "failed";    // terminal — baseline processing exhausted retries; recovery is re-upload
 
 /** Content pillars — rotated through the publishing calendar */
 export type ContentPillar =

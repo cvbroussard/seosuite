@@ -123,7 +123,7 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
            ma.content_tags, ma.ai_analysis, ma.context_note
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status IN ('triaged', 'consumed')
+      AND ma.triage_status = 'analyzed'
       AND ma.quality_score >= ${heroThreshold}
       AND ma.media_type LIKE 'image%'
       AND NOT EXISTS (
@@ -213,7 +213,7 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
         ) VALUES (
           ${siteId}, ${video.url}, 'video',
           ${(analysis.description as string) || (candidate.context_note as string) || ''},
-          'ai_generated', 'pending_briefing', 0.85,
+          'ai_generated', 'briefed', 0.85,
           ${candidate.id},
           ${candidate.content_tags || []},
           ${JSON.stringify({
@@ -273,7 +273,7 @@ export async function getPoolStatus(siteId: string): Promise<PoolStatus> {
     WHERE ma.site_id = ${siteId}
       AND ma.source = 'ai_generated'
       AND ma.media_type = 'video'
-      AND ma.triage_status IN ('triaged', 'consumed')
+      AND ma.triage_status = 'analyzed'
   `;
 
   const [weekCount] = await sql`

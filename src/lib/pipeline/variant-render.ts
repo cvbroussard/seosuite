@@ -31,7 +31,7 @@ const VIDEO_OUTPUT_TEMPLATES = new Set<string>(["reel_9x16", "story_9x16", "long
 /**
  * Variant render worker (#163, #172).
  *
- * When an asset is briefed (triage_status flips to 'triaged'), trigger
+ * When an asset is briefed (triage_status flips to 'briefed'), trigger
  * default-template variant rendering. The orchestrator (#168) only picks
  * assets that have a ready variant for the target template, so this
  * worker is what makes briefed assets eligible for autopilot.

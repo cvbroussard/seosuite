@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
            ma.ai_analysis, ma.created_at
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status = 'triaged'
+      AND ma.triage_status = 'briefed'
       AND ma.quality_score >= 0.5
       AND ma.media_type LIKE 'image/%'
       AND NOT EXISTS (

@@ -56,15 +56,18 @@ export async function POST(req: NextRequest) {
   }
   const tpl: DirectorTemplate = TEMPLATES.includes(template) ? template : "reel_9x16";
 
-  // Resolve the asset — seeded UUID, or the most recent triaged image.
+  // Resolve the asset — seeded UUID, or the most recent analyzed image.
+  // The Director Call needs analysis JSON as an input stream, so only
+  // 'analyzed' assets are eligible (cascade-committed). Briefed-but-not-
+  // analyzed assets would direct off incomplete input.
   let assetId: string | null = seedAssetId || null;
   if (!assetId) {
     const [row] = await sql`
       SELECT id FROM media_assets
       WHERE site_id = ${siteId}
         AND media_type ILIKE 'image%'
-        AND triage_status = 'triaged'
-        AND status NOT IN ('deleted','failed')
+        AND triage_status = 'analyzed'
+        AND archived_at IS NULL
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -72,7 +75,7 @@ export async function POST(req: NextRequest) {
   }
   if (!assetId) {
     return NextResponse.json(
-      { error: "No eligible triaged image asset found for this site" },
+      { error: "No eligible analyzed image asset found for this site" },
       { status: 404 },
     );
   }
