@@ -126,7 +126,7 @@ export async function detectBeforeAfterPair(
     FROM asset_projects ap
     JOIN media_assets ma ON ma.id = ap.asset_id
     WHERE ap.project_id = ${projectId}
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
       AND ma.media_type LIKE 'image%'
       AND ma.quality_score >= ${minScore}
     ORDER BY ma.date_taken ASC NULLS LAST, ma.created_at ASC

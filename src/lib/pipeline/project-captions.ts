@@ -237,7 +237,7 @@ export async function maybeGenerateArticlePrompts(projectId: string): Promise<bo
     JOIN asset_projects ap ON ap.asset_id = ma.id
     WHERE ap.project_id = ${projectId}
       AND ma.context_note IS NOT NULL AND ma.context_note != ''
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
   `;
   if ((count?.c || 0) < 3) return false;
 
@@ -506,7 +506,7 @@ export async function generateAllCaptions(projectId: string): Promise<number> {
     JOIN asset_projects ap ON ap.asset_id = ma.id
     WHERE ap.project_id = ${projectId}
       AND (ma.context_note IS NULL OR ma.context_note = '')
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
     ORDER BY ma.sort_order ASC NULLS LAST
   `;
 

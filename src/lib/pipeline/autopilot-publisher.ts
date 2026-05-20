@@ -78,7 +78,7 @@ async function selectNextAsset(
            ma.variants
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
       AND ma.quality_score >= ${threshold}
       AND ma.media_type LIKE 'image%'
       AND ma.render_status = 'rendered'
@@ -141,7 +141,7 @@ async function selectPoolVideo(
     WHERE ma.site_id = ${siteId}
       AND ma.source = 'ai_generated'
       AND ma.media_type = 'video'
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
       AND NOT EXISTS (
         SELECT 1 FROM social_posts sp
         JOIN social_accounts sa ON sp.account_id = sa.id

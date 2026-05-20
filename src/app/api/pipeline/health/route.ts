@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       sql`
         SELECT
           (SELECT COUNT(*)::int FROM media_assets
-           WHERE site_id = ${siteId} AND triage_status = 'briefed') AS triaged_count,
+           WHERE site_id = ${siteId} AND processing_stage = 'briefed') AS triaged_count,
           (SELECT COUNT(*)::int FROM publishing_slots
            WHERE site_id = ${siteId} AND status = 'open'
              AND scheduled_at <= ${sevenDaysFromNow}) AS open_slots_7d,
@@ -56,10 +56,10 @@ export async function GET(req: NextRequest) {
            JOIN social_accounts sa ON sp.account_id = sa.id
            WHERE sa.site_id = ${siteId} AND sp.status = 'scheduled') AS scheduled_count,
           (SELECT COUNT(*)::int FROM media_assets
-           WHERE site_id = ${siteId} AND triage_status = 'onboarded') AS pending_count
+           WHERE site_id = ${siteId} AND processing_stage = 'onboarded') AS pending_count
       `,
       sql`
-        SELECT id, storage_url AS url, media_type, context_note, triage_status, created_at
+        SELECT id, storage_url AS url, media_type, context_note, processing_stage, created_at
         FROM media_assets
         WHERE site_id = ${siteId}
         ORDER BY created_at DESC

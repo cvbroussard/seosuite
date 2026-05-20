@@ -62,7 +62,7 @@ export async function syncRssFeeds(siteId: string): Promise<number> {
         });
 
         await sql`
-          INSERT INTO media_assets (site_id, source, media_type, triage_status, context_note, metadata, created_at)
+          INSERT INTO media_assets (site_id, source, media_type, processing_stage, context_note, metadata, created_at)
           VALUES (
             ${siteId},
             'rss',

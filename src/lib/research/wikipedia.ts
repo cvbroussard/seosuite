@@ -530,7 +530,7 @@ Content note: "${contextNote}"
               const [newAsset] = await sql`
                 INSERT INTO media_assets (
                   site_id, storage_url, media_type, context_note,
-                  source, triage_status, quality_score,
+                  source, processing_stage, quality_score,
                   content_tags, metadata
                 ) VALUES (
                   ${siteId}, ${url}, 'image', ${imgPrompt.alt},

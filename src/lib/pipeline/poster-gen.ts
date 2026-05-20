@@ -61,7 +61,7 @@ export async function generatePosterForAsset(
   const [posterAsset] = await sql`
     INSERT INTO media_assets (
       site_id, storage_url, media_type, source,
-      triage_status, sort_order, metadata
+      processing_stage, sort_order, metadata
     )
     VALUES (
       ${siteId}, ${posterUrl}, 'image/jpeg', 'video_poster',

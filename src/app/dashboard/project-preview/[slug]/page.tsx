@@ -33,7 +33,7 @@ export default async function ProjectPreviewPage({
     FROM media_assets ma
     JOIN asset_projects ap ON ap.asset_id = ma.id
     WHERE ap.project_id = ${projectId}
-      AND ma.triage_status = 'briefed'
+      AND ma.processing_stage = 'briefed'
     ORDER BY ma.sort_order ASC NULLS LAST
   `;
 

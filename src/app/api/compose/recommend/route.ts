@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
           FROM media_assets
           WHERE site_id = ${siteId}
             AND media_type ILIKE ANY(${typePatterns}::text[])
-            AND triage_status IN ('briefed', 'analyzed')
+            AND processing_stage IN ('briefed', 'analyzed')
             AND archived_at IS NULL
             AND id <> ALL(${Array.from(usedIds)}::uuid[])
             AND content_tags && ${pillarTagIds}::text[]
@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
           FROM media_assets
           WHERE site_id = ${siteId}
             AND media_type ILIKE ANY(${typePatterns}::text[])
-            AND triage_status IN ('briefed', 'analyzed')
+            AND processing_stage IN ('briefed', 'analyzed')
             AND archived_at IS NULL
             AND id <> ALL(${Array.from(usedIds)}::uuid[])
           ORDER BY quality_score DESC NULLS LAST, created_at DESC

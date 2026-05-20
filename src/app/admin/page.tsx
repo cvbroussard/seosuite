@@ -17,10 +17,10 @@ export default async function AdminOverview() {
     `,
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE triage_status = 'onboarded')::int AS onboarded,
-        COUNT(*) FILTER (WHERE triage_status = 'briefed')::int AS briefed,
-        COUNT(*) FILTER (WHERE triage_status = 'analyzed')::int AS analyzed,
-        COUNT(*) FILTER (WHERE triage_status = 'failed')::int AS failed
+        COUNT(*) FILTER (WHERE processing_stage = 'onboarded')::int AS onboarded,
+        COUNT(*) FILTER (WHERE processing_stage = 'briefed')::int AS briefed,
+        COUNT(*) FILTER (WHERE processing_stage = 'analyzed')::int AS analyzed,
+        COUNT(*) FILTER (WHERE processing_stage = 'failed')::int AS failed
       FROM media_assets
     `,
   ]);

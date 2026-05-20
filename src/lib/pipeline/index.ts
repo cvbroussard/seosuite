@@ -9,7 +9,7 @@ export { autopilotPublish } from "./autopilot-publisher";
 export { loadCadenceConfig, shouldPublishNow } from "./cadence";
 export { runGates, quarantineAsset, releaseAsset } from "./quality-gates";
 export type {
-  TriageStatus,
+  ProcessingStage,
   ContentPillar,
   PlatformFormat,
   PostAuthority,

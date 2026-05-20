@@ -78,7 +78,7 @@ export async function runPipeline(siteId: string): Promise<PipelineRunResult> {
   const receivedAssets = await sql`
     SELECT id FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status = 'onboarded'
+      AND processing_stage = 'onboarded'
       AND ai_analysis IS NULL
     ORDER BY created_at ASC
     LIMIT 50

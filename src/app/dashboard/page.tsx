@@ -46,10 +46,10 @@ export default async function DashboardOverview() {
     `,
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE triage_status = 'onboarded')::int AS onboarded,
-        COUNT(*) FILTER (WHERE triage_status = 'briefed')::int AS briefed,
-        COUNT(*) FILTER (WHERE triage_status = 'analyzed')::int AS analyzed,
-        COUNT(*) FILTER (WHERE triage_status = 'failed')::int AS failed
+        COUNT(*) FILTER (WHERE processing_stage = 'onboarded')::int AS onboarded,
+        COUNT(*) FILTER (WHERE processing_stage = 'briefed')::int AS briefed,
+        COUNT(*) FILTER (WHERE processing_stage = 'analyzed')::int AS analyzed,
+        COUNT(*) FILTER (WHERE processing_stage = 'failed')::int AS failed
       FROM media_assets WHERE site_id = ${siteId}
     `,
     sql`
@@ -64,7 +64,7 @@ export default async function DashboardOverview() {
     sql`
       SELECT
         (SELECT COUNT(*)::int FROM media_assets
-         WHERE site_id = ${siteId} AND triage_status = 'briefed') AS triaged,
+         WHERE site_id = ${siteId} AND processing_stage = 'briefed') AS triaged,
         (SELECT COUNT(*)::int FROM publishing_slots
          WHERE site_id = ${siteId} AND status = 'open'
            AND scheduled_at <= ${sevenDaysFromNow}) AS open_slots,

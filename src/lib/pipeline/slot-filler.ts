@@ -62,7 +62,7 @@ export async function fillSlots(siteId: string): Promise<number> {
         SELECT id, storage_url, media_type, quality_score, content_tags, ai_analysis, variants
         FROM media_assets
         WHERE site_id = ${siteId}
-          AND triage_status = ${status}
+          AND processing_stage = ${status}
           AND quality_score >= ${config.min_quality || 0.4}
           AND ${slot.platform} = ANY(platform_fit)
           ${pillarClause}
@@ -120,7 +120,7 @@ export async function fillSlots(siteId: string): Promise<number> {
       WHERE id = ${slot.id}
     `;
 
-    // Asset utilization is no longer a triage_status — slotting an asset
+    // Asset utilization is no longer a processing_stage — slotting an asset
     // does not mutate its processing stage.
 
     // Log in post history

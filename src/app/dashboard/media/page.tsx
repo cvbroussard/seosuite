@@ -62,7 +62,7 @@ export default async function MediaPage({ searchParams }: Props) {
 
   const allAssets = sortOrder === "oldest"
     ? await sql`
-        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
+        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.processing_stage,
                ma.quality_score, ma.content_tags,
                ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
@@ -80,7 +80,7 @@ export default async function MediaPage({ searchParams }: Props) {
       `
     : sortOrder === "quality"
     ? await sql`
-        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
+        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.processing_stage,
                ma.quality_score, ma.content_tags,
                ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
@@ -98,7 +98,7 @@ export default async function MediaPage({ searchParams }: Props) {
       `
     : sortOrder === "least_used"
     ? await sql`
-        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
+        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.processing_stage,
                ma.quality_score, ma.content_tags,
                ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
@@ -115,7 +115,7 @@ export default async function MediaPage({ searchParams }: Props) {
         LIMIT 500
       `
     : await sql`
-        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.triage_status,
+        SELECT ma.id, ma.storage_url, ma.media_type, ma.context_note, ma.processing_stage,
                ma.quality_score, ma.content_tags,
                ma.source, ma.ai_analysis, ma.asset_analysis, ma.metadata, ma.date_taken, ma.sort_order,
                ma.platform_fit, ma.flag_reason, ma.shelve_reason, ma.created_at,
@@ -186,7 +186,7 @@ export default async function MediaPage({ searchParams }: Props) {
     });
   }
   if (briefingFilter === "pending") {
-    filtered = filtered.filter(a => a.triage_status === "onboarded");
+    filtered = filtered.filter(a => a.processing_stage === "onboarded");
   }
 
   let filteredAssets = filtered.slice(0, 200);
@@ -198,7 +198,7 @@ export default async function MediaPage({ searchParams }: Props) {
       COUNT(*)::int AS total,
       COUNT(*) FILTER (WHERE COALESCE(source, 'upload') = 'upload')::int AS uploads,
       COUNT(*) FILTER (WHERE source = 'ai_generated')::int AS ai_generated,
-      COUNT(*) FILTER (WHERE triage_status = 'onboarded' AND archived_at IS NULL)::int AS pending_briefing,
+      COUNT(*) FILTER (WHERE processing_stage = 'onboarded' AND archived_at IS NULL)::int AS pending_briefing,
       COUNT(*) FILTER (WHERE archived_at IS NOT NULL)::int AS archived
     FROM media_assets WHERE site_id = ${siteId}
   `;

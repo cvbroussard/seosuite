@@ -202,7 +202,7 @@ async function buildActivityFeed(siteId: string) {
   const triaged = await sql`
     SELECT id, context_note, triaged_at
     FROM media_assets
-    WHERE site_id = ${siteId} AND triage_status IN ('briefed', 'analyzed') AND triaged_at IS NOT NULL
+    WHERE site_id = ${siteId} AND processing_stage IN ('briefed', 'analyzed') AND triaged_at IS NOT NULL
     ORDER BY triaged_at DESC
     LIMIT 5
   `;

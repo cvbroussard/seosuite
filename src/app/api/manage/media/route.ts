@@ -20,8 +20,8 @@ export async function GET(req: NextRequest) {
       COUNT(*)::int AS total,
       COUNT(*) FILTER (WHERE source = 'upload')::int AS uploads,
       COUNT(*) FILTER (WHERE source = 'ai_generated')::int AS ai,
-      COUNT(*) FILTER (WHERE triage_status = 'briefed')::int AS triaged,
-      COUNT(*) FILTER (WHERE triage_status = 'onboarded')::int AS pending_briefing,
+      COUNT(*) FILTER (WHERE processing_stage = 'briefed')::int AS triaged,
+      COUNT(*) FILTER (WHERE processing_stage = 'onboarded')::int AS pending_briefing,
       COUNT(*) FILTER (WHERE context_note IS NOT NULL)::int AS with_context,
       COUNT(*) FILTER (WHERE context_note IS NULL)::int AS without_context,
       ROUND(AVG(quality_score)::numeric, 2) AS avg_quality
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   `;
 
   const assets = await sql`
-    SELECT ma.id, ma.storage_url, ma.media_type, ma.source, ma.triage_status, ma.quality_score,
+    SELECT ma.id, ma.storage_url, ma.media_type, ma.source, ma.processing_stage, ma.quality_score,
            ma.context_note,
            COALESCE((ma.metadata->>'context_auto_generated')::boolean, false) AS auto_context,
            (SELECT array_agg(b.name) FROM asset_brands ab JOIN brands b ON b.id = ab.brand_id WHERE ab.asset_id = ma.id) AS brands,
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       url: a.storage_url,
       type: a.media_type,
       source: a.source,
-      status: a.triage_status,
+      status: a.processing_stage,
       quality: a.quality_score,
       context: a.context_note,
       autoContext: a.auto_context,

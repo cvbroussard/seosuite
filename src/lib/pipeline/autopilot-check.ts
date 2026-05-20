@@ -36,7 +36,7 @@ export async function checkAndActivateAutopilot(siteId: string): Promise<boolean
   // Check 3+ triaged assets
   const [count] = await sql`
     SELECT COUNT(*)::int AS c FROM media_assets
-    WHERE site_id = ${siteId} AND triage_status = 'analyzed'
+    WHERE site_id = ${siteId} AND processing_stage = 'analyzed'
   `;
   if ((count?.c || 0) < 3) return false;
 

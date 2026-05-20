@@ -411,7 +411,7 @@ export async function captureLogoAsHeroAsset(
     await sql`
       INSERT INTO media_assets (
         id, site_id, storage_url, media_type, source,
-        triage_status, archived_at, context_note, metadata, created_at
+        processing_stage, archived_at, context_note, metadata, created_at
       )
       VALUES (
         ${assetId},

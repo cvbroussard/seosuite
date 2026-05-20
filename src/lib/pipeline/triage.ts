@@ -76,7 +76,7 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
   const [asset] = await sql`
     SELECT id, site_id, storage_url, media_type, context_note, transcription, metadata, poster_asset_id
     FROM media_assets
-    WHERE id = ${assetId} AND triage_status = 'onboarded'
+    WHERE id = ${assetId} AND processing_stage = 'onboarded'
   `;
 
   if (!asset) {
@@ -153,7 +153,7 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
   await sql`
     UPDATE media_assets
     SET
-      triage_status = ${result.triage_status},
+      processing_stage = ${result.processing_stage},
       quality_score = ${result.quality_score},
       scene_types = COALESCE(${result.scene_types || null}, scene_types),
       content_tags = ${result.content_tags || []},
@@ -189,7 +189,7 @@ async function _archivedTriageAssetBody(assetId: string): Promise<TriageResult> 
   await sql`
     INSERT INTO subscriber_actions (site_id, action_type, target_type, target_id, payload)
     VALUES (${asset.site_id}, 'triage', 'media_asset', ${assetId}, ${JSON.stringify({
-      status: result.triage_status,
+      status: result.processing_stage,
       quality_score: result.quality_score,
       pillar: result.content_pillar,
       engine: result.ai_analysis?.engine || "unknown",
@@ -416,17 +416,17 @@ Rules:
   // DEAD CODE — this function is unreachable (triageAsset throws
   // DEPRECATED). Literal updated only to satisfy the new ProcessingStage
   // enum; the value is never used at runtime.
-  let triageStatus: TriageResult["triage_status"] = "onboarded";
+  let processingStage: TriageResult["processing_stage"] = "onboarded";
   let flagReason: string | undefined;
   let shelveReason: string | undefined;
 
   if (quality < (config.min_quality || 0.4)) {
-    triageStatus = "onboarded";
+    processingStage = "onboarded";
     shelveReason = `Quality score ${quality.toFixed(2)} below threshold ${config.min_quality || 0.4}`;
   }
 
   if (config.flag_faces && parsed.has_faces) {
-    triageStatus = "onboarded";
+    processingStage = "onboarded";
     flagReason = "Face detected in image — verify consent before publishing";
   }
 
@@ -437,7 +437,7 @@ Rules:
     scene_types: sceneTypes,
     content_tags: contentTags,
     platform_fit: platformFit,
-    triage_status: triageStatus,
+    processing_stage: processingStage,
     flag_reason: flagReason,
     shelve_reason: shelveReason,
     ai_analysis: {
@@ -525,17 +525,17 @@ function heuristicTriage(
   // DEAD CODE — this function is unreachable (triageAsset throws
   // DEPRECATED). Literal updated only to satisfy the new ProcessingStage
   // enum; the value is never used at runtime.
-  let triageStatus: TriageResult["triage_status"] = "onboarded";
+  let processingStage: TriageResult["processing_stage"] = "onboarded";
   let flagReason: string | undefined;
   let shelveReason: string | undefined;
 
   if (quality < (config.min_quality || 0.4)) {
-    triageStatus = "onboarded";
+    processingStage = "onboarded";
     shelveReason = `Quality score ${quality.toFixed(2)} below threshold ${config.min_quality || 0.4}`;
   }
 
   if (config.flag_faces && /\b(face|person|people|kid|child|client)\b/i.test(contextNote)) {
-    triageStatus = "onboarded";
+    processingStage = "onboarded";
     flagReason = "Possible person/face detected in context note — verify consent";
   }
 
@@ -546,7 +546,7 @@ function heuristicTriage(
     scene_types: [],  // heuristic can't infer composition — leave empty for subscriber to set
     content_tags: [],
     platform_fit: platformFit,
-    triage_status: triageStatus,
+    processing_stage: processingStage,
     flag_reason: flagReason,
     shelve_reason: shelveReason,
     ai_analysis: {

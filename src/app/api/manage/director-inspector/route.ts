@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       SELECT id FROM media_assets
       WHERE site_id = ${siteId}
         AND media_type ILIKE 'image%'
-        AND triage_status = 'analyzed'
+        AND processing_stage = 'analyzed'
         AND archived_at IS NULL
       ORDER BY created_at DESC
       LIMIT 1

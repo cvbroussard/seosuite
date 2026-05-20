@@ -78,7 +78,7 @@ async function persistCascadeArtifact(
   await sql`
     UPDATE media_assets
     SET asset_analysis = ${JSON.stringify(analysis)}::jsonb,
-        triage_status = 'analyzed',
+        processing_stage = 'analyzed',
         updated_at = NOW()
     WHERE id = ${assetId}
   `;

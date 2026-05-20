@@ -29,7 +29,7 @@ export async function loadAboutPage(siteId: string): Promise<AboutPageData> {
   const [aboutHeroRow] = await sql`
     SELECT storage_url FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status = 'briefed'
+      AND processing_stage = 'briefed'
       AND media_type LIKE 'image%'
       ${heroAssetId ? sql`AND id != ${heroAssetId}` : sql``}
     ORDER BY quality_score DESC NULLS LAST

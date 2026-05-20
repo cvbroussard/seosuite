@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       SELECT id FROM media_assets
       WHERE site_id = ${siteId}
         AND (media_type ILIKE 'image%' OR media_type = 'video')
-        AND triage_status IN ('briefed','analyzed')
+        AND processing_stage IN ('briefed','analyzed')
         AND archived_at IS NULL
         AND context_note IS NOT NULL
         AND id <> ALL(${usedIds}::uuid[])
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
         SELECT id FROM media_assets
         WHERE site_id = ${siteId}
           AND id <> ${heroId}
-          AND triage_status IN ('briefed','analyzed')
+          AND processing_stage IN ('briefed','analyzed')
           AND archived_at IS NULL
           AND (media_type ILIKE 'image%' OR media_type = 'video')
           AND content_tags && ${pillarTagIds}::text[]
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
         SELECT id FROM media_assets
         WHERE site_id = ${siteId}
           AND id <> ${heroId}
-          AND triage_status IN ('briefed','analyzed')
+          AND processing_stage IN ('briefed','analyzed')
           AND archived_at IS NULL
           AND (media_type ILIKE 'image%' OR media_type = 'video')
         ORDER BY quality_score DESC NULLS LAST, created_at DESC

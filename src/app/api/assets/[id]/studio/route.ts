@@ -17,7 +17,7 @@ import {
  * for navigation context only).
  *
  * Per the briefing-required principle (project_tracpost_generation_briefing_separation.md):
- *   - All outputs land in `media_assets` rows with `triage_status='briefed'`
+ *   - All outputs land in `media_assets` rows with `processing_stage='briefed'`
  *   - Modify-only tools (edit/enhance/regenerate) create SIBLINGS — original preserved
  *   - All generated assets carry full provenance metadata (tool, prompt, model, source/parent)
  *   - Subscriber briefs the new asset via the standard PATCH /api/assets/:id flow
@@ -32,7 +32,7 @@ import {
  *   }
  *
  * Returns:
- *   { newAssetId: string, triage_status: "briefed" }
+ *   { newAssetId: string, processing_stage: "briefed" }
  *   For draft-caption: { caption: string } (no asset created — subscriber edits + saves)
  */
 export async function POST(
@@ -90,7 +90,7 @@ export async function POST(
           inheritFrom: asset,
           isSibling: true,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
+        return NextResponse.json({ newAssetId: newId, processing_stage: "briefed" });
       }
 
       case "enhance":
@@ -119,7 +119,7 @@ export async function POST(
           inheritFrom: asset,
           isSibling: true,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
+        return NextResponse.json({ newAssetId: newId, processing_stage: "briefed" });
       }
 
       case "animate": {
@@ -141,7 +141,7 @@ export async function POST(
         const [inserted] = await sql`
           INSERT INTO media_assets (
             site_id, storage_url, media_type, context_note,
-            source, triage_status, source_asset_id,
+            source, processing_stage, source_asset_id,
             content_tags, metadata
           ) VALUES (
             ${asset.site_id}, ${video.url}, 'video',
@@ -161,7 +161,7 @@ export async function POST(
           )
           RETURNING id
         `;
-        return NextResponse.json({ newAssetId: inserted.id, triage_status: "briefed" });
+        return NextResponse.json({ newAssetId: inserted.id, processing_stage: "briefed" });
       }
 
       case "generate-variation": {
@@ -194,7 +194,7 @@ export async function POST(
           inheritFrom: asset,
           isSibling: false,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
+        return NextResponse.json({ newAssetId: newId, processing_stage: "briefed" });
       }
 
       case "generate-from-prompt": {
@@ -223,7 +223,7 @@ export async function POST(
           inheritFrom: null, // no inheritance — this is fresh content
           isSibling: false,
         });
-        return NextResponse.json({ newAssetId: newId, triage_status: "briefed" });
+        return NextResponse.json({ newAssetId: newId, processing_stage: "briefed" });
       }
 
       case "draft-caption": {
@@ -296,7 +296,7 @@ async function persistGeneratedAsset(opts: {
   const [inserted] = await sql`
     INSERT INTO media_assets (
       site_id, storage_url, media_type, context_note,
-      source, triage_status, source_asset_id,
+      source, processing_stage, source_asset_id,
       content_tags, metadata
     ) VALUES (
       ${opts.siteId}, ${url}, ${opts.mediaType}, NULL,

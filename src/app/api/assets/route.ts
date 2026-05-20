@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
     const [asset] = await sql`
       INSERT INTO media_assets (
         site_id, storage_url, media_type, context_note,
-        source, triage_status, triaged_at, briefable_at,
+        source, processing_stage, triaged_at, briefable_at,
         metadata, sort_order
       )
       VALUES (
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
         ${briefableAtInsert},
         ${JSON.stringify({ ...assetMeta, ...briefedMeta })}, EXTRACT(EPOCH FROM NOW())
       )
-      RETURNING id, site_id, storage_url, media_type, context_note, triage_status, briefable_at, created_at
+      RETURNING id, site_id, storage_url, media_type, context_note, processing_stage, briefable_at, created_at
     `;
 
     // Post-upload work, all non-blocking via waitUntil. Two cases:
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
     //
     // Briefed-on-upload no longer auto-fires the cascade (LOCKED 2026-05-16,
     // manual-first). Subscribers who upload via the briefed-on-upload mobile
-    // flow still get the briefing metadata + triage_status flip; the
+    // flow still get the briefing metadata + processing_stage flip; the
     // cascade (asset_analysis, slug, variants) runs only when they
     // explicitly hit the Auto-tag preview/Apply in the modal.
     if (isHeic) {
@@ -300,14 +300,14 @@ export async function GET(req: NextRequest) {
 
   const assets = status
     ? await sql`
-        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at, briefable_at
+        SELECT id, storage_url, media_type, context_note, processing_stage, quality_score, created_at, archived_at, briefable_at
         FROM media_assets
-        WHERE site_id = ${siteId} AND triage_status = ${status}
+        WHERE site_id = ${siteId} AND processing_stage = ${status}
           AND (${showArchived} OR archived_at IS NULL)
         ORDER BY created_at DESC LIMIT 100
       `
     : await sql`
-        SELECT id, storage_url, media_type, context_note, triage_status, quality_score, created_at, archived_at, briefable_at
+        SELECT id, storage_url, media_type, context_note, processing_stage, quality_score, created_at, archived_at, briefable_at
         FROM media_assets
         WHERE site_id = ${siteId}
           AND (${showArchived} OR archived_at IS NULL)

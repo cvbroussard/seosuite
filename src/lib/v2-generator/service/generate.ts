@@ -100,7 +100,7 @@ export async function generateServicePage(spec: ServiceGenerateSpec): Promise<Se
       FROM asset_projects ap
       JOIN media_assets ma ON ma.id = ap.asset_id
       WHERE ap.project_id = ${p.id}
-        AND ma.triage_status = 'analyzed'
+        AND ma.processing_stage = 'analyzed'
         AND ma.archived_at IS NULL
         AND (ma.media_type ILIKE 'image%' OR ma.media_type = 'video')
       ORDER BY ma.quality_score DESC NULLS LAST

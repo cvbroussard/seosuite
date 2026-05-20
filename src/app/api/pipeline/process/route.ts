@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     SELECT id, site_id, storage_url, media_type, metadata
     FROM media_assets
     WHERE site_id = ${siteId}
-      AND triage_status = 'onboarded'
+      AND processing_stage = 'onboarded'
       AND ai_analysis IS NULL
     ORDER BY created_at ASC
     LIMIT 50

@@ -13,7 +13,7 @@ interface Asset {
       project_tracpost_recording_as_canonical.md). When present, displays
       under the thumbnail. Falls back to context_note for legacy assets. */
   latest_transcript?: string | null;
-  triage_status: string;
+  processing_stage: string;
   quality_score: number | null;
   // content_pillar / content_pillars dropped from the asset model
   // (LOCKED 2026-05-09). Pillars derive from content_tags via
@@ -36,7 +36,7 @@ interface Asset {
 }
 
 // Subscriber-facing 3-state lifecycle badge (2026-05-18 reframe).
-// Source-of-truth fields, not triage_status:
+// Source-of-truth fields, not processing_stage:
 //   needs brief  — no transcription saved on the asset
 //   briefed      — transcription saved, cascade hasn't committed yet
 //   analyzed     — asset_analysis present (cascade committed)

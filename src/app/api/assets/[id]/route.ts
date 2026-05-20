@@ -192,24 +192,24 @@ export async function PATCH(
     // that gates orchestrator pool entry per migrate-099. A subscriber
     // saving a thin or empty caption keeps the asset in onboarded.
     const [latest] = await sql`
-      SELECT triage_status, context_note FROM media_assets WHERE id = ${id}
+      SELECT processing_stage, context_note FROM media_assets WHERE id = ${id}
     `;
-    if (latest?.triage_status === "onboarded") {
+    if (latest?.processing_stage === "onboarded") {
       const note = (latest.context_note as string) || "";
       if (note.trim().length >= 40) {
         await sql`
           UPDATE media_assets
-          SET triage_status = 'briefed',
+          SET processing_stage = 'briefed',
               triaged_at = COALESCE(triaged_at, NOW()),
               metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
                 'briefed_at', NOW()::text,
                 'briefed_by_subscription_id', ${auth.subscriptionId}
               )
-          WHERE id = ${id} AND triage_status = 'onboarded'
+          WHERE id = ${id} AND processing_stage = 'onboarded'
         `;
 
         // Manual-first cascade (LOCKED 2026-05-16):
-        // Save persists the form + flips triage_status. It does NOT
+        // Save persists the form + flips processing_stage. It does NOT
         // auto-fire the cascade (asset_analysis, slug derivation, R2
         // rename, variant render). Subscriber must explicitly click the
         // Auto-tag preview/Apply flow in the modal to produce a

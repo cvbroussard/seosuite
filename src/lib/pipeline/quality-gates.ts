@@ -167,7 +167,7 @@ export async function quarantineAsset(
 export async function releaseAsset(assetId: string): Promise<void> {
   await sql`
     UPDATE media_assets
-    SET triage_status = 'briefed',
+    SET processing_stage = 'briefed',
         archived_at = NULL,
         metadata = COALESCE(metadata, '{}'::jsonb) - 'quarantine_reason' - 'quarantined_at'
     WHERE id = ${assetId} AND archived_at IS NOT NULL

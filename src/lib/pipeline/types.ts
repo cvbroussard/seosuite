@@ -1,9 +1,8 @@
 /**
  * Asset processing stage — the monotonic preparation pipeline.
  *
- * The DB column is `media_assets.triage_status` (CHECK-constrained,
- * NOT NULL, default 'uploaded') — a follow-up migration renames the
- * column to `processing_stage`; this type renames with it.
+ * DB column: `media_assets.processing_stage` — CHECK-constrained,
+ * NOT NULL, default 'uploaded'.
  *
  * This is the SINGLE source of truth for the value set. It is
  * deliberately ONLY the processing axis. Two things that used to be
@@ -12,7 +11,7 @@
  *   - Utilization (scheduled/consumed) → a derived usage history,
  *     never a stored status value.
  */
-export type TriageStatus =
+export type ProcessingStage =
   | "uploaded"   // baseline processing in progress (HEIC convert, video poster, EXIF, R2, URL catalog)
   | "onboarded"  // baseline processing done — asset is in the system, awaiting human briefing
   | "briefed"    // transcription saved (human briefing complete)
@@ -98,7 +97,7 @@ export interface TriageResult {
   scene_types: string[];       // composition vocabulary from src/lib/scene-types.ts
   content_tags: string[];      // specific tags from two-tier system
   platform_fit: PlatformFormat[];
-  triage_status: TriageStatus; // triaged | shelved | flagged
+  processing_stage: ProcessingStage;
   flag_reason?: string;
   shelve_reason?: string;
   ai_analysis: Record<string, unknown>;

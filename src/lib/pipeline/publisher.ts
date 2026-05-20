@@ -163,7 +163,7 @@ export async function publishPost(postId: string): Promise<{ success: boolean; e
       `.catch(() => {});
     }
 
-    // Asset utilization is no longer a triage_status — publishing a post
+    // Asset utilization is no longer a processing_stage — publishing a post
     // does not mutate the source asset's processing stage.
 
     // Audit trail

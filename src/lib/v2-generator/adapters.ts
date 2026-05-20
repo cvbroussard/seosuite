@@ -51,7 +51,7 @@ export async function generateBlogPost(opts: {
         SELECT id FROM media_assets
         WHERE site_id = ${opts.siteId}
           AND id <> ${opts.seedAssetId}
-          AND triage_status = 'analyzed'
+          AND processing_stage = 'analyzed'
           AND archived_at IS NULL
           AND content_tags && ${pillarTagIds}::text[]
         ORDER BY quality_score DESC NULLS LAST, created_at DESC
@@ -61,7 +61,7 @@ export async function generateBlogPost(opts: {
         SELECT id FROM media_assets
         WHERE site_id = ${opts.siteId}
           AND id <> ${opts.seedAssetId}
-          AND triage_status = 'analyzed'
+          AND processing_stage = 'analyzed'
           AND archived_at IS NULL
         ORDER BY quality_score DESC NULLS LAST, created_at DESC
         LIMIT 10

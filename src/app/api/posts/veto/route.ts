@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Pulls back a scheduled post. The publishing slot is marked "vetoed".
  * The pipeline will attempt to fill the slot with the next best asset
  * on next run. The source asset's processing stage is unchanged —
- * utilization is no longer a triage_status.
+ * utilization is no longer a processing_stage.
  *
  * Body: { post_id, reason? }
  */
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     `;
 
     // Record the veto reason on the asset for audit. Processing stage
-    // (triage_status) is unchanged — utilization is no longer a status.
+    // (processing_stage) is unchanged — utilization is no longer a status.
     if (post.source_asset_id) {
       await sql`
         UPDATE media_assets

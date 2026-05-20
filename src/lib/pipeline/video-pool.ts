@@ -123,7 +123,7 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
            ma.content_tags, ma.ai_analysis, ma.context_note
     FROM media_assets ma
     WHERE ma.site_id = ${siteId}
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
       AND ma.quality_score >= ${heroThreshold}
       AND ma.media_type LIKE 'image%'
       AND NOT EXISTS (
@@ -207,7 +207,7 @@ export async function evaluateAndGenerate(siteId: string): Promise<VideoPoolResu
       await sql`
         INSERT INTO media_assets (
           site_id, storage_url, media_type, context_note,
-          source, triage_status, quality_score,
+          source, processing_stage, quality_score,
           source_asset_id, content_tags,
           ai_analysis, metadata
         ) VALUES (
@@ -273,7 +273,7 @@ export async function getPoolStatus(siteId: string): Promise<PoolStatus> {
     WHERE ma.site_id = ${siteId}
       AND ma.source = 'ai_generated'
       AND ma.media_type = 'video'
-      AND ma.triage_status = 'analyzed'
+      AND ma.processing_stage = 'analyzed'
   `;
 
   const [weekCount] = await sql`
