@@ -9,6 +9,11 @@ import { seoFilename } from "@/lib/seo-filename";
 
 const API_BASE = "https://api.klingai.com/v1";
 
+// Model version — env-overridable so a bump (e.g. v2-6 → v3.0) is a
+// config change, not a code deploy, and a wrong value can be corrected
+// without shipping. Default is the known-good v2-6.
+const MODEL_NAME = process.env.KLING_MODEL_NAME || "kling-v2-6";
+
 interface KlingVideo {
   url: string;
   duration: number;
@@ -64,7 +69,7 @@ export async function generateVideoFromImage(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        model_name: "kling-v2-6",
+        model_name: MODEL_NAME,
         image: imageUrl,
         prompt,
         duration,
