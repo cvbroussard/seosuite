@@ -35,23 +35,28 @@ interface Asset {
   scene_types: string[] | null;
 }
 
-// Subscriber-facing 3-state lifecycle badge (2026-05-18 reframe).
-// Source-of-truth fields, not processing_stage:
-//   needs brief  — no transcription saved on the asset
-//   briefed      — transcription saved, cascade hasn't committed yet
-//   analyzed     — asset_analysis present (cascade committed)
-// Brief presence = transcript presence, period. Triage_status is an
-// internal lifecycle enum that doesn't map cleanly to the subscriber
-// mental model.
-function lifecycleBadge(a: { latest_transcript?: string | null; asset_analysis: Record<string, unknown> | null }) {
-  const hasBrief = (a.latest_transcript || "").trim().length > 0;
-  if (!hasBrief) {
-    return { label: "needs brief", className: "bg-amber-500/80 text-white" };
+// Subscriber-facing stage badge. Reads processing_stage directly — since
+// the 2026-05-20 reframe that column IS the clean, subscriber-meaningful
+// state machine (uploaded → onboarded → briefed → analyzed, + failed).
+//
+// The badge names the stage the asset has COMPLETED — stage-completion
+// framing, not "next step needed." An un-briefed asset reads "onboarded"
+// (it IS onboarded), not "needs brief." Colour still progresses
+// early → done so the grid is scannable.
+function lifecycleBadge(a: { processing_stage: string }) {
+  switch (a.processing_stage) {
+    case "analyzed":
+      return { label: "analyzed", className: "bg-success/70 text-white" };
+    case "briefed":
+      return { label: "briefed", className: "bg-accent/70 text-white" };
+    case "failed":
+      return { label: "failed", className: "bg-red-500/80 text-white" };
+    case "uploaded":
+      return { label: "uploaded", className: "bg-slate-500/70 text-white" };
+    case "onboarded":
+    default:
+      return { label: "onboarded", className: "bg-amber-500/80 text-white" };
   }
-  if (a.asset_analysis) {
-    return { label: "analyzed", className: "bg-success/70 text-white" };
-  }
-  return { label: "briefed", className: "bg-accent/70 text-white" };
 }
 
 interface Brand {
