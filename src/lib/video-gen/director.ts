@@ -134,11 +134,12 @@ export interface DirectorBrief {
 }
 
 /**
- * Build the Director's instructions. Kept as a standalone builder so
- * the director-prompt inspector can show it block-by-block and so it's
- * cheap to iterate (this prompt is expected to be tuned heavily).
+ * Build the Director's instructions. Exported as a standalone builder so
+ * the director-prompt inspector can show it without running the call —
+ * and so it's cheap to iterate (this prompt is expected to be tuned
+ * heavily). Pure: same input always yields the same string.
  */
-function buildDirectorPrompt(input: DirectorInput): string {
+export function buildDirectorPrompt(input: DirectorInput): string {
   const spec = DIRECTOR_TEMPLATE_SPECS[input.template];
   const voice = input.brandVoice || {};
   const analysis = input.analysis || {};

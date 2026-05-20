@@ -1,0 +1,386 @@
+"use client";
+
+import { useState } from "react";
+import { ManagePage } from "@/components/manage/manage-page";
+
+/**
+ * Director Inspector — the prompt-engineering workbench for the director
+ * pattern (project_tracpost_director_pattern). Sibling to the blog
+ * Prompt Inspector, but for the two-hop video pipeline:
+ *
+ *   Script → Director Call (Sonnet 4.6) → the brief → Producer Call
+ *   (Kling) → the render
+ *
+ * It assembles + shows the director prompt, runs the Director Call to
+ * show the actual brief, and — on explicit request — fires the Producer
+ * Call so you can watch the brief become a video. Single-template by
+ * design, so one run fits the 300s budget.
+ */
+
+const TEMPLATES = [
+  { value: "reel_9x16", label: "Reel — 9:16, 5s" },
+  { value: "story_9x16", label: "Story — 9:16, 5s" },
+  { value: "long_16x9", label: "Long — 16:9, 10s" },
+];
+
+interface DirectorBrief {
+  prompt: string;
+  threadUsed: string;
+  brandsMentioned: string[];
+  transcriptSnippet: string;
+}
+
+interface InspectorResponse {
+  assetId: string;
+  imageUrl: string;
+  template: string;
+  templateSpec: { label: string; durationSeconds: number; guidance: string };
+  context: {
+    transcript: string | null;
+    analysis: Record<string, unknown> | null;
+    brandVoice: Record<string, unknown> | null;
+    previousThreads: string[];
+  };
+  directorPrompt: string;
+  brief: DirectorBrief | null;
+  briefFailed: boolean;
+  render: { url: string; durationSeconds: number } | null;
+  producerError: string | null;
+}
+
+function DirectorInspectorContent({ siteId }: { siteId: string }) {
+  const [template, setTemplate] = useState("reel_9x16");
+  const [seedAssetId, setSeedAssetId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [rendering, setRendering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<InspectorResponse | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+
+  async function runDirector() {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setPromptOpen(false);
+    try {
+      const res = await fetch("/api/manage/director-inspector", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          assetId: seedAssetId || undefined,
+          template,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Request failed (${res.status})`);
+        return;
+      }
+      setResult(data as InspectorResponse);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runProducer() {
+    if (!result?.brief) return;
+    setRendering(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/manage/director-inspector", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          assetId: result.assetId,
+          template: result.template,
+          briefPrompt: result.brief.prompt,
+          runProducer: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Render failed (${res.status})`);
+        return;
+      }
+      // Merge the render result into the existing result — keep the
+      // brief the operator reviewed on screen.
+      setResult((prev) =>
+        prev
+          ? { ...prev, render: data.render, producerError: data.producerError }
+          : prev,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Render failed");
+    } finally {
+      setRendering(false);
+    }
+  }
+
+  const analysis = result?.context.analysis || {};
+  const sceneType = (analysis.scene_type as string) || "";
+  const description = (analysis.description as string) || "";
+  const detectedVendors = Array.isArray(analysis.detected_vendors)
+    ? (analysis.detected_vendors as string[])
+    : [];
+  const brandVoice = result?.context.brandVoice || {};
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Controls */}
+      <div className="rounded-xl border border-border bg-surface p-4 shadow-card space-y-3">
+        <h3 className="text-sm font-medium">Director Call</h3>
+        <p className="text-[10px] text-muted leading-snug">
+          Hop 1 of the director pattern. Assembles the director prompt, runs the
+          Sonnet 4.6 Director Call, and returns the brief. Hop 2 (the Kling
+          Producer Call) fires only when you click Render.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[10px] text-muted mb-1">Template</label>
+            <select
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+            >
+              {TEMPLATES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-[10px] text-muted mb-1">
+              Seed asset ID (optional — leave blank for the most recent triaged image)
+            </label>
+            <input
+              type="text"
+              value={seedAssetId}
+              onChange={(e) => setSeedAssetId(e.target.value)}
+              placeholder="UUID of a media_asset"
+              className="w-full rounded border border-border bg-background px-2 py-1 text-xs font-mono"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runDirector}
+            disabled={loading || siteId === "all"}
+            className="bg-accent px-3 py-1.5 text-xs font-medium text-white rounded hover:bg-accent-hover disabled:opacity-50"
+          >
+            {loading ? "Running Director Call…" : "Run Director Call"}
+          </button>
+          {siteId === "all" && (
+            <span className="text-[10px] text-muted">Pick a site to enable.</span>
+          )}
+          {error && <span className="text-[10px] text-danger">{error}</span>}
+        </div>
+      </div>
+
+      {result && (
+        <>
+          {/* Source asset + the brief side by side */}
+          <div className="grid gap-4 md:grid-cols-[200px_1fr]">
+            {/* Source still */}
+            <div className="rounded-xl border border-border bg-surface p-3 shadow-card">
+              <div className="text-[10px] text-muted uppercase tracking-wide mb-1.5">
+                Source still
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={result.imageUrl}
+                alt=""
+                className="w-full rounded border border-border object-cover"
+              />
+              <div className="mt-1.5 text-[9px] font-mono text-muted break-all">
+                {result.assetId}
+              </div>
+            </div>
+
+            {/* The brief */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 shadow-card">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-400">
+                  THE BRIEF
+                </span>
+                <span className="text-[10px] text-muted">
+                  {result.templateSpec.label} · {result.templateSpec.durationSeconds}s
+                </span>
+              </div>
+              {result.briefFailed || !result.brief ? (
+                <div className="text-xs text-danger">
+                  Director Call returned no brief. Check the inputs below — a
+                  missing image or empty context can cause this.
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm leading-relaxed">{result.brief.prompt}</p>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted">
+                    <span>
+                      <span className="text-emerald-400 font-mono">thread:</span>{" "}
+                      {result.brief.threadUsed}
+                    </span>
+                    {result.brief.brandsMentioned.length > 0 && (
+                      <span>
+                        <span className="text-emerald-400 font-mono">brands:</span>{" "}
+                        {result.brief.brandsMentioned.join(", ")}
+                      </span>
+                    )}
+                    <span className="basis-full">
+                      <span className="text-emerald-400 font-mono">anchored on:</span>{" "}
+                      <span className="italic">
+                        &ldquo;{result.brief.transcriptSnippet}&rdquo;
+                      </span>
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Director Call inputs */}
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-card space-y-3">
+            <h3 className="text-sm font-medium">Director Call inputs</h3>
+            <div className="grid gap-3 md:grid-cols-2 text-xs">
+              <InputBlock label="Script (transcript)">
+                {result.context.transcript || (
+                  <span className="text-muted italic">
+                    (no transcript — director worked from the image + analysis)
+                  </span>
+                )}
+              </InputBlock>
+              <InputBlock label="Analysis JSON">
+                {description || sceneType || detectedVendors.length > 0 ? (
+                  <div className="space-y-0.5">
+                    {description && <div>{description}</div>}
+                    {sceneType && (
+                      <div className="text-muted">scene type: {sceneType}</div>
+                    )}
+                    {detectedVendors.length > 0 && (
+                      <div className="text-muted">
+                        brands present: {detectedVendors.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-muted italic">(no analysis)</span>
+                )}
+              </InputBlock>
+              <InputBlock label="Brand voice">
+                {Object.keys(brandVoice).length > 0 ? (
+                  <div className="space-y-0.5">
+                    {(brandVoice.tone as string) && (
+                      <div>tone: {brandVoice.tone as string}</div>
+                    )}
+                    {Array.isArray(brandVoice.distinctive_traits) && (
+                      <div className="text-muted">
+                        traits:{" "}
+                        {(brandVoice.distinctive_traits as string[]).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-muted italic">(no brand voice on file)</span>
+                )}
+              </InputBlock>
+              <InputBlock label="Variety constraint — threads already used">
+                {result.context.previousThreads.length > 0 ? (
+                  result.context.previousThreads.join(", ")
+                ) : (
+                  <span className="text-muted italic">
+                    none yet — any thread is open
+                  </span>
+                )}
+              </InputBlock>
+            </div>
+          </div>
+
+          {/* The assembled director prompt */}
+          <div className="rounded-xl border border-border bg-surface shadow-card overflow-hidden">
+            <button
+              onClick={() => setPromptOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-surface-hover text-left"
+            >
+              <span className="text-sm font-medium">
+                Assembled director prompt — what Sonnet 4.6 receives
+              </span>
+              <span className="text-xs text-muted">
+                {result.directorPrompt.length.toLocaleString()} chars{" "}
+                {promptOpen ? "▾" : "▸"}
+              </span>
+            </button>
+            {promptOpen && (
+              <pre className="border-t border-border bg-background p-3 text-[10px] font-mono whitespace-pre-wrap leading-relaxed max-h-[32rem] overflow-y-auto">
+                {result.directorPrompt}
+              </pre>
+            )}
+          </div>
+
+          {/* Producer Call */}
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-card space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium">Producer Call (Kling)</h3>
+                <p className="text-[10px] text-muted">
+                  Hop 2 — renders the brief above into video. ~$0.20, up to a few
+                  minutes.
+                </p>
+              </div>
+              <button
+                onClick={runProducer}
+                disabled={rendering || !result.brief}
+                className="bg-violet-600 px-3 py-1.5 text-xs font-medium text-white rounded hover:bg-violet-500 disabled:opacity-50"
+              >
+                {rendering ? "Rendering…" : "Render with Kling"}
+              </button>
+            </div>
+            {result.producerError && (
+              <div className="text-[10px] text-danger">{result.producerError}</div>
+            )}
+            {result.render && (
+              <div>
+                <video
+                  src={result.render.url}
+                  controls
+                  className="max-h-96 rounded border border-border"
+                />
+                <div className="mt-1 text-[10px] font-mono text-muted break-all">
+                  {result.render.url}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function InputBlock({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded border border-border bg-background p-2.5">
+      <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
+        {label}
+      </div>
+      <div className="leading-snug">{children}</div>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <ManagePage title="Director Inspector" requireSite>
+      {({ siteId }) => <DirectorInspectorContent siteId={siteId} />}
+    </ManagePage>
+  );
+}

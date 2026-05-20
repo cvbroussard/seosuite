@@ -16,29 +16,17 @@ import {
   directVideoBrief,
   DIRECTOR_TEMPLATE_SPECS,
   type DirectorTemplate,
-  type NarrativeThread,
 } from "@/lib/video-gen/director";
 import { generateVideoFromImage } from "@/lib/video-gen/kling";
-import { getAssetNarrative } from "@/lib/asset-narrative";
+import {
+  gatherDirectorContext,
+  type DirectorContext,
+} from "@/lib/video-gen/director-context";
 
 /** Templates that produce video output. Stills targeting one of these
  * go through the Director Call → Producer Call (Kling) path; everything
  * else is a sharp image crop. */
 const VIDEO_OUTPUT_TEMPLATES = new Set<string>(["reel_9x16", "story_9x16", "long_16x9"]);
-
-/**
- * Director Call inputs gathered once per still→video render. Assembled
- * in renderTemplateVariant (which already has the asset row) and handed
- * to renderImageVariant. The director module itself does no DB work.
- */
-interface DirectorContext {
-  transcript: string | null;
-  analysis: Record<string, unknown> | null;
-  contextNote: string | null;
-  brandVoice: Record<string, unknown> | null;
-  /** Threads already amplified for this asset (variety constraint). */
-  previousThreads: NarrativeThread[];
-}
 
 /**
  * Variant render worker (#163, #172).
@@ -203,10 +191,8 @@ export async function renderTemplateVariant(
 
   const [asset] = await sql`
     SELECT ma.id, ma.site_id, ma.storage_url, ma.media_type, ma.metadata,
-           ma.ai_analysis, ma.context_note,
            s.face_policy, s.face_waiver_signed_at,
-           s.minor_face_policy, s.minor_face_waiver_signed_at,
-           s.brand_dna
+           s.minor_face_policy, s.minor_face_waiver_signed_at
     FROM media_assets ma JOIN sites s ON s.id = ma.site_id
     WHERE ma.id = ${assetId}
   `;
@@ -303,7 +289,7 @@ export async function renderTemplateVariant(
       // voice + prior threads. Gather them only when relevant — image-
       // output templates (feed_square etc.) ignore directorContext.
       const directorContext = VIDEO_OUTPUT_TEMPLATES.has(templateId)
-        ? await gatherDirectorContext(assetId, asset)
+        ? await gatherDirectorContext(assetId)
         : null;
       ({ outputUrl, renderNotes } = await renderImageVariant(
         sourceUrl, templateId, siteId, assetId,
@@ -459,47 +445,6 @@ async function renderImageVariant(
         },
       }),
     },
-  };
-}
-
-/**
- * Gather the Director Call inputs for a still→video render. Done in one
- * place so renderTemplateVariant stays the single DB-touch point. The
- * director module receives this fully-assembled and does no queries.
- *
- * previousThreads reads the threads already amplified for this asset
- * (from sibling variants' audit trail) so the Director can deliberately
- * pick a different one — the variety knob. Because renderAllVariantsForAsset
- * renders the video templates sequentially and each persists its brief
- * before the next starts, the Nth call sees the prior N-1 threads.
- */
-async function gatherDirectorContext(
-  assetId: string,
-  asset: Record<string, unknown>,
-): Promise<DirectorContext> {
-  const narrative = await getAssetNarrative(assetId);
-
-  // Brand voice lives at brand_dna.signals.voice (per v2 brand DNA shape).
-  const brandDna = (asset.brand_dna as Record<string, unknown> | null) || {};
-  const signals = (brandDna.signals as Record<string, unknown> | null) || {};
-  const brandVoice = (signals.voice as Record<string, unknown> | null) || null;
-
-  const threadRows = await sql`
-    SELECT DISTINCT render_settings->'director'->>'thread_used' AS thread
-    FROM asset_variants
-    WHERE source_asset_id = ${assetId}
-      AND render_settings->'director'->>'thread_used' IS NOT NULL
-  `;
-  const previousThreads = threadRows
-    .map((r) => r.thread as string)
-    .filter(Boolean) as NarrativeThread[];
-
-  return {
-    transcript: narrative.text || null,
-    analysis: (asset.ai_analysis as Record<string, unknown> | null) || null,
-    contextNote: (asset.context_note as string | null) || null,
-    brandVoice,
-    previousThreads,
   };
 }
 
